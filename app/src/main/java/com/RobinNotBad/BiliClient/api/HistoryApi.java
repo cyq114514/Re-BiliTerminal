@@ -80,11 +80,14 @@ public class HistoryApi {
         if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PRIVACY_MODE, false)) {
             return;
         }
+        String csrf = currentCsrf();
+        if (csrf.isEmpty())
+            Logu.e("history-report", "csrf 为空，上报必被服务端拒绝(-111)，请确认已登录");
         String url = "https://api.bilibili.com/x/v2/history/report";
         String per = "aid=" + aid + "&cid=" + cid
                 + "&progress=" + (progress >= 0 ? progress : "")
                 + "&platform=pc"
-                + "&csrf=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "");
+                + "&csrf=" + csrf;
         Response response = NetWorkUtil.post(url, per, NetWorkUtil.webHeaders);
         logReportResult("reportHistory", response, "aid=" + aid + " cid=" + cid + " progress=" + progress);
     }
@@ -116,13 +119,16 @@ public class HistoryApi {
             Logu.d("history-report", "跳过 0 进度上报 epid=" + epid);
             return;
         }
+        String csrf = currentCsrf();
+        if (csrf.isEmpty())
+            Logu.e("history-report", "csrf 为空，上报必被服务端拒绝(-111)，请确认已登录");
         long nowSec = System.currentTimeMillis() / 1000;
         NetWorkUtil.FormData form = new NetWorkUtil.FormData()
                 .put("aid", aid)
                 .put("cid", cid)
                 .put("epid", epid)
                 .put("sid", seasonId)
-                .put("mid", SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0))
+                .put("mid", currentMid())
                 .put("type", HEARTBEAT_TYPE_SEASON)
                 .put("played_time", progress)
                 //接口文档明确说明这几个"持续时间"字段算不准时可以都填同一个值
@@ -130,18 +136,49 @@ public class HistoryApi {
                 .put("real_played_time", progress)
                 .put("last_play_progress_time", progress)
                 .put("max_play_progress_time", progress)
-                //start_ts 是"开始播放时刻"：已知看了 progress 秒，倒推大致起点，比直接填当前时间更接近语义
-                .put("start_ts", nowSec - progress)
+                //start_ts 是"开始播放时刻"：已知看了 progress 秒，倒推大致起点，比直接填当前时间更接近语义。
+                //下界必须夹到 0：设备时钟偏慢时倒退结果会变成负数，服务端直接判参数错误(-400)
+                .put("start_ts", Math.max(0, nowSec - progress))
                 .put("play_type", 0)   //0 播放中
                 .put("dt", 2)
                 .put("outer", 0)
-                .put("csrf", SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, ""));
+                .put("csrf", csrf);
         if (isKnownSeasonType(seasonType)) form.put("sub_type", seasonType);
 
         Response response = NetWorkUtil.post(HEARTBEAT_URL, form.toString(), NetWorkUtil.webHeaders);
         logReportResult("reportHistoryPgc", response,
                 "aid=" + aid + " cid=" + cid + " epid=" + epid + " sid=" + seasonId
                         + " sub_type=" + seasonType + " progress=" + progress);
+    }
+
+    /**
+     * 取当前有效的 csrf。
+     *
+     * 不能只读 {@code SharedPreferencesUtil.csrf}：该字段只在"登录成功 / 刷新Cookie成功"那一刻写入，
+     * 而 bilibili 会在任意响应里通过 Set-Cookie 轮换 bili_jct（{@link NetWorkUtil} 的拦截器会把新 Cookie
+     * 落进 cookies 字段，却不会同步 csrf）。两者一旦错位，所有 POST 都会拿到 -111，
+     * 而 GET 一切正常——表现出来就只是"观看记录上报静默不生效"，且同一份代码在不同设备/不同登录时机表现不同。
+     * 这里与 {@code MessageApi} / {@code UserInfoApi} 保持同一口径：优先从实时 Cookie 派生，取不到再退回旧字段。
+     */
+    private static String currentCsrf() {
+        String csrf = NetWorkUtil.getInfoFromCookie("bili_jct",
+                SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+        if (csrf != null && !csrf.isEmpty()) return csrf;
+        return SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "");
+    }
+
+    /** 与 {@link #currentCsrf()} 同理：mid 也可能因换设备/刷新Cookie 而与实时 Cookie 不一致。 */
+    private static long currentMid() {
+        String midStr = NetWorkUtil.getInfoFromCookie("DedeUserID",
+                SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+        if (midStr != null && !midStr.isEmpty()) {
+            try {
+                return Long.parseLong(midStr);
+            } catch (NumberFormatException ignored) {
+                //Cookie 形态异常时退回本地记录，不能让上报直接失败
+            }
+        }
+        return SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0);
     }
 
     private static boolean isKnownSeasonType(int seasonType) {
@@ -288,5 +325,54 @@ public class HistoryApi {
         long result = firstMatchWithProgress != 0 ? firstMatchWithProgress : firstMatch;
         Logu.d("history-locate", "定位结果 epid=" + result + "（有进度命中=" + firstMatchWithProgress + "）");
         return result;
+    }
+
+    /**
+     * 从观看记录里取某稿件/剧集最近一次的播放进度（毫秒），作为续播进度的兜底来源。
+     *
+     * 为什么需要兜底：番剧续播进度走 x/player/wbi/v2，该接口需要 WBI 签名与登录态，
+     * 一旦密钥异常/被风控/未登录就静默返回 0，表现为"续播永远从 0 开始"；
+     * 而观看记录列表接口不需要 WBI，只要登录过就能拿到 progress（秒），可靠性更高。
+     *
+     * @param aid 稿件/剧集 aid（观看记录里的 history.oid）
+     * @return 毫秒；未登录、无记录或进度为 0/-1（已看完）时返回 0
+     */
+    public static long findProgressMsByAid(long aid) {
+        if (aid == 0) return 0;
+        //未登录时没有观看记录，直接跳过，避免发无谓请求
+        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0) return 0;
+
+        long viewAt = 0, max = 0;
+        String business = "";
+        try {
+            for (int page = 1; page <= LOCATE_MAX_PAGES; page++) {
+                String url = "https://api.bilibili.com/x/web-interface/history/cursor?type=all&view_at=" + viewAt
+                        + "&business=" + business + "&max=" + max;
+                String json = NetWorkUtil.getJson(url).toString();
+                ApiResponse<HistoryData> resp = GsonUtil.fromJson(json,
+                        new com.google.gson.reflect.TypeToken<ApiResponse<HistoryData>>(){}.getType());
+                if (resp == null || !resp.isSuccess() || resp.data == null || resp.data.list == null) break;
+
+                for (HistoryItem item : resp.data.list) {
+                    if (item == null || item.history == null) continue;
+                    if (item.history.oid != aid) continue;
+                    //progress 单位是秒；-1 表示已看完，没有可续播的位置
+                    if (item.progress > 0) return item.progress * 1000L;
+                }
+
+                if (resp.data.list.isEmpty() || resp.data.cursor == null) break;
+                long nextViewAt = resp.data.cursor.view_at;
+                long nextMax = resp.data.cursor.max;
+                String nextBusiness = resp.data.cursor.business != null ? resp.data.cursor.business : "";
+                //游标没有前进说明已经没有更多数据，必须跳出，否则会无限翻页
+                if (nextViewAt == viewAt && nextMax == max && nextBusiness.equals(business)) break;
+                viewAt = nextViewAt;
+                max = nextMax;
+                business = nextBusiness;
+            }
+        } catch (Exception e) {
+            Logu.e("history-locate", "兜底查询观看记录失败: " + e.getMessage());
+        }
+        return 0;
     }
 }

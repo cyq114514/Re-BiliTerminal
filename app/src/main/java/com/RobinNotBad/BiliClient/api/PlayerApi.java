@@ -190,7 +190,14 @@ public class PlayerApi {
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
         //番剧取流接口(pgc/player/web/playurl)的 result 不返回 last_play_*，续播进度必须单独查询
         playerData.cidHistory = playerData.cid;
-        playerData.progress = normalizeProgress(getLastPlayProgress(playerData.aid, playerData.cid), result.result.timelength);
+        long lastProgress = getLastPlayProgress(playerData.aid, playerData.cid);
+        if (lastProgress <= 0) {
+            //WBI 接口（密钥/风控/未登录）取不到时兜底走观看记录列表，否则续播会永远从 0 开始
+            lastProgress = HistoryApi.findProgressMsByAid(playerData.aid);
+            if (lastProgress > 0)
+                Logu.w("history-last", "WBI 进度不可用，使用观看记录兜底: " + lastProgress + "ms");
+        }
+        playerData.progress = normalizeProgress(lastProgress, result.result.timelength);
         if (result.result.accept_description != null && result.result.accept_quality != null) {
             playerData.qnStrList = result.result.accept_description.toArray(new String[0]);
             int[] qnValueList = new int[result.result.accept_quality.size()];
@@ -209,8 +216,11 @@ public class PlayerApi {
             String json = NetWorkUtil.getJson(ConfInfoApi.signWBI("https://api.bilibili.com/x/player/wbi/v2?aid=" + aid + "&cid=" + cid)).toString();
             SubtitleLinkData data = GsonUtil.fromJson(json, SubtitleLinkData.class);
             if (data == null || data.data == null) return 0;
-            Logu.d("history-last", "aid=" + aid + " cid=" + cid + " last_play_time=" + data.data.last_play_time);
-            return data.data.last_play_time;
+            long lastPlayTime = data.data.last_play_time;
+            if (lastPlayTime <= 0)
+                Logu.w("history-last", "未取到上次播放进度 aid=" + aid + " cid=" + cid + "（未登录或服务端无记录）");
+            else Logu.d("history-last", "aid=" + aid + " cid=" + cid + " last_play_time=" + lastPlayTime);
+            return lastPlayTime;
         } catch (Exception e) {
             Logu.e("history-last", "获取上次播放进度失败: " + e.getMessage());
             return 0;

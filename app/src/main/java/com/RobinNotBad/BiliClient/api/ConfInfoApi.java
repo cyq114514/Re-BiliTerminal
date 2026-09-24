@@ -57,15 +57,18 @@ public class ConfInfoApi {
     }
 
     public static String signWBI(String url_query) throws JSONException, IOException {
-        String mixin_key;
+        String mixin_key = SharedPreferencesUtil.getString("wbi_mixin_key", "");
         int curr = getDateCurr();
-        if (SharedPreferencesUtil.getInt("last_wbi", 0) < curr) {    //限制一天一次
+        //缓存为空也要重新取，否则空密钥会一直参与签名（服务端一律判签名失败）
+        if (mixin_key.isEmpty() || SharedPreferencesUtil.getInt("last_wbi", 0) < curr) {    //限制一天一次
             Logu.d("检查WBI");
-            SharedPreferencesUtil.putInt("last_wbi", curr);
-
-            mixin_key = ConfInfoApi.getWBIMixinKey(ConfInfoApi.getWBIRawKey());
+            //必须先取到密钥再落 last_wbi：取密钥要联网，失败时若已经写了 last_wbi，
+            //当天后续所有 WBI 请求都会拿着空/过期密钥签名——番剧续播进度就是这么静默取不到的
+            String rawKey = ConfInfoApi.getWBIRawKey();
+            mixin_key = ConfInfoApi.getWBIMixinKey(rawKey);
             SharedPreferencesUtil.putString("wbi_mixin_key", mixin_key);
-        } else mixin_key = SharedPreferencesUtil.getString("wbi_mixin_key", "");
+            SharedPreferencesUtil.putInt("last_wbi", curr);
+        }
 
         String wts = String.valueOf(System.currentTimeMillis() / 1000);
         String calc_str = sortUrlParams(Uri.encode(url_query, "@#&=*+-_.,:!?()/~'%") + "&wts=" + wts) + mixin_key;

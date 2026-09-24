@@ -168,7 +168,11 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
             HandlerThread handlerThread = this.mHandlerThread;
             mHandlerThread = null;
             try {
-                handlerThread.join();
+                //必须带超时：stopDraw 是被主线程调用的（Activity 销毁路径），
+                //而无超时 join 一旦撞上绘制线程卡在原生调用上，主线程就永久挂死（表现为整个应用卡死）。
+                handlerThread.join(2000);
+                if (handlerThread.isAlive())
+                    android.util.Log.w(TAG, "handler thread 未在 2s 内退出，放弃等待");
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
