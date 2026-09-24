@@ -1,93 +1,144 @@
 <div align="center">
 
-# 哔哩终端
+# Re：哔哩终端
 
-轻量的第三方B站Android客户端
+哔哩终端（BiliClient）的**非官方**二次开发分支 · 轻量第三方 B 站 Android 客户端
+
+当前版本 **1.0.2-fix1**（`versionCode 20260925`）· 基于哔哩终端 2.9.8 · 许可 GPL-3.0
+
+[下载最新版](https://github.com/cyq114514/Re-BiliTerminal/releases/latest)　|　[更新日志](#更新日志)　|　[Vibe Coding 声明](#vibe-coding-声明)
 
 </div>
 
-> [!IMPORTANT]
-> 原项目已停更并归档存档。此项目为基于最新 2.9.8 版本的二次开发版本。作者已跑路，有问题在本项目下提 issue 即可。
+---
 
-# 介绍
-这是一个**极其轻量级**的**B站客户端**，名字来源于原神中的“虚空终端”。使用远古技术 `java` + `xml`开发，最低支持**安卓4.0.4**。（部分4.0.4设备无法运行，但也无法解决）~~这么古老的设备解码视频都费劲，要不还是留作收藏吧（~~
-
-本项目借鉴了 [WearBili](https://github.com/SpaceXC/WearBili) 和 [腕上哔哩](https://github.com/luern0313/WristBilibili) 的部分开源代码和它们收集的部分 API 。
-界面曾使用 [WearBili](https://github.com/SpaceXC/WearBili) 的布局（现已重做）。
-**除此之外本项目与 其他第三方B站浏览软件 无任何关系**。
-**谢绝在无关评论区提及终端，谢谢喵**。
-
-播放视频可选择使用内置播放器、小电视播放器或凉腕播放器，内置播放器会优先支持部分功能。
-
-1. 我们会尽量保证软件的轻量，不在其中塞入太多东西，优先保证**可用性**与**流畅性**，字体之类的怎么说也不会放进去40M的（
-2. ~~我们尽量把代码写得好看了~~现在的代码已经是一个庞大的屎山了
-3. ~~项目的API解析逻辑十分甚至九分清晰~~（指直接一层一层拆json）
-4. 依赖库少，~~可以快速嫁接到其他工程里~~（大嘘
-
->**品鉴此项目代码前请注意：此工程的某些部分存在复用以及有一些奇怪的写法以及可能存在暗病和屎山！**
+> [!WARNING]
+> ## Vibe Coding 声明
 >
->#### 本项目可能包含：
+> **本分支是 vibe coding 产物。请先读完这一段，再决定是否使用、fork 或参考它。**
 >
-> ~~大哥上楼梯：~~
-> ```java
-> // if (all.has("xxx")) {
-> //     JSONObject data = all.getJSONObject("xxx");
-> //     if (data.has("xxx")){
-> //         JSONObject data2 = data.getJSONObject("xxx");
-> //         if (data2.has("xxx")){
-> //             JSONObject data3 = data2.getJSONObject("xxx");
-> //             if (data3.has("items_lists")){
-> ```
->
-> ~~神秘逻辑：~~
-> ```java
-> // if (data.getInt("aaa") == 1 ? true : false)
-> // if (data.getInt("bbb") == 1 ? true : false)
-> // if (data.getInt("ccc") == 1 ? true : false)
-> ```
->
-> ~~以上问题正在逐渐改善，大概（QAQ~~
->
-> **此版本使用Gson重构了大部分解析逻辑，以上问题已不复存在**
->
-> 很多结构相同的页面（如`稍后再看`、`收藏`等只有一个 `RecyclerView`的页面）都直接使用了共用的一套界面布局。动态和视频的 `Adapter` 和 `Holder` 并没有按照常规套路来写，而是将 `Holder` 独立出来。因为有些页面如搜索页、个人信息页也用到了相同的代码，我就选择了把这些共用代码统一放在同一个类里。这可以减小一部分资源浪费，也易于整体修改。
->
-> 布局里 `CardView` 和 `Button` 都设置了**统一的 style** 。
+> - 本项目（Re：哔哩终端）自 1.0.0 起的**绝大部分改动，由 AI 编码助手（大语言模型）生成**，
+>   人工主要负责「提需求、审阅结果、真机验证、写文案与做决策」，而非逐行手写。
+> - 因此代码里可能存在 AI 生成代码的典型特征：**注释与实现不完全对应、冗余分支、过度防御、
+>   命名不统一、局部实现风格与上游不一致**。这些不必然造成功能缺陷，但确实影响可读性。
+> - **不要把本分支的代码当作工程规范或学习范本。** 想要风格统一、人工编写的哔哩终端，请回到上游项目。
+> - 功能改动会尽量在提交信息里写明**根因与修法**，并附真机验证结论；发现问题欢迎直接提 Issue。
+> - 如果你介意 AI 参与编码，**请不要使用、不要 fork、不要参考本分支**。
 
-> [!IMPORTANT]
-> 项目展望：本项目将作为一个哔哩终端的非官方分支存在，可能不定期更新（？
+---
 
+## 这是什么
 
-### 为啥不是在那两位前辈的基础上改？
+「Re：哔哩终端」是基于 **哔哩终端（BiliClient，原项目已停更归档）** 的**非官方分支**，
+面向**低配手机 / 手表 / 老设备**。
 
-- [腕上哔哩](https://github.com/luern0313/WristBilibili) 的开源代码**不完整**，它的数据处理部分多处用到 luern 自己的 **Lson** 库，然而 Github 上的版本似乎不管用。
-- [WearBili](https://github.com/SpaceXC/WearBili) 的界面确实好看，但是体积大、在许多手表上卡顿严重，而且**仅支持安卓7.1**以上，~~最重要的是 Robin 看不懂 kotlin~~。
+相对上游，本分支主要做了两件事：
 
-### 其他
+1. **品牌与安装隔离** —— 应用更名为「Re：哔哩终端」，包名改为 `com.RobinNotBad.BiliClient.re`，
+   可与原版「哔哩终端」**同时安装、互不覆盖**。
+2. **修番剧相关的观看进度问题** —— 这也是本分支存在的主要理由。
 
-> 此项目正在持续更新中，若有问题和建议欢迎提issue或加群反馈。
->
-> 开发组都是学生，上学期间不能更新，请勿催更，因为催了也大概率没用（
+## 更新日志
 
-> 友情链接：**WearBili** 现已推出**重制版**：[Re:WearBili](https://github.com/SpaceXC/Re-WearBili)，全新UI和动效，流畅度也有所改善，欢迎前往搜索与体验！
+| 版本 | 主要内容 |
+| --- | --- |
+| 1.0.0 | 修复番剧播放进度无法保存；历史记录支持显示番剧；修复从历史处续播 |
+| 1.0.2 | 播放中自动保存进度（意外退出最多丢 15 秒）；弹幕缓存；历史记录点番剧直达续播；稍后再看显示进度 |
+| **1.0.2-fix1** | 修复番剧断点续播**上报静默失效**；修复**跳转后弹幕卡死 / 退出播放后整个应用卡死** |
 
-# 联系
- 
-- 唯一官网：[biliterminal.cn](https://biliterminal.cn)
-- QQ交流群
-> 交流一群：482091687
->
-> 交流二群：656364457
->
-> 测试群：745414928
+### 1.0.2-fix1 具体修了什么
 
-# 开发
+**观看进度上报（番剧续播进度写不进服务端）**
 
-`clone`本项目，导入到你的IDE中进行开发、构建
+- 上报凭证不再读本地快照 `csrf` / `mid`，改为从实时 Cookie（`bili_jct` / `DedeUserID`）派生。
+  原实现下 Cookie 轮换后两者会错位，导致**所有 POST 返回 `-111`，而 GET 一切正常** ——
+  表现为「只有观看记录上报静默失效」，且同一份代码在不同设备/登录时机表现不同。
+- 心跳接口的 `start_ts` 夹到 `>= 0`，避免设备时钟偏慢时被服务端判 `-400`。
+- 上报前若 `mid` 为 0，用实时 Cookie 补一次解析，避免已登录却被判未登录。
+- 番剧续播进度在 `x/player/wbi/v2` 取不到时，兜底走观看记录列表接口。
+- WBI 密钥取成功后才落 `last_wbi`，缓存为空强制刷新，避免一次取密钥失败污染当天所有 WBI 请求。
 
-> `develop`分支用于在线开发，获取到的为最新源码，但可能会存在未修复的问题。
-> 欢迎提交 pr （
+**跳转后弹幕卡死 / 退出播放后整个应用卡死**
 
-## 部分问题的解决方法
+- 弹幕绘制线程不再轮询 `ijkPlayer.getCurrentPosition()`。该回调跑在弹幕同步/绘制线程上，
+  而它是会取播放器原生锁的 JNI 调用 —— 既是「弹幕时间轴被旧位置拽住」的直接原因，
+  也是绘制线程卡住后主线程 `release()` 内 `join()` 无限等待、**整个应用卡死**的共因。
+- 退出链路（`finish` / `onPause` / `onStop` / `onDestroy`）与 MediaSession 状态更新
+  不再在主线程调用 `getCurrentPosition()`。
+- 弹幕未 `prepared` 时的 seek 请求会暂存、prepared 后补做；新增带观察窗与冷却的弹幕时间轴校正。
+- DanmakuFlameMaster 的 `Thread.join` 加 2s 超时，避免主线程被无限阻塞。
+- 所有 `TimerTask` 加异常兜底（TimerTask 抛未捕获异常会永久终止整个 Timer，
+  导致进度条与进度上报一起静默失效）。
 
-### ~~当前似乎没有什么大问题~~
+## 下载与安装
+
+从 [Releases](https://github.com/cyq114514/Re-BiliTerminal/releases) 下载 `Re-BiliTerminal-<版本>-release.apk`。
+
+| 项目 | 说明 |
+| --- | --- |
+| 系统要求 | **Android 4.0.4 及以上**（`minSdk 14`，`targetSdk 26`） |
+| ABI | `armeabi-v7a`、`x86`（**不含 arm64-v8a**，与上游一致；arm64 设备走 32 位兼容模式） |
+| 签名 | 正式证书。同签名版本**直接覆盖安装即可**，无需卸载、不丢登录态 |
+| 共存 | 若设备上同时装有原版「哔哩终端」，两者会并存，属正常现象 |
+
+> 本软件永久免费开源，不收集账号与隐私信息。**若你在任何平台付费下载到它，那你被坑了。**
+
+## 构建
+
+```bash
+git clone https://github.com/cyq114514/Re-BiliTerminal.git
+cd Re-BiliTerminal
+# 需要 JDK 17+ 与 Android SDK（compileSdk 33）
+./gradlew :app:assembleDebug     # 调试包
+./gradlew :app:assembleRelease   # 正式包（需自行配置签名）
+```
+
+Release 签名通过项目根目录的 `local.properties` 读取（该文件已在 `.gitignore` 中）：
+
+```properties
+sdk.dir=/path/to/Android/sdk
+KEY_PATH=/path/to/your.jks
+KEY_PASSWORD=******
+ALIAS_NAME=******
+ALIAS_PASSWORD=******
+```
+
+> **`KEY_PATH` 必须是纯 ASCII 路径。** `local.properties` 会被 `Properties.load()`
+> 按 ISO-8859-1 解析，路径里一旦含中文就会读成乱码，导致 `validateSigningRelease`
+> 报 `keystore file not found`。
+
+## 技术栈
+
+- **语言 / 界面**：Java + XML（`minSdk 14`，无 Kotlin、无 Compose）
+- **播放器**：`ijkplayer-java`（模块内置，源自 [bilibili/ijkplayer](https://github.com/bilibili/ijkplayer)）
+- **弹幕**：`DanmakuFlameMaster`（模块内置，已打本地补丁）
+- **网络 / 解析**：OkHttp 3.12.1 · Gson 2.8.9 · protobuf-javalite（弹幕协议）
+- **其他**：Glide、EventBus、jsoup、PhotoView、zxing、Brotli（`brotlij` + brotli4j）
+
+## 已知问题
+
+- 观看进度依赖服务端接口，**未登录时不会上报**（日志中会有明确提示）。
+- 使用外部播放器（小电视 / 凉腕）时拿不到播放结束时的真实进度，会用进入播放前的进度兜底。
+- 部分界面文案（如初始引导页里的 QQ 群与官网信息）**仍沿用上游**，未随本分支更新。
+- 只打包 32 位 ABI，极少数纯 64 位设备无法安装。
+
+## 上游与致谢
+
+- **哔哩终端（BiliClient）** —— 本分支的上游项目，原项目已停更归档。
+- [WearBili](https://github.com/SpaceXC/WearBili) —— 布局与部分开源代码参考。
+- [腕上哔哩](https://github.com/luern0313/WristBilibili) —— 部分开源代码与 API 收集参考。
+- [Re:WearBili](https://github.com/SpaceXC/Re-WearBili) —— 兄弟项目，全新 UI 与动效。
+- [bilibili/ijkplayer](https://github.com/bilibili/ijkplayer) —— 播放内核。
+
+本分支为**非官方构建**，与哔哩哔哩（Bilibili）官方及上游项目均无隶属关系。
+使用中遇到的问题请**在本仓库提 Issue**，请勿反馈至官方或上游渠道。
+
+## 许可
+
+[GPL-3.0](LICENSE)。上游为 GPL-3.0 项目，本分支沿用同一许可，分发时请保留版权声明与许可全文。
+
+---
+
+<div align="center">
+<sub>代码有 AI 编码助手参与 · 功能经真机验证 · 问题请提 Issue</sub>
+</div>
