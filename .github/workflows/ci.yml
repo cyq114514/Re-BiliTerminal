@@ -1,6 +1,10 @@
 name: CI
 
 # push 到 main 时编译自检；推 v* 标签时构建 release 包并附加到对应 Release
+permissions:
+  # github.token 默认只读，向 Release 上传资产需要 contents 写权限
+  contents: write
+
 on:
   push:
     branches: [ main ]
