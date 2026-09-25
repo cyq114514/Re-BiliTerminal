@@ -156,6 +156,28 @@ public class EmoteApi {
         return emotePackages.getInt("code");
     }
 
+    /**
+     * 获取业务下全部表情文本（如"[doge]"）的集合，用于发布时把[xxx]文本识别为type 9表情节点。
+     * 拉取失败时返回空集合（发布退化为纯文本，不报错）。
+     */
+    public static java.util.Set<String> getEmoteTexts(String business) {
+        java.util.Set<String> texts = new java.util.HashSet<>();
+        try {
+            List<EmotePackage> packages = getEmotes(business);
+            if (packages != null) {
+                for (EmotePackage emotePackage : packages) {
+                    if (emotePackage.emotes == null) continue;
+                    for (Emote emote : emotePackage.emotes) {
+                        if (emote.name != null && !emote.name.isEmpty()) texts.add(emote.name);
+                        if (emote.alias != null && !emote.alias.isEmpty()) texts.add(emote.alias);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return texts;
+    }
+
     public static List<EmotePackage> analyzeEmotePackages(JSONArray packages) throws JSONException {
         if (packages == null) return null;
         List<EmotePackage> result = new ArrayList<>();

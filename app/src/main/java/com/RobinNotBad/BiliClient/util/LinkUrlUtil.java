@@ -28,6 +28,9 @@ public class LinkUrlUtil {
     public static final int TYPE_AVID = 2;
     public static final int TYPE_CVID = 3;
     public static final int TYPE_UID = 4;
+    //动态富文本节点专用：话题跳转话题页、投票打开投票页（val分别为话题名/vote_id）
+    public static final int TYPE_TOPIC = 5;
+    public static final int TYPE_VOTE = 6;
     public static final Pattern BV_PATTERN = Pattern.compile("BV[A-Za-z0-9]{10}");
     public static final Pattern AV_PATTERN = Pattern.compile("av\\d{1,10}");
     public static final Pattern CV_PATTERN = Pattern.compile("cv\\d{1,10}");

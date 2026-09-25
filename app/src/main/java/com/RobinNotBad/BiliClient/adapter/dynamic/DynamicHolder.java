@@ -22,7 +22,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
+import com.RobinNotBad.BiliClient.activity.ListChooseActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.activity.dynamic.VoteActivity;
 import com.RobinNotBad.BiliClient.activity.dynamic.send.SendDynamicActivity;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.adapter.article.ArticleCardHolder;
@@ -49,6 +51,10 @@ import java.util.List;
 
 public class DynamicHolder extends RecyclerView.ViewHolder {
     public static final int GO_TO_INFO_REQUEST = 71;
+    /**动态操作菜单（置顶/可见范围/编辑）的请求码，结果在宿主Activity的onActivityResult里回调onDynamicOpResult*/
+    public static final int DYNAMIC_OPS_REQUEST = 7131;
+    private static Dynamic pendingOpsDynamic;
+
     public final TextView username;
     public final TextView content;
     public final TextView title;
@@ -58,6 +64,8 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
     public final View itemView;
     public TextView item_dynamic_share, item_dynamic_delete;
     public TextView likeCount;
+    public TextView item_dynamic_comment;
+    public TextView dynamicVote;
     public View cell_dynamic_child;
     public final View cell_dynamic_video;
     public final View cell_dynamic_image;
@@ -95,11 +103,83 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
             item_dynamic_share = itemView.findViewById(R.id.item_dynamic_share);
             likeCount = itemView.findViewById(R.id.likes);
             item_dynamic_delete = itemView.findViewById(R.id.item_dynamic_delete);
+            item_dynamic_comment = itemView.findViewById(R.id.item_dynamic_comment);
+            dynamicVote = itemView.findViewById(R.id.dynamic_vote_extra);
             relayDynamicLauncher = mActivity.relayDynamicLauncher;
             this.cell_dynamic_child = extraCard.findViewById(R.id.dynamic_child);
             this.cell_dynamic_video = extraCard.findViewById(R.id.dynamic_video_extra);
             this.cell_dynamic_article = extraCard.findViewById(R.id.dynamic_article_extra);
             this.cell_dynamic_image = extraCard.findViewById(R.id.dynamic_image_extra);
+        }
+    }
+
+    /**
+     * 宿主Activity的onActivityResult转发到此处处理动态操作菜单的选择结果。
+     * 编辑动态会再次以DYNAMIC_OPS_REQUEST拉起SendDynamicActivity，其完成结果（editOk）也在此处理。
+     */
+    public static void onDynamicOpResult(int requestCode, int resultCode, Intent data, BaseActivity activity) {
+        if (requestCode != DYNAMIC_OPS_REQUEST) return;
+        if (resultCode != Activity.RESULT_OK) {
+            //取消选择/取消编辑时清掉挂起的动态引用，避免静态字段滞留（取消时data通常为null）
+            pendingOpsDynamic = null;
+            return;
+        }
+        if (data == null) return;
+        String item = data.getStringExtra("item");
+        String editOk = data.getStringExtra("editOk");
+        if (editOk != null) {
+            MsgUtil.showMsg("编辑成功~");
+            return;
+        }
+        final Dynamic dynamic = pendingOpsDynamic;
+        pendingOpsDynamic = null;
+        if (dynamic == null || item == null) return;
+        switch (item) {
+            case "置顶动态":
+            case "取消置顶": {
+                boolean top = item.equals("置顶动态");
+                CenterThreadPool.run(() -> {
+                    try {
+                        int code = DynamicApi.setTop(dynamic.dynamicId, top);
+                        activity.runOnUiThread(() -> {
+                            if (code == 0) {
+                                dynamic.isTop = top;
+                                MsgUtil.showMsg(top ? "置顶成功~" : "已取消置顶~");
+                            } else MsgUtil.showMsg("操作失败：" + code);
+                        });
+                    } catch (Exception e) {
+                        activity.runOnUiThread(() -> MsgUtil.err(e));
+                    }
+                });
+                break;
+            }
+            case "仅自己可见":
+            case "设为所有人可见": {
+                boolean privatePub = item.equals("仅自己可见");
+                CenterThreadPool.run(() -> {
+                    try {
+                        int code = DynamicApi.setPrivatePub(dynamic.dynamicId, privatePub);
+                        activity.runOnUiThread(() -> {
+                            if (code == 0) {
+                                dynamic.badgeText = privatePub ? "仅自己可见" : "";
+                                MsgUtil.showMsg(privatePub ? "已设为仅自己可见" : "已设为所有人可见");
+                            } else MsgUtil.showMsg("操作失败：" + code);
+                        });
+                    } catch (Exception e) {
+                        activity.runOnUiThread(() -> MsgUtil.err(e));
+                    }
+                });
+                break;
+            }
+            case "编辑动态": {
+                Intent intent = new Intent(activity, SendDynamicActivity.class);
+                intent.putExtra("editId", dynamic.dynamicId);
+                intent.putExtra("editText", dynamic.content == null ? "" : dynamic.content.toString());
+                activity.startActivityForResult(intent, DYNAMIC_OPS_REQUEST);
+                break;
+            }
+            default:
+                MsgUtil.showMsg("未知操作：" + item);
         }
     }
 
@@ -110,10 +190,14 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
 
     public static void removeDynamicFromList(List<Dynamic> dynamicList, int finalPosition,
                                              RecyclerView.Adapter<RecyclerView.ViewHolder> adapter, boolean showRecentUp) {
+        removeDynamicFromList(dynamicList, finalPosition, adapter, showRecentUp ? 2 : 1);
+    }
+
+    public static void removeDynamicFromList(List<Dynamic> dynamicList, int finalPosition,
+                                             RecyclerView.Adapter<RecyclerView.ViewHolder> adapter, int headerCount) {
         dynamicList.remove(finalPosition);
-        int offset = showRecentUp ? 2 : 1;
-        adapter.notifyItemRemoved(finalPosition + offset);
-        adapter.notifyItemRangeChanged(finalPosition + offset, dynamicList.size() - finalPosition);
+        adapter.notifyItemRemoved(finalPosition + headerCount);
+        adapter.notifyItemRangeChanged(finalPosition + headerCount, dynamicList.size() - finalPosition);
     }
 
     public static View.OnLongClickListener getDeleteListener(Activity dynamicActivity, List<Dynamic> dynamicList,
@@ -236,8 +320,14 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
         } else {
             username.setTextColor(0xFFFFFFFF);
         }
-        if (pubdate != null)
-            pubdate.setText(dynamic.pubTime);
+        if (pubdate != null) {
+            //pub_action（如"参与了投票"）优先于发布时间展示，其后拼icon_badge（如"仅自己可见"）
+            StringBuilder dateText = new StringBuilder();
+            if (!TextUtils.isEmpty(dynamic.pubAction)) dateText.append(dynamic.pubAction);
+            else dateText.append(dynamic.pubTime);
+            if (!TextUtils.isEmpty(dynamic.badgeText)) dateText.append(" · ").append(dynamic.badgeText);
+            pubdate.setText(dateText.toString());
+        }
         if (dynamic.content != null && !TextUtils.isEmpty(dynamic.content)) {
             content.setVisibility(View.VISIBLE);
             content.setText(dynamic.content);
@@ -358,6 +448,24 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
         else
             extraCard.setVisibility(View.VISIBLE);
 
+        //投票卡片（module_additional ADDITIONAL_TYPE_VOTE）
+        if (dynamicVote != null) {
+            if (dynamic.vote != null && dynamic.vote.voteId != 0) {
+                dynamicVote.setVisibility(View.VISIBLE);
+                dynamicVote.setText("🗳 " + (TextUtils.isEmpty(dynamic.vote.title) ? "参与投票" : dynamic.vote.title)
+                        + "　" + toWan(dynamic.vote.joinNum) + "人参与");
+                dynamicVote.setOnClickListener(view -> {
+                    Intent intent = new Intent();
+                    intent.setClass(context, VoteActivity.class);
+                    intent.putExtra("voteId", dynamic.vote.voteId);
+                    intent.putExtra("dynamicId", dynamic.dynamicId);
+                    context.startActivity(intent);
+                });
+            } else {
+                dynamicVote.setVisibility(View.GONE);
+            }
+        }
+
         if (clickable) {
             content.setMaxLines(5);
             if (dynamic.dynamicId != 0) {
@@ -391,6 +499,12 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
             Intent intent = new Intent();
             intent.setClass(mActivity, SendDynamicActivity.class);
             intent.putExtra("dynamicId", dynamic.dynamicId);
+            //转发自动引用所需的信息，SendDynamicActivity完成时会原样回传
+            if (dynamic.userInfo != null) {
+                intent.putExtra("forwardAuthorName", dynamic.userInfo.name);
+                intent.putExtra("forwardAuthorMid", dynamic.userInfo.mid);
+            }
+            if (dynamic.content != null) intent.putExtra("forwardContentText", dynamic.content.toString());
             TerminalContext.getInstance().setForwardContent(dynamic);
             relayDynamicLauncher.launch(intent);
         };
@@ -399,8 +513,40 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
 
         View.OnClickListener onDeleteClick = view -> MsgUtil.showMsg("长按删除");
         if (item_dynamic_delete != null) {
+            if (dynamic.canDelete && clickable) {
+                //自己的动态：点击弹出操作菜单（置顶/可见范围/编辑），长按删除保持不变
+                onDeleteClick = view -> {
+                    pendingOpsDynamic = dynamic;
+                    ArrayList<String> ops = new ArrayList<>();
+                    ops.add(dynamic.isTop ? "取消置顶" : "置顶动态");
+                    ops.add(dynamic.isOnlySelf() ? "设为所有人可见" : "仅自己可见");
+                    if (dynamic.major_object == null && dynamic.dynamic_forward == null) ops.add("编辑动态");
+                    ((Activity) context).startActivityForResult(
+                            new Intent(context, ListChooseActivity.class)
+                                    .putExtra("title", "动态操作")
+                                    .putExtra("items", ops),
+                            DYNAMIC_OPS_REQUEST);
+                };
+            }
             item_dynamic_delete.setOnClickListener(onDeleteClick);
             item_dynamic_delete.setVisibility(View.GONE);
+        }
+
+        //评论数与入口
+        if (item_dynamic_comment != null) {
+            if (dynamic.stats != null && dynamic.stats.reply > 0 && dynamic.dynamicId != 0) {
+                item_dynamic_comment.setVisibility(View.VISIBLE);
+                item_dynamic_comment.setText(toWan(dynamic.stats.reply));
+                item_dynamic_comment.setOnClickListener(view -> {
+                    if (context instanceof Activity)
+                        TerminalContext.getInstance().enterDynamicDetailPage((Activity) context,
+                                dynamic.dynamicId, getAdapterPosition(), 1L);
+                    else
+                        TerminalContext.getInstance().enterDynamicDetailPage(context, dynamic.dynamicId, getAdapterPosition());
+                });
+            } else {
+                item_dynamic_comment.setVisibility(View.GONE);
+            }
         }
 
         if (likeCount != null) {

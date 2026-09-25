@@ -30,6 +30,22 @@ public class OpusApi {
         opus.type = Opus.TYPE_DYNAMIC;
         opus.id = id;
 
+        if (id > 100000000) {
+            // 动态：优先走 opus/detail 接口（单次API请求）。
+            // 之前是抓取 www.bilibili.com/opus/{id} 的SSR整页HTML再抠JSON，
+            // 页面体积大、还有多级重定向，是图文动态详情打开慢（2~3秒）的元凶。
+            try {
+                if (fetchOpusFromApi(opus, id)) return finishOpus(opus);
+                // 接口明确没有opus数据（纯文字等旧样式动态）：
+                // 让OpusInfoActivity跳转旧版DynamicInfoActivity，走dynamic/detail接口
+                opus.type = Opus.TYPE_DYNAMIC_OLD_STYLE;
+                return opus;
+            } catch (Exception apiError) {
+                // 接口异常（网络/WBI失败等）时退回网页抓取兜底，保证可用性
+                Logu.w("OpusApi", "opus/detail failed, fallback to html scrape: " + apiError.getMessage());
+            }
+        }
+
         String url;
         if (id > 100000000)
             url = "https://www.bilibili.com/opus/" + id; // 别问，问就是动态和专栏都被统一了，判断不了类型，只能判断id长度了。能用。
@@ -62,68 +78,9 @@ public class OpusApi {
             if (opus.commentType == 0) opus.commentType = 17;
 
             if (detail.isNull("modules")) return opus;    //isNull其实涵盖了!has的情况，之前都是咋想的判断两次，我简直是sb
-            JSONArray modules = detail.getJSONArray("modules");
+            parseOpusModules(opus, detail.getJSONArray("modules"));
 
-            for (int i = 0; i < modules.length(); i++) {
-                JSONObject module = modules.getJSONObject(i);
-                switch (module.optString("module_type")) {
-                    case "MODULE_TYPE_TITLE":
-                        JSONObject moduleTitle = module.optJSONObject("module_title");
-                        if (moduleTitle != null) opus.title = moduleTitle.optString("text", "");
-                        break;
-                    case "MODULE_TYPE_TOP":
-                        ArrayList<String> topImages = new ArrayList<>();
-                        JSONObject module_top = module.optJSONObject("module_top");
-                        if (module_top != null) {
-                            JSONObject display = module_top.optJSONObject("display");
-                            if (display != null) {
-                                int displayType = display.optInt("type");
-                                if (displayType == 1) {
-                                    JSONObject album = display.optJSONObject("album");
-                                    if (album != null) {
-                                        JSONArray pics = album.optJSONArray("pics");
-                                        if (pics != null) {
-                                            for (int j = 0; j < pics.length(); j++) {
-                                                JSONObject pic = pics.optJSONObject(j);
-                                                if (pic != null) topImages.add(pic.optString("url", ""));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        opus.topImages = topImages;
-                        Logu.d("yes");
-                        break;
-                    case "MODULE_TYPE_AUTHOR":
-                        JSONObject module_author = module.optJSONObject("module_author");    //我感觉b站也是一个巨大的草台班子，用户信息格式都好几种，头像有avatar有face有head的，他们自己的程序员不累吗……
-                        if (module_author == null) break;
-                        UserInfo author = new UserInfo();
-                        author.mid = module_author.optLong("mid", 0);
-                        author.name = module_author.optString("name", "");
-                        author.followed = module_author.optBoolean("following", false);
-                        author.avatar = module_author.optString("face", module_author.optString("avatar", ""));
-                        if (!module_author.isNull("vip"))
-                            author.vip_nickname_color = module_author.optJSONObject("vip").optString("nickname_color", "");
-
-                        opus.pubTime = module_author.optString("pub_time", "");
-                        opus.upInfo = author;
-                        break;
-                    case "MODULE_TYPE_CONTENT":
-                        JSONObject moduleContent = module.optJSONObject("module_content");
-                        if (moduleContent != null) {
-                            JSONArray paragraphs = moduleContent.optJSONArray("paragraphs");
-                            if (paragraphs != null) opus.paragraphs = analyzeParagraphs(paragraphs);
-                        }
-                        break;
-                    case "MODULE_TYPE_STAT":
-                        opus.stats = Stats.fromOpus(module.optJSONObject("module_stat"));
-                        break;
-                }
-            }
-
-            if (opus.upInfo == null) opus.upInfo = new UserInfo();
-            if (opus.stats == null) opus.stats = new Stats();
+            return finishOpus(opus);
         } catch (IllegalArgumentException e) { // 取不出来的时候，会重定向，但重定向的域名是//开头的，会报错
             //这里给opus设置一个参数，让OpusInfoActivity跳转到旧版的DynamicInfoActivity，从而无需重写解析
             //判断方式很简单粗暴，看报错信息里有没有URL这个关键字，有就是跳转错误
@@ -131,22 +88,102 @@ public class OpusApi {
             if (errMsg != null && errMsg.contains("URL")) opus.type = Opus.TYPE_DYNAMIC_OLD_STYLE;
             else MsgUtil.err(e);
             return opus;
-
-            /*
-            url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?";
-            url += "timezone_offset=-480&platform=web&gaia_source=main_web&id=" + id + "&features=itemOpusStyle,opusBigCover,onlyfansVote,endFooterHidden,decorationCard,onlyfansAssetsV2,ugcDelete,onlyfansQaCard,editable,opusPrivateVisible,avatarAutoTheme&web_location=333.1368&x-bili-device-req-json=%7B%22platform%22:%22web%22,%22device%22:%22pc%22%7D&x-bili-web-req-json=%7B%22spm_id%22:%22333.1368%22%7D";
-            Response response = NetWorkUtil.get(ConfInfoApi.signWBI(url));
-            ResponseBody responseBody = response.body();
-            if(responseBody == null) return opus;
-
-            JSONObject json = new JSONObject(responseBody.string());
-            JSONObject item = json.getJSONObject("data").getJSONObject("item");
-
-            analyzeOldStyleDynamic(opus, item);
-             */
         }
-        // B站是会做图文的
+    }
 
+    /**模块数组解析（opus/detail接口与网页内嵌detail同构），供API与HTML两条路径共用*/
+    private static void parseOpusModules(Opus opus, JSONArray modules) throws JSONException {
+        for (int i = 0; i < modules.length(); i++) {
+            JSONObject module = modules.getJSONObject(i);
+            switch (module.optString("module_type")) {
+                case "MODULE_TYPE_TITLE":
+                    JSONObject moduleTitle = module.optJSONObject("module_title");
+                    if (moduleTitle != null) opus.title = moduleTitle.optString("text", "");
+                    break;
+                case "MODULE_TYPE_TOP":
+                    ArrayList<String> topImages = new ArrayList<>();
+                    JSONObject module_top = module.optJSONObject("module_top");
+                    if (module_top != null) {
+                        JSONObject display = module_top.optJSONObject("display");
+                        if (display != null) {
+                            int displayType = display.optInt("type");
+                            if (displayType == 1) {
+                                JSONObject album = display.optJSONObject("album");
+                                if (album != null) {
+                                    JSONArray pics = album.optJSONArray("pics");
+                                    if (pics != null) {
+                                        for (int j = 0; j < pics.length(); j++) {
+                                            JSONObject pic = pics.optJSONObject(j);
+                                            if (pic != null) topImages.add(pic.optString("url", ""));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    opus.topImages = topImages;
+                    Logu.d("yes");
+                    break;
+                case "MODULE_TYPE_AUTHOR":
+                    JSONObject module_author = module.optJSONObject("module_author");    //我感觉b站也是一个巨大的草台班子，用户信息格式都好几种，头像有avatar有face有head的，他们自己的程序员不累吗……
+                    if (module_author == null) break;
+                    UserInfo author = new UserInfo();
+                    author.mid = module_author.optLong("mid", 0);
+                    author.name = module_author.optString("name", "");
+                    author.followed = module_author.optBoolean("following", false);
+                    author.avatar = module_author.optString("face", module_author.optString("avatar", ""));
+                    if (!module_author.isNull("vip"))
+                        author.vip_nickname_color = module_author.optJSONObject("vip").optString("nickname_color", "");
+
+                    opus.pubTime = module_author.optString("pub_time", "");
+                    opus.upInfo = author;
+                    break;
+                case "MODULE_TYPE_CONTENT":
+                    JSONObject moduleContent = module.optJSONObject("module_content");
+                    if (moduleContent != null) {
+                        JSONArray paragraphs = moduleContent.optJSONArray("paragraphs");
+                        if (paragraphs != null) opus.paragraphs = analyzeParagraphs(paragraphs);
+                    }
+                    break;
+                case "MODULE_TYPE_STAT":
+                    opus.stats = Stats.fromOpus(module.optJSONObject("module_stat"));
+                    break;
+            }
+        }
+    }
+
+    /**
+     * 通过 /x/polymer/web-dynamic/v1/opus/detail 接口获取图文详情（需WBI签名，features=htmlNewStyle）。
+     * @return true=成功解析；false=接口无opus数据（调用方转旧样式流程）
+     */
+    private static boolean fetchOpusFromApi(Opus opus, long id) throws IOException, JSONException {
+        String url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail?timezone_offset=-480&features=htmlNewStyle&id=" + id;
+        JSONObject root = NetWorkUtil.getJson(ConfInfoApi.signWBI(url));
+        if (root.optInt("code", -1) != 0) return false;
+        JSONObject data = root.optJSONObject("data");
+        if (data == null) return false;
+        //fallback.id非空说明该内容实为旧版载体，走重定向流程
+        JSONObject fallback = data.optJSONObject("fallback");
+        if (fallback != null && fallback.optLong("id", 0) > 0) return false;
+        JSONObject item = data.optJSONObject("item");
+        if (item == null) return false;
+
+        JSONObject basic = item.optJSONObject("basic");
+        if (basic != null) {
+            opus.commentId = Long.parseLong(basic.optString("comment_id_str", "0"));
+            opus.commentType = basic.optInt("comment_type", 0);
+        }
+        if (opus.commentId == 0) opus.commentId = id;
+        if (opus.commentType == 0) opus.commentType = 17;
+        if (item.isNull("modules")) return false;
+        parseOpusModules(opus, item.getJSONArray("modules"));
+        return true;
+    }
+
+    private static Opus finishOpus(Opus opus) {
+        if (opus.upInfo == null) opus.upInfo = new UserInfo();
+        if (opus.stats == null) opus.stats = new Stats();
+        // B站是会做图文的
         opus.cover = "";
         return opus;
     }

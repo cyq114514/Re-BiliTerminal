@@ -70,6 +70,22 @@
         app:layout_constraintTop_toBottomOf="@id/title"
         tools:ignore="TouchTargetSizeCheck" />
 
+    <TextView
+        android:id="@+id/dynamic_vote_extra"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:alpha="0.9"
+        android:ellipsize="end"
+        android:lines="1"
+        android:textColor="#66ccff"
+        android:textSize="13sp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/content"
+        tools:ignore="TouchTargetSizeCheck" />
+
     <LinearLayout
         android:id="@+id/extraCard"
         android:layout_width="0dp"
@@ -79,7 +95,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/content">
+        app:layout_constraintTop_toBottomOf="@id/dynamic_vote_extra">
 
         <include
             android:id="@+id/dynamic_child"
@@ -136,6 +152,20 @@
         app:layout_constraintTop_toBottomOf="@id/extraCard" />
 
 
+    <TextView
+        android:id="@+id/item_dynamic_comment"
+        android:layout_width="wrap_content"
+        android:layout_height="20dp"
+        android:layout_marginStart="4dp"
+        android:textColor="#fff"
+        android:gravity="center_vertical"
+        android:text="0"
+        android:alpha="0.7"
+        app:drawableStartCompat="@drawable/icon_reply"
+        app:layout_constraintStart_toEndOf="@+id/likes"
+        app:layout_constraintTop_toTopOf="@+id/likes"
+        android:textSize="14sp" />
+
     <!-- MMP哪个B在代码里设置了点赞的颜色害得我排除半天色调不对的问题 -->
     <TextView
         android:id="@+id/item_dynamic_share"
@@ -147,7 +177,7 @@
         android:text="转发"
         android:alpha="0.7"
         app:drawableStartCompat="@drawable/icon_share"
-        app:layout_constraintStart_toEndOf="@+id/likes"
+        app:layout_constraintStart_toEndOf="@+id/item_dynamic_comment"
         app:layout_constraintTop_toTopOf="@+id/likes"
         android:textSize="14sp" />
 

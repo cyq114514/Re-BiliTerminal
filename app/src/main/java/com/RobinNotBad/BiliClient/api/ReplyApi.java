@@ -322,6 +322,30 @@ public class ReplyApi {
         return new Pair<>(code, replyResult);
     }
 
+    /**
+     * 带图评论走新版 /x/v2/reply/create（JSON body，content.pictures 携带图片），
+     * 图片需先经 ImageApi.uploadImage 上传图床；旧版 /x/v2/reply/add 不支持图片。
+     */
+    public static Pair<Integer, Reply> sendReply(long oid, long root, long parent, String text, int type, JSONArray pictures) throws IOException, JSONException {
+        if (pictures == null || pictures.length() == 0) return sendReply(oid, root, parent, text, type);
+        String url = "https://api.bilibili.com/x/v2/reply/create";
+        JSONObject content = new JSONObject().put("message", text == null ? "" : text).put("pictures", pictures);
+        JSONObject body = new JSONObject()
+                .put("oid", oid)
+                .put("type", type)
+                .put("content", content)
+                .put("csrf", SharedPreferencesUtil.getString("csrf", ""));
+        if (root != 0) body.put("root", root).put("parent", parent);
+        Logu.v("sendReply(create) body=" + body);
+        JSONObject result = new JSONObject(Objects.requireNonNull(NetWorkUtil.postJson(url, body.toString()).body()).string());
+        int code = result.optInt("code", -1);
+        JSONObject data = result.optJSONObject("data");
+        JSONObject replyJson = data != null ? data.optJSONObject("reply") : null;
+        Reply replyResult = null;
+        try { if (replyJson != null) replyResult = new Reply(root != 0, replyJson); } catch (Exception ignored) {}
+        return new Pair<>(code, replyResult);
+    }
+
     public static Pair<Integer, Reply> sendReply(long oid, long root, long parent, String text) throws IOException, JSONException {
         return sendReply(oid, root, parent, text, REPLY_TYPE_VIDEO);
     }

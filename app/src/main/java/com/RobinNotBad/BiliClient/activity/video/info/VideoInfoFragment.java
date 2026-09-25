@@ -48,6 +48,7 @@ import com.RobinNotBad.BiliClient.activity.video.collection.CollectionInfoActivi
 import com.RobinNotBad.BiliClient.adapter.user.UpListAdapter;
 import com.RobinNotBad.BiliClient.api.BangumiApi;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
+import com.RobinNotBad.BiliClient.api.EmoteApi;
 import com.RobinNotBad.BiliClient.api.HistoryApi;
 import com.RobinNotBad.BiliClient.api.LikeCoinFavApi;
 import com.RobinNotBad.BiliClient.api.PlayerApi;
@@ -77,6 +78,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -120,7 +122,13 @@ public class VideoInfoFragment extends BaseFragment {
                                 atUids.put(matchedString, uid);
                             }
                         }
-                        dynId = DynamicApi.relayVideo(text, (atUids.isEmpty() ? null : atUids), videoInfo.aid);
+                        //转发自动引用 //@UP主: 标题
+                        String authorName = data.getStringExtra("forwardAuthorName");
+                        long authorMid = data.getLongExtra("forwardAuthorMid", 0);
+                        String authorContent = data.getStringExtra("forwardContentText");
+                        Set<String> emoteTexts = EmoteApi.getEmoteTexts(EmoteApi.BUSINESS_DYNAMIC);
+                        dynId = DynamicApi.relayVideo(text, (atUids.isEmpty() ? null : atUids), videoInfo.aid,
+                                authorName, authorMid, authorContent, emoteTexts);
 
                         if (dynId != -1) MsgUtil.showMsg("转发成功~");
                         else MsgUtil.showMsg("转发失败");
@@ -479,6 +487,14 @@ public class VideoInfoFragment extends BaseFragment {
         relay.setOnClickListener((view1) -> {
             Intent intent = new Intent();
             intent.setClass(requireContext(), SendDynamicActivity.class);
+            //转发自动引用所需信息，SendDynamicActivity完成时会原样回传
+            if (!videoInfo.staff.isEmpty()) {
+                intent.putExtra("forwardAuthorName", videoInfo.staff.get(0).name);
+                intent.putExtra("forwardAuthorMid", videoInfo.staff.get(0).mid);
+            }
+            intent.putExtra("forwardContentText", videoInfo.title);
+            //标记转发内容，SendDynamicActivity据此显示视频预览卡并隐藏带图/发布选项入口
+            TerminalContext.getInstance().setForwardContent(videoInfo);
             writeDynamicLauncher.launch(intent);
         });
         relay.setOnLongClickListener(v -> {

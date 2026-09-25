@@ -85,6 +85,13 @@ public class DynamicInfoActivity extends BaseActivity {
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        //动态操作菜单（置顶/可见范围/编辑）的选择结果
+        com.RobinNotBad.BiliClient.adapter.dynamic.DynamicHolder.onDynamicOpResult(requestCode, resultCode, data, this);
+    }
+
+    @Override
     protected void onDestroy() {
         TerminalContext.getInstance().leaveDetailPage();
         super.onDestroy();

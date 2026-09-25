@@ -182,6 +182,7 @@
     <string name="btn_login_confirm">登录</string>
     <string name="btn_login_refuse">但是我拒绝</string>
     <string name="btn_emote">表情</string>
+    <string name="btn_image">图片</string>
     <string name="btn_send">发送</string>
     <string name="btn_setup_init">Re：哔哩终端，启动！</string>
     <string name="btn_login_tip">你还木有登录哦！点击这里登录</string>
@@ -245,20 +246,20 @@
 
     #新增功能放到上面，修复问题放下面，方便用户看见
     <string-array name="update_log_items">
-        <item>增加播放中自动保存观看进度的功能，异常退出最多丢失 15 秒进度</item>
-        <item>增加弹幕缓存复用，30 分钟内重进视频或切换分P不再重新下载弹幕</item>
-        <item>增加从历史记录点击番剧直接续播对应剧集的功能</item>
-        <item>增加稍后再看显示观看进度</item>
-        <item>增加番剧详情页自动定位上次观看剧集的功能</item>
-        <item>增加热搜排行榜</item>
-        <item>增加番剧追番按钮</item>
-        <item>历史记录支持显示番剧</item>
-        <item>修复番剧详情页无法定位上次观看分集、且再次进入后定位失效的问题</item>
-        <item>修复通过外部链接打开内容时可能闪退的问题</item>
-        <item>修复在终端内观看番剧后，观看记录与播放进度无法同步的问题</item>
-        <item>修复番剧播放进度无法保存、无法从历史处续播的问题</item>
-        <item>优化列表滑动流畅度，降低部分页面的内存占用</item>
-        <item>加强隐私保护：收敛应用权限，清理调试日志</item>
+        <item>增加带图发动态功能：最多可选9张图片，GIF动图与PNG透明图原样上传，其余自动压缩</item>
+        <item>增加带图发评论功能：可在根评论附图（需评论区开启图片评论）</item>
+        <item>发布动态时表情将渲染为表情图片，不再以纯文本发出</item>
+        <item>转发动态、分享视频到动态时自动引用原作者与原内容</item>
+        <item>发布动态新增选项：仅自己可见、关闭评论、定时发布</item>
+        <item>增加动态投票的查看与参与功能（支持图片投票与多选）</item>
+        <item>增加置顶/取消置顶自己动态的功能</item>
+        <item>增加动态可见范围切换功能（所有人可见/仅自己可见）</item>
+        <item>增加编辑自己纯文字动态的功能</item>
+        <item>动态卡片新增评论数显示，点击直达评论区</item>
+        <item>动态正文中的话题、BV号、网页链接等内容可点击跳转，#话题#可进入话题动态页</item>
+        <item>大幅提升图文动态详情页的打开速度（改为接口直取，不再抓取网页）</item>
+        <item>修复视频转发时转发场景未被识别，导致显示异常入口的问题</item>
+        <item>修复图片评论的部分字段解析不兼容的问题</item>
     </string-array>
 
     <string name="tutorial_pager">提示\n\n←这个页面可以左右翻页喵→\n\n（共有%d页，滑动一下不再显示）</string>

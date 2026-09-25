@@ -63,6 +63,21 @@
                 android:padding="8dp"
                 android:textSize="13sp" />
 
+            <HorizontalScrollView
+                android:id="@+id/picsPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/picsLayout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingVertical="4dp" />
+            </HorizontalScrollView>
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/emote"
                 android:layout_width="match_parent"
@@ -78,6 +93,78 @@
                     android:textAlignment="textEnd"
                     android:textSize="13sp"
                     android:visibility="visible"
+                    tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/addPic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    app:drawableEndCompat="@drawable/arrow_forward"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/btn_image"
+                    android:textAlignment="textEnd"
+                    android:textSize="13sp"
+                    android:visibility="visible"
+                    tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/optVisibility"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/optVisibilityText"
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    app:drawableEndCompat="@drawable/arrow_forward"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="所有人可见"
+                    android:textAlignment="textEnd"
+                    android:textSize="13sp"
+                    tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/optComment"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/optCommentText"
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    app:drawableEndCompat="@drawable/arrow_forward"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="允许评论"
+                    android:textAlignment="textEnd"
+                    android:textSize="13sp"
+                    tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/optTimer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/optTimerText"
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    app:drawableEndCompat="@drawable/arrow_forward"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="定时发布：关"
+                    android:textAlignment="textEnd"
+                    android:textSize="13sp"
                     tools:ignore="RtlCompat" />
             </com.google.android.material.card.MaterialCardView>
 

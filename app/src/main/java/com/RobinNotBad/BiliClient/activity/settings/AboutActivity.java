@@ -116,6 +116,10 @@ public class AboutActivity extends BaseActivity {
                 });
             }
 
+            findViewById(R.id.github_repo_card).setOnClickListener(v ->
+                    com.RobinNotBad.BiliClient.util.LinkUrlUtil.handleWebURL(this,
+                            "https://github.com/cyq114514/Re-BiliTerminal"));
+
             findViewById(R.id.author_words).setOnClickListener(view -> {
                 eggClick_authorWords++;
                 if (eggClick_authorWords == 7) {

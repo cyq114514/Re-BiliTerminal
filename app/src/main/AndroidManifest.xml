@@ -191,6 +191,16 @@
             android:label="动态"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.dynamic.TopicDynamicActivity"
+            android:exported="false"
+            android:label="话题动态"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.dynamic.VoteActivity"
+            android:exported="false"
+            android:label="投票详情"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.SettingLaboratoryActivity"
             android:exported="false"
             android:label="实验性功能"

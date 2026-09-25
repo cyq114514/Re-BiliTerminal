@@ -8,6 +8,8 @@ import static com.RobinNotBad.BiliClient.util.LinkUrlUtil.TYPE_BVID;
 import static com.RobinNotBad.BiliClient.util.LinkUrlUtil.TYPE_CVID;
 import static com.RobinNotBad.BiliClient.util.LinkUrlUtil.TYPE_USER;
 import static com.RobinNotBad.BiliClient.util.LinkUrlUtil.TYPE_WEB_URL;
+import static com.RobinNotBad.BiliClient.util.LinkUrlUtil.TYPE_TOPIC;
+import static com.RobinNotBad.BiliClient.util.LinkUrlUtil.TYPE_VOTE;
 
 import android.annotation.SuppressLint;
 import android.content.ClipData;
@@ -39,6 +41,9 @@ import androidx.core.content.res.ResourcesCompat;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.CopyTextActivity;
+import com.RobinNotBad.BiliClient.activity.dynamic.TopicDynamicActivity;
+import com.RobinNotBad.BiliClient.activity.dynamic.VoteActivity;
+import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.api.ReplyApi;
 import com.RobinNotBad.BiliClient.model.At;
@@ -305,16 +310,35 @@ public class StringUtil {
                     widget.getContext().startActivity(new Intent(widget.getContext(), UserInfoActivity.class).putExtra("mid", Long.parseLong(val)));
                     break;
                 case TYPE_WEB_URL:
-                    LinkUrlUtil.handleWebURL(widget.getContext(), text);
+                    //动态WEB/GOODS/LOTTERY节点显示的是"网页链接"等描述文本，真实跳转地址在val里
+                    LinkUrlUtil.handleWebURL(widget.getContext(), val != null ? val : text);
                     break;
                 case TYPE_BVID:
-                    TerminalContext.getInstance().enterVideoDetailPage(widget.getContext(), text);
+                    TerminalContext.getInstance().enterVideoDetailPage(widget.getContext(), val != null ? val : text);
                     break;
                 case TYPE_AVID:
-                    TerminalContext.getInstance().enterVideoDetailPage(widget.getContext(), Long.parseLong(text.replace("av", "")));
+                    TerminalContext.getInstance().enterVideoDetailPage(widget.getContext(), Long.parseLong((val != null ? val : text).replace("av", "")));
                     break;
                 case TYPE_CVID:
-                    TerminalContext.getInstance().enterArticleDetailPage(widget.getContext(), Long.parseLong(text.replace("cv", "")));
+                    TerminalContext.getInstance().enterArticleDetailPage(widget.getContext(), Long.parseLong((val != null ? val : text).replace("cv", "")));
+                    break;
+                case TYPE_TOPIC: {
+                    //val为话题topic_id，显示文本为"#话题名#"；无有效id时降级为搜索
+                    String topicName = text.replaceAll("^#+|#+$", "");
+                    long topicId = 0;
+                    try { topicId = Long.parseLong(val); } catch (Exception ignored) {}
+                    if (topicId > 0) {
+                        widget.getContext().startActivity(new Intent(widget.getContext(), TopicDynamicActivity.class)
+                                .putExtra("topicId", topicId).putExtra("name", topicName));
+                    } else if (!topicName.isEmpty()) {
+                        widget.getContext().startActivity(new Intent(widget.getContext(), SearchActivity.class).putExtra("keyword", topicName));
+                    }
+                    break;
+                }
+                case TYPE_VOTE:
+                    //val为vote_id
+                    widget.getContext().startActivity(new Intent(widget.getContext(), VoteActivity.class)
+                            .putExtra("voteId", Long.parseLong(val)));
                     break;
             }
         }

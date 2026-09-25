@@ -132,7 +132,10 @@ public class Reply implements Serializable {
                 JSONArray pictures = content.getJSONArray("pictures");
                 for (int j = 0; j < pictures.length(); j++) {
                     JSONObject picture = pictures.getJSONObject(j);
-                    pictureList.add(picture.getString("img_src"));
+                    //评论列表接口的图片字段是img_src，评论发布接口(/x/v2/reply/create)返回的是img_url，做兼容
+                    String picUrl = picture.optString("img_src", "");
+                    if (picUrl.isEmpty()) picUrl = picture.optString("img_url", "");
+                    if (!picUrl.isEmpty()) pictureList.add(picUrl);
                 }
                 this.pictureList = pictureList;
             }

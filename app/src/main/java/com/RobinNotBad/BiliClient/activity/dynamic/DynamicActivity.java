@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.activity.base.RefreshMainActivity;
 import com.RobinNotBad.BiliClient.adapter.dynamic.DynamicAdapter;
 import com.RobinNotBad.BiliClient.adapter.dynamic.DynamicHolder;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
+import com.RobinNotBad.BiliClient.api.EmoteApi;
 import com.RobinNotBad.BiliClient.helper.TutorialHelper;
 import com.RobinNotBad.BiliClient.model.Dynamic;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
@@ -26,8 +27,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 //动态页面
 //2023-09-17
@@ -46,6 +51,21 @@ public class DynamicActivity extends RefreshMainActivity {
             "追番", "pgc",
             "专栏", "article"
     );
+
+    /**话题页（TopicDynamicActivity）复用本页框架时开启：隐藏发动态入口与UP列表*/
+    public boolean isTopicMode() {
+        return false;
+    }
+
+    /**列表前的占位头部数量（发动态入口+UP列表），Adapter与插入/删除偏移都依赖它*/
+    public int headerCount() {
+        return isTopicMode() ? 0 : (showRecentUp() ? 2 : 1);
+    }
+
+    /**分页数据拉取钩子，话题页覆写为按话题名拉流*/
+    protected long fetchPage(List<Dynamic> out, long offset, String type) throws Exception {
+        return DynamicApi.getDynamicList(out, offset, 0, type);
+    }
     public final ActivityResultLauncher<Intent> selectTypeLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), (result) -> {
         int code = result.getResultCode();
         Intent data = result.getData();
@@ -68,6 +88,8 @@ public class DynamicActivity extends RefreshMainActivity {
         Intent data = result.getData();
         if (code == RESULT_OK && data != null) {
             String text = data.getStringExtra("text");
+            String picsJson = data.getStringExtra("pics");
+            String optionsJson = data.getStringExtra("options");
             CenterThreadPool.run(() -> {
                 try {
                     long dynId;
@@ -81,10 +103,22 @@ public class DynamicActivity extends RefreshMainActivity {
                             atUids.put(matchedString, uid);
                         }
                     }
-                    if (atUids.isEmpty()) {
+                    JSONArray pics = null;
+                    if (picsJson != null && !picsJson.isEmpty()) {
+                        pics = new JSONArray(picsJson);
+                    }
+                    JSONObject option = null;
+                    if (optionsJson != null && !optionsJson.isEmpty()) {
+                        option = new JSONObject(optionsJson);
+                    }
+                    Set<String> emoteTexts = EmoteApi.getEmoteTexts(EmoteApi.BUSINESS_DYNAMIC);
+                    boolean hasPics = pics != null && pics.length() > 0;
+                    if (hasPics) {
+                        dynId = DynamicApi.publishImageContent(text, atUids, pics, option, emoteTexts);
+                    } else if (atUids.isEmpty() && option == null) {
                         dynId = DynamicApi.publishTextContent(text);
                     } else {
-                        dynId = DynamicApi.publishTextContent(text, atUids);
+                        dynId = DynamicApi.publishTextContent(text, atUids, option, emoteTexts);
                     }
                     if (!(dynId == -1)) {
                         runOnUiThread(() -> MsgUtil.showMsg("发送成功~"));
@@ -126,6 +160,10 @@ public class DynamicActivity extends RefreshMainActivity {
                 String text = data.getStringExtra("text");
                 if (TextUtils.isEmpty(text)) text = "转发动态";
                 long dynamicId = data.getLongExtra("dynamicId", -1);
+                //转发自动引用：SendDynamicActivity会原样回传启动时的extras
+                String authorName = data.getStringExtra("forwardAuthorName");
+                long authorMid = data.getLongExtra("forwardAuthorMid", 0);
+                String authorContent = data.getStringExtra("forwardContentText");
                 String finalText = text;
                 CenterThreadPool.run(() -> {
                     try {
@@ -140,7 +178,9 @@ public class DynamicActivity extends RefreshMainActivity {
                                 atUids.put(matchedString, uid);
                             }
                         }
-                        dynId = DynamicApi.relayDynamic(finalText, (atUids.isEmpty() ? null : atUids), dynamicId);
+                        Set<String> emoteTexts = EmoteApi.getEmoteTexts(EmoteApi.BUSINESS_DYNAMIC);
+                        dynId = DynamicApi.relayDynamic(finalText, (atUids.isEmpty() ? null : atUids), dynamicId,
+                                authorName, authorMid, authorContent, emoteTexts);
                         if (!(dynId == -1)) {
                             activity.runOnUiThread(() -> MsgUtil.showMsg("转发成功~"));
                         } else {
@@ -164,6 +204,13 @@ public class DynamicActivity extends RefreshMainActivity {
 
         setOnRefreshListener(this::refreshDynamic);
         setOnLoadMoreListener(page -> addDynamic(type));
+
+        if (isTopicMode()) {
+            String topicName = getIntent().getStringExtra("name");
+            setPageName(topicName == null ? "话题" : "#" + topicName + "#");
+            refreshDynamic();
+            return;
+        }
 
         setPageName("动态");
 
@@ -199,7 +246,7 @@ public class DynamicActivity extends RefreshMainActivity {
         CenterThreadPool.run(() -> {
             try {
                 List<Dynamic> list = new ArrayList<>();
-                offset = DynamicApi.getDynamicList(list, offset, 0, type);
+                offset = fetchPage(list, offset, type);
                 bottom = (offset == -1);
                 setRefreshing(false);
 
@@ -213,8 +260,7 @@ public class DynamicActivity extends RefreshMainActivity {
                         if (refresh) {
                             dynamicAdapter.notifyDataSetChanged();
                         } else {
-                            int offset = showRecentUp() ? 2 : 1;
-                            dynamicAdapter.notifyItemRangeInserted(dynamicList.size() - list.size() + offset, list.size());
+                            dynamicAdapter.notifyItemRangeInserted(dynamicList.size() - list.size() + headerCount(), list.size());
                         }
                     }
                     if (refresh) {
@@ -263,14 +309,15 @@ public class DynamicActivity extends RefreshMainActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        //动态操作菜单（置顶/可见范围/编辑）的选择结果
+        DynamicHolder.onDynamicOpResult(requestCode, resultCode, data, this);
         if (requestCode == DynamicHolder.GO_TO_INFO_REQUEST && resultCode == RESULT_OK) {
             try {
                 if (data != null && !isRefreshing) {
                     int adapterPosition = data.getIntExtra("position", 0);
-                    int offset = showRecentUp() ? 2 : 1;
-                    int realPosition = adapterPosition - offset;
+                    int realPosition = adapterPosition - headerCount();
                     if (realPosition >= 0 && realPosition < dynamicList.size()) {
-                        DynamicHolder.removeDynamicFromList(dynamicList, realPosition, dynamicAdapter, showRecentUp());
+                        DynamicHolder.removeDynamicFromList(dynamicList, realPosition, dynamicAdapter, headerCount());
                     }
                 }
             } catch (Throwable ignored) {

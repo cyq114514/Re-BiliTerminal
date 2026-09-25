@@ -48,13 +48,14 @@ public class DynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     private boolean showRecentUp() {
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.RECENT_UP_DISPLAY_ENABLE, true)
+        return !dynamicActivity.isTopicMode()
+                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.RECENT_UP_DISPLAY_ENABLE, true)
                 && recentUpList != null && !recentUpList.isEmpty();
     }
 
     @Override
     public int getItemViewType(int position) {
-        if (position == 0) {
+        if (position == 0 && !dynamicActivity.isTopicMode()) {
             return 0;
         } else if (position == 1 && showRecentUp()) {
             return 2;
@@ -103,7 +104,7 @@ public class DynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 recentUpListHolder.recentUpRecyclerView.setAdapter(recentUpListHolder.recentUpAdapter);
             }
         } else if (holder instanceof DynamicHolder) {
-            int realPosition = position - (showRecentUp() ? 2 : 1);
+            int realPosition = position - dynamicActivity.headerCount();
             if (realPosition < 0 || realPosition >= dynamicList.size())
                 return;
 
@@ -140,7 +141,8 @@ public class DynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     @Override
     public int getItemCount() {
-        int baseCount = dynamicList != null ? dynamicList.size() + 1 : 1;
+        if (dynamicList == null) return dynamicActivity.isTopicMode() ? 0 : 1;
+        int baseCount = dynamicList.size() + (dynamicActivity.isTopicMode() ? 0 : 1);
         return showRecentUp() ? baseCount + 1 : baseCount;
     }
 
