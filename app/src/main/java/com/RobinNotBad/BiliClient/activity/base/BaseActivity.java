@@ -229,6 +229,33 @@ public class BaseActivity extends AppCompatActivity {
         new AsyncLayoutInflaterX(this).inflate(id, null, (view, layoutId, parent) -> {
             setContentView(view);
 
+            //低性能设备（手表/低端机）上布局加载耗时可能超过转场动画时长：
+            //转场期间显示的是加载占位屏，内容就绪时直接setContentView是硬切，
+            //观感即"过渡动画丢失、短暂显示后直接跳到下一个界面"。
+            //这里对内容做淡入把硬切变成过渡。
+            //注意必须按"帧数"而非"时间"驱动：单帧绘制耗时可能超过动画时长（W527手表实测），
+            //时间型淡入会在首帧绘制完成时就已经结束，依然表现为硬切；
+            //时间上限仅用于防止极端情况下长时间半透明
+            view.setAlpha(0f);
+            final View fadeInView = view;
+            android.view.Choreographer.getInstance().postFrameCallback(new android.view.Choreographer.FrameCallback() {
+                final long startMs = android.os.SystemClock.uptimeMillis();
+                int frameCount = 0;
+
+                @Override
+                public void doFrame(long frameTimeNanos) {
+                    frameCount++;
+                    long elapsed = android.os.SystemClock.uptimeMillis() - startMs;
+                    float alpha = Math.min(Math.min(frameCount / 3f, elapsed / 300f), 1f);
+                    fadeInView.setAlpha(alpha);
+                    if (alpha < 1f && !isDestroyed()) {
+                        android.view.Choreographer.getInstance().postFrameCallback(this);
+                    } else {
+                        fadeInView.setAlpha(1f);
+                    }
+                }
+            });
+
             if (this instanceof InstanceActivity) ((InstanceActivity) this).setMenuClick();
             else setTopbarExit();
 

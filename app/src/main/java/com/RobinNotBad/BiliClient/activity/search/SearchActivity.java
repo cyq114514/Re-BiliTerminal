@@ -59,6 +59,8 @@ public class SearchActivity extends InstanceActivity {
     ArrayList<String> searchSuggestions;
     private Runnable suggestionRunnable;
     private boolean suggestionsEnabled;
+    //搜索建议请求代际：每次输入自增，响应到达时若代际已过期则丢弃（防慢响应覆盖新响应的乱序竞态）
+    private int suggestionGeneration;
     private String defaultSearchContent;
     private boolean defaultSearchContentEnabled;
 
@@ -112,7 +114,7 @@ public class SearchActivity extends InstanceActivity {
                 if (b) {
                     // 获得焦点时，根据输入内容决定显示历史还是建议
                     String keyword = keywordInput.getText().toString();
-                    if (keyword.isEmpty() || !suggestionsEnabled) {
+                    if (keyword.isEmpty() || !suggestionsEnabled || searchSuggestions.isEmpty()) {
                         historyRecyclerview.setVisibility(View.VISIBLE);
                         suggestionsRecyclerview.setVisibility(View.GONE);
                     } else {
@@ -163,6 +165,12 @@ public class SearchActivity extends InstanceActivity {
 
             searchBtn.setOnClickListener(view -> searchKeyword(keywordInput.getText().toString()));
             searchBtn.setOnLongClickListener(this::jumpToTargetId);
+            //搜索执行后焦点会被结果列表抢占（requestFragmentFocus），部分ROM（一加13/ColorOS16实测）
+            //上第一次点击输入框只恢复焦点、不拉起输入法，这里在点击时主动补一次
+            keywordInput.setOnClickListener(v -> v.post(() -> {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT);
+            }));
             keywordInput.setOnEditorActionListener((textView, actionId, event) -> {
                 if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE || event != null
                         && KeyEvent.KEYCODE_ENTER == event.getKeyCode() && KeyEvent.ACTION_DOWN == event.getAction()) {
@@ -202,6 +210,8 @@ public class SearchActivity extends InstanceActivity {
             searchSuggestionsAdapter = new SearchSuggestionsAdapter(this, searchSuggestions);
             searchSuggestionsAdapter.setOnClickListener(position -> {
                 String suggestion = searchSuggestions.get(position);
+                //先清掉输入法未上屏的组词缓冲，防止其迟后commit再次触发建议请求导致卡片回弹
+                keywordInput.clearComposingText();
                 keywordInput.setText(suggestion);
                 keywordInput.setSelection(suggestion.length());
                 searchKeyword(suggestion);
@@ -222,6 +232,9 @@ public class SearchActivity extends InstanceActivity {
 
                     @Override
                     public void afterTextChanged(Editable s) {
+                        //搜索执行期间忽略一切文本变化（包括部分ROM输入法收起/确认时的延迟commit，
+                        //如一加13/ColorOS16），否则建议卡片会在结果加载完成后回弹
+                        if (refreshing) return;
                         String keyword = s.toString();
 
                         // 移除之前的请求
@@ -238,22 +251,28 @@ public class SearchActivity extends InstanceActivity {
                                 }
                             });
                         } else {
+                            suggestionGeneration++;
+                            final int gen = suggestionGeneration;
                             suggestionRunnable = () -> new Thread(() -> {
                                 try {
                                     ArrayList<String> suggestions = SearchApi.getSearchSuggestions(keyword);
                                     runOnUiThread(() -> {
-                                        if (keywordInput.hasFocus()) {
-                                            searchSuggestions.clear();
-                                            searchSuggestions.addAll(suggestions);
-                                            searchSuggestionsAdapter.notifyDataSetChanged();
+                                        //不能用"输入框此刻是否持有焦点"作为显示条件：部分ROM输入法
+                                        //在组词/候选期间会让输入框短暂失焦（一加13/ColorOS16实测），
+                                        //旧实现会因此把结果整包丢弃，表现为搜索建议永远不出现。
+                                        //代际校验负责丢弃过期响应（防慢响应覆盖新响应的乱序竞态）
+                                        if (gen != suggestionGeneration || refreshing || isFinishing() || isDestroyed())
+                                            return;
+                                        searchSuggestions.clear();
+                                        searchSuggestions.addAll(suggestions);
+                                        searchSuggestionsAdapter.notifyDataSetChanged();
 
-                                            if (!suggestions.isEmpty()) {
-                                                historyRecyclerview.setVisibility(View.GONE);
-                                                suggestionsRecyclerview.setVisibility(View.VISIBLE);
-                                            } else {
-                                                historyRecyclerview.setVisibility(View.VISIBLE);
-                                                suggestionsRecyclerview.setVisibility(View.GONE);
-                                            }
+                                        if (!suggestions.isEmpty()) {
+                                            historyRecyclerview.setVisibility(View.GONE);
+                                            suggestionsRecyclerview.setVisibility(View.VISIBLE);
+                                        } else {
+                                            historyRecyclerview.setVisibility(View.VISIBLE);
+                                            suggestionsRecyclerview.setVisibility(View.GONE);
                                         }
                                     });
                                 } catch (Exception e) {
@@ -305,6 +324,12 @@ public class SearchActivity extends InstanceActivity {
             if ((curFocus = getCurrentFocus()) != null) {
                 manager.hideSoftInputFromWindow(curFocus.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
             }
+
+            //点击联想词/历史词会经 setText 触发一次新的建议请求；搜索执行时作废它并收起建议面板，
+            //否则该请求返回后会把建议卡片重新盖到搜索结果上
+            suggestionGeneration++;
+            if (suggestionRunnable != null) handler.removeCallbacks(suggestionRunnable);
+            runOnUiThread(() -> suggestionsRecyclerview.setVisibility(View.GONE));
 
             if (str.isEmpty()) {
                 if (defaultSearchContentEnabled && defaultSearchContent != null && !defaultSearchContent.isEmpty()) {
@@ -413,6 +438,10 @@ public class SearchActivity extends InstanceActivity {
     }
 
     private void requestFragmentFocus(){
+        //输入框持有焦点（用户正在输入或刚点击输入框）时不得把焦点抢给结果列表：
+        //键盘弹出引发的布局变化会让列表产生滚动回调走到这里，抢占焦点会立刻把刚拉起的键盘顶掉
+        //（一加13/ColorOS16实测：点击输入框后键盘短暂弹出随即被收回）
+        if (keywordInput.hasFocus()) return;
         SearchFragment fragmentCurr = (SearchFragment) vpfAdapter.getFragment(viewPager.getCurrentItem());
         if (fragmentCurr != null) {
             fragmentCurr.refresh();

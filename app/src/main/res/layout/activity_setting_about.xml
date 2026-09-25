@@ -143,6 +143,26 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/anim_scale_card"
+                android:layout_marginTop="4dp"
+                android:layout_height="wrap_content"
+                android:layout_width="match_parent"
+                android:layout_marginHorizontal="1dp">
+
+                <TextView
+                    android:id="@+id/anim_scale_text"
+                    android:layout_height="wrap_content"
+                    android:layout_width="match_parent"
+                    android:textSize="10sp"
+                    android:alpha="0.7"
+                    android:padding="3dp"
+                    android:text="动画缩放诊断中……"
+                    android:layout_gravity="center"
+                    android:gravity="center" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/debug_tip"
                 android:layout_marginTop="4dp"
                 android:layout_height="wrap_content"

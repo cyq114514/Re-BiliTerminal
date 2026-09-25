@@ -103,6 +103,23 @@ public class SearchApi {
         public List<TagItem> tag;
     }
 
+    /**
+     * 搜索建议响应。词表目前挂在 result 字段下（旧结构挂在 data 下），
+     * 两个字段都解析，谁有值用谁，避免B站再调整结构时建议悄悄失效。
+     */
+    public static class SuggestResponse {
+        @SerializedName("code")
+        public int code;
+        @SerializedName("result")
+        public SearchResult result;
+        @SerializedName("data")
+        public SearchResult data;
+
+        public SearchResult payload() {
+            return result != null ? result : data;
+        }
+    }
+
     public static class TagItem {
         @SerializedName("value")
         public String value;
@@ -190,9 +207,11 @@ public class SearchApi {
         if (keyword == null || keyword.trim().isEmpty()) return suggestions;
         String url = "https://s.search.bilibili.com/main/suggest?term=" + URLEncoder.encode(keyword, "UTF-8");
         String json = NetWorkUtil.getJson(url).toString();
-        ApiResponse<SearchResult> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<SearchResult>>(){}.getType());
-        if (resp == null || !resp.isSuccess() || resp.data == null || resp.data.tag == null) return suggestions;
-        for (TagItem tag : resp.data.tag) {
+        //词表挂在 result 字段下（旧结构在 data 下），之前只解析 data 导致建议永远为空
+        SuggestResponse resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<SuggestResponse>(){}.getType());
+        SearchResult payload = resp != null && resp.code == 0 ? resp.payload() : null;
+        if (payload == null || payload.tag == null) return suggestions;
+        for (TagItem tag : payload.tag) {
             if (tag != null && tag.value != null && !tag.value.isEmpty()) suggestions.add(tag.value);
         }
         return suggestions;

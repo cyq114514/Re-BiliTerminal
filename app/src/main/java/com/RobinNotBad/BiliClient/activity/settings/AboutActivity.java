@@ -51,6 +51,22 @@ public class AboutActivity extends BaseActivity {
 
                 String updateLog = ToolsUtil.getUpdateLog(this);
                 ((TextView) findViewById(R.id.updatelog_view)).setText("\n更新细节：" + updateLog);
+
+                //动画缩放诊断：部分手表ROM默认把缩放设为0（系统级转场动画全部失效），
+                //无开发者选项的设备无法查看，这里直接读出来展示
+                try {
+                    float windowScale = android.provider.Settings.Global.getFloat(getContentResolver(),
+                            android.provider.Settings.Global.WINDOW_ANIMATION_SCALE, -1f);
+                    float transitionScale = android.provider.Settings.Global.getFloat(getContentResolver(),
+                            android.provider.Settings.Global.TRANSITION_ANIMATION_SCALE, -1f);
+                    float animatorScale = android.provider.Settings.Global.getFloat(getContentResolver(),
+                            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, -1f);
+                    String scaleText = "动画缩放 窗口:" + windowScale + " 过渡:" + transitionScale + " 时长:" + animatorScale;
+                    if (windowScale == 0 || transitionScale == 0 || animatorScale == 0)
+                        scaleText += "\n（有缩放为0，系统级转场动画会被禁用）";
+                    ((TextView) findViewById(R.id.anim_scale_text)).setText(scaleText);
+                } catch (Exception ignored) {
+                }
                 StringUtil.setCopy(findViewById(R.id.updatelog_view), updateLog);
             } catch (PackageManager.NameNotFoundException e) {
                 e.printStackTrace();
