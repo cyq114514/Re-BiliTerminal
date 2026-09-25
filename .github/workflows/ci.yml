@@ -1,0 +1,87 @@
+name: CI
+
+# push 到 main 时编译自检；推 v* 标签时构建 release 包并附加到对应 Release
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: 编译自检（Debug 包）
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: 上传 Debug 包
+        uses: actions/upload-artifact@v4
+        with:
+          name: Re-BiliTerminal-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # ===== 以下仅 tag 推送时执行 =====
+      - name: 写入签名配置（未配置密钥 secrets 时跳过，产出未签名包）
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ALIAS_NAME: ${{ secrets.ALIAS_NAME }}
+          ALIAS_PASSWORD: ${{ secrets.ALIAS_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$HOME/release.jks"
+            {
+              echo "sdk.dir=$ANDROID_HOME"
+              echo "KEY_PATH=$HOME/release.jks"
+              echo "KEY_PASSWORD=$KEY_PASSWORD"
+              echo "ALIAS_NAME=$ALIAS_NAME"
+              echo "ALIAS_PASSWORD=$ALIAS_PASSWORD"
+            } > local.properties
+          else
+            echo "未配置 KEYSTORE_B64 等 secrets，本次 Release 包不做正式签名"
+          fi
+
+      - name: 构建 Release 包
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: 上传 Release 包
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: Re-BiliTerminal-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: 附加到 GitHub Release（不存在则自动创建）
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          if echo "$APK" | grep -q "unsigned"; then
+            NAME="Re-BiliTerminal-${TAG}-release-unsigned.apk"
+          else
+            NAME="Re-BiliTerminal-${TAG}-release.apk"
+          fi
+          cp "$APK" "/tmp/$NAME"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "/tmp/$NAME" --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "/tmp/$NAME" -R "$GITHUB_REPOSITORY" \
+              --title "Re：哔哩终端 ${TAG}" --generate-notes
+          fi
