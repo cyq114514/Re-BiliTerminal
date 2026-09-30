@@ -16,7 +16,7 @@ public class UserInfo implements Parcelable, Serializable {
     @SerializedName(value = "name", alternate = {"uname"})
     public String name;
     @SerializedName(value = "face", alternate = {"avatar"})
-    public String avatar;
+    public String avatar = "";
     public String sign;
     @SerializedName(value = "follower", alternate = {"fans"})
     public int fans;

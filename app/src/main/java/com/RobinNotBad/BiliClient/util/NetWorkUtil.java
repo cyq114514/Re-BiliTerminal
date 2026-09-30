@@ -31,6 +31,7 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Dns;
+import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -79,8 +80,16 @@ public class NetWorkUtil {
                             if (request.url().host().equals("b23.tv") && !isSslRedirect && (handler = request.tag(RedirectHandler.class)) != null) {
                                 handler.handleRedirect(location);
                             } else {
+                                HttpUrl target = HttpUrl.parse(location);
+                                //手动跟跳必须有安全边界：目标要在 B 站域名白名单内才携带请求头跟随，
+                                //否则原样返回（绝不把带 Cookie 的请求转发给任意域名）；
+                                //跳数通过 request tag 累计，防恶意循环重定向打爆调用栈
+                                if (target == null || !isBilibiliHost(target.host())) return response;
+                                int hops = request.tag(Integer.class) != null ? request.tag(Integer.class) : 0;
+                                if (hops >= 5) return response;
                                 Request newRequest = request.newBuilder()
-                                        .url(location)
+                                        .url(target)
+                                        .tag(Integer.class, hops + 1)
                                         .build();
                                 return chain.proceed(newRequest);
                             }
@@ -99,26 +108,17 @@ public class NetWorkUtil {
     public synchronized static OkHttpClient.Builder setOkHttpSsl(OkHttpClient.Builder okhttpBuilder) {
         if (Build.VERSION.SDK_INT > 22) return okhttpBuilder;
         try {
-            @SuppressLint("CustomX509TrustManager") final X509TrustManager trustAllCert =
-                    new X509TrustManager() {
-                        @SuppressLint("TrustAllX509TrustManager")
-                        @Override
-                        public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                        }
-
-                        @SuppressLint("TrustAllX509TrustManager")
-                        @Override
-                        public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                        }
-
-                        @Override
-                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                            return new java.security.cert.X509Certificate[]{};
-                        }
-                    };
-            final SSLSocketFactory sslSocketFactory = new SSLSocketFactoryCompat(trustAllCert);
-            okhttpBuilder.sslSocketFactory(sslSocketFactory, trustAllCert);
+            //老设备 TLS 协议兼容仍走 SSLSocketFactoryCompat（启用 TLSv1.1/1.2），
+            //但证书校验必须用系统默认 TrustManager——此前传入的空实现 trust-all
+            //会让 API≤22 设备信任任意自签证书，登录 Cookie 可被同网段中间人整体窃取
+            javax.net.ssl.TrustManagerFactory tmf = javax.net.ssl.TrustManagerFactory.getInstance(
+                    javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init((java.security.KeyStore) null);
+            final X509TrustManager systemTrustManager = (X509TrustManager) tmf.getTrustManagers()[0];
+            final SSLSocketFactory sslSocketFactory = new SSLSocketFactoryCompat(systemTrustManager);
+            okhttpBuilder.sslSocketFactory(sslSocketFactory, systemTrustManager);
         } catch (Exception e) {
+            //初始化失败不能退化成 trust-all：抛出让调用方拿到明确的初始化错误
             throw new RuntimeException(e);
         }
         return okhttpBuilder;
@@ -352,20 +352,27 @@ public class NetWorkUtil {
         String cookiesStr = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
         ArrayList<String> oldCookies = (cookiesStr.equals("") ? new ArrayList<>() : new ArrayList<>(Arrays.asList(cookiesStr.split("; "))));  //转list
 
-        for (String newCookie : newCookies) {  //对每一条新cookie遍历
+            for (String newCookie : newCookies) {  //对每一条新cookie遍历
 
-            Cookies cookies = new Cookies(newCookie);
-            if (cookies.containsKey("Domain") && !cookies.get("Domain").endsWith("bilibili.com"))
-                continue;
+                Cookies cookies = new Cookies(newCookie);
+                if (cookies.containsKey("Domain")) {
+                    if (!cookies.get("Domain").endsWith("bilibili.com"))
+                        continue;
+                } else if (!isBilibiliHost(response.request().url().host())) {
+                    //无 Domain 属性的 Set-Cookie 按响应来源校验：
+                    //第三方域（或被劫持的跳转目标）不能把 cookie 注入全局请求头
+                    continue;
+                }
 
-            int index = newCookie.indexOf("; ");
-            if (index != -1) newCookie = newCookie.substring(0, index);  //如果没有分号不做处理
+                int index = newCookie.indexOf("; ");
+                if (index != -1) newCookie = newCookie.substring(0, index);  //如果没有分号不做处理
 
-            index = newCookie.indexOf("=") + 1;
-            if (index == 0) continue;   //如果没有等号，跳过
+                index = newCookie.indexOf("=") + 1;
+                if (index == 0) continue;   //如果没有等号，跳过
 
-            String key = newCookie.substring(0, index);    //key=
-            Logu.d("newCookie", newCookie);
+                String key = newCookie.substring(0, index);    //key=
+                //不打印 cookie 内容（含登录凭证），只记键名
+                Logu.d("newCookie", newCookie.substring(0, Math.max(key.length() - 1, 0)));
 
             boolean added = false;
             for (int i = 0; i < oldCookies.size(); i++) {  //查找旧cookie表有没有
@@ -388,12 +395,21 @@ public class NetWorkUtil {
         }
         //如果一次setCookies都没有，就不要存了， 因为是个空字符串
         if (setCookies.length() >= 2) {
-            Logu.d("save-result", setCookies.substring(0, setCookies.length() - 2));
+            //不打印完整 cookie 串（含 SESSDATA 等登录凭证）
+            Logu.d("save-result", "cookie jar updated, " + oldCookies.size() + " items");
             SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, setCookies.substring(0, setCookies.length() - 2));
             //只重建请求头，不触发 ensureCookies：本方法跑在 OkHttp 拦截器线程上，
             //嵌套网络请求会在弱网下递归占用请求线程并拖慢所有接口
             updateWebHeaders();
         }
+    }
+
+    /**重定向跟随与 Cookie 来源校验共用的域名白名单：B 站主站、短链、视频/图片 CDN。*/
+    private static boolean isBilibiliHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase(Locale.ROOT);
+        return h.equals("b23.tv") || h.equals("bilibili.com") || h.endsWith(".bilibili.com")
+                || h.endsWith(".bilivideo.com") || h.endsWith(".hdslb.com") || h.endsWith(".akamaized.net");
     }
 
     /**
@@ -437,7 +453,10 @@ public class NetWorkUtil {
     }
 
     public static final String USER_AGENT_WEB = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.95 Safari/537.36";
-    public static final ArrayList<String> webHeaders = new ArrayList<>() {{
+    //volatile + 整表替换（copy-on-write）：请求线程会按索引遍历本表，
+    //拦截器线程更新 Cookie 时不能原地 set（旧值可见性无保证），必须重建列表整体替换引用，
+    //读线程拿到的引用要么是旧快照要么是新快照，永远不会读到半更新的表
+    public static volatile ArrayList<String> webHeaders = new ArrayList<>() {{
         add("Cookie");
         add(SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
 
@@ -475,7 +494,9 @@ public class NetWorkUtil {
      * 它们运行在 OkHttp 线程上，若触发 ensureCookies 的嵌套网络请求，会递归占用请求线程并拖慢所有接口。
      */
     public static void updateWebHeaders() {
-        webHeaders.set(1, CookieGenerator.getCookieString(true));
+        ArrayList<String> updated = new ArrayList<>(webHeaders);
+        updated.set(1, CookieGenerator.getCookieString(true));
+        webHeaders = updated;
     }
 
     public static class FormData {

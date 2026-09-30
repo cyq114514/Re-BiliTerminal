@@ -10,7 +10,9 @@ import java.util.List;
 
 public class ImageViewer {
     public static ImageViewer from(String url) {
-        return new ImageViewer(new ArrayList<>(List.of(url)));
+        ArrayList<String> urls = new ArrayList<>();
+        urls.add(url);
+        return new ImageViewer(urls);
     }
 
     public static ImageViewer from(List<String> urls) {

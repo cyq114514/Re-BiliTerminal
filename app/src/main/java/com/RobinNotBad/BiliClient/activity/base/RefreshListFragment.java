@@ -29,7 +29,8 @@ public class RefreshListFragment extends BaseFragment {
     public RecyclerView recyclerView;
     public TextView emptyView;
     public OnLoadMoreListener listener;
-    public boolean bottom = false;
+    //volatile：子类的后台加载循环读、主线程写（如 ReplyFragment 的世代守卫内落库）
+    public volatile boolean bottom = false;
     public int page = 1;
     public long lastLoadTimestamp;
     public boolean force_single_column = false;

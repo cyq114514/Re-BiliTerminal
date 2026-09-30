@@ -50,11 +50,11 @@ import okio.Okio;
 import okio.Sink;
 
 public class DownloadService extends Service {
-    public static boolean started;
-    public static int exitCode;
-    public static float percent = -1;
-    public static String state;
-    public static DownloadSection section;
+    public static volatile boolean started;
+    public static volatile int exitCode;
+    public static volatile float percent = -1;
+    public static volatile String state;
+    public static volatile DownloadSection section;
     private static long firstDown;
 
     final String NOTIFICATION_CHANNEL_ID = "biliterminal_download";
@@ -368,12 +368,19 @@ public class DownloadService extends Service {
         notifyTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-                if (section == null || notifyTimer == null)
-                    return;
+                try {
+                    DownloadSection currentSection = section;
+                    String currentState = state;
+                    if (currentSection == null || notifyTimer == null)
+                        return;
 
-                statusBuilder.setContentText(state + "：" + section.name_short);
-                statusBuilder.setProgress(100, (int) (percent * 100), false);
-                notifyManager.notify(FOREGROUND_ID, statusBuilder.build());
+                    statusBuilder.setContentText(currentState + "：" + currentSection.name_short);
+                    statusBuilder.setProgress(100, (int) Math.max(0, Math.min(percent, 1f) * 100), false);
+                    notifyManager.notify(FOREGROUND_ID, statusBuilder.build());
+                } catch (Exception e) {
+                    //TimerTask 抛未捕获异常会永久终止整个 Timer，进度通知从此静默失效
+                    e.printStackTrace();
+                }
             }
         }, 500, 500);
     }
@@ -412,12 +419,13 @@ public class DownloadService extends Service {
                 return NORMAL;
 
             File subtitleFolder = new File(folder, "subtitles");
-            if (!subtitleFolder.mkdirs())
+            //mkdirs 在目录已存在时返回 false，不能当失败；重下/残目录场景会误杀整个下载单
+            if (!subtitleFolder.isDirectory() && !subtitleFolder.mkdirs())
                 return ERR_FILE;
             for (SubtitleLink subtitleLink : subtitleLinks) {
                 if (subtitleLink.id != -1) {
                     File subtitleFile = new File(subtitleFolder, subtitleLink.lang + ".json");
-                    if (!subtitleFile.createNewFile())
+                    if (!subtitleFile.exists() && !subtitleFile.createNewFile())
                         return ERR_FILE;
                     int result = downFile(subtitleLink.url, subtitleFile);
                     if (result != NORMAL)
@@ -442,6 +450,11 @@ public class DownloadService extends Service {
         InputStream inputStream = null;
         FileOutputStream fileOutputStream = null;
         try {
+            //B 站错误响应多为 JSON：不校验状态码会把错误页写进 video.mp4，本地列表显示可播放
+            if (!response.isSuccessful()) {
+                response.close();
+                return ERR_NETWORK;
+            }
             if (!file.exists() && !file.createNewFile())
                 return ERR_FILE;
             else if (!file.delete() || !file.createNewFile())
@@ -452,10 +465,13 @@ public class DownloadService extends Service {
             int len;
             byte[] bytes = new byte[1024 * 10];
             long TotalFileSize = Objects.requireNonNull(response.body()).contentLength();
+            long completeFileSize = 0;
             while ((len = inputStream.read(bytes)) != -1 && started) {
                 fileOutputStream.write(bytes, 0, len);
-                long CompleteFileSize = file.length();
-                percent = 1.0f * CompleteFileSize / TotalFileSize;
+                completeFileSize += len;
+                //长度未知（chunked/-1）时不算百分比，避免负数/NaN；也不再每 10KB 一次 file.length() 系统调用
+                if (TotalFileSize > 0)
+                    percent = 1.0f * completeFileSize / TotalFileSize;
             }
             if (!started)
                 return ERR_UNKNOWN;
@@ -551,7 +567,10 @@ public class DownloadService extends Service {
         try {
             byte[] buf = new byte[2048];
             while (!decompresser.finished()) {
+                //数据截断/损坏时 inflate 恒返回 0 且 finished() 恒 false，不 break 会 100% CPU 死循环卡死整个下载服务
+                if (decompresser.needsInput() || decompresser.needsDictionary()) break;
                 int i = decompresser.inflate(buf);
+                if (i == 0) break;
                 o.write(buf, 0, i);
             }
             output = o.toByteArray();
@@ -632,7 +651,6 @@ public class DownloadService extends Service {
             DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
             database = helper.getWritableDatabase();
             database.execSQL("delete from download where id=?", new Object[]{id});
-            database.close();
         } catch (Exception e) {
             MsgUtil.err(e);
         } finally {
@@ -762,8 +780,12 @@ public class DownloadService extends Service {
     }
 
     public static void start(long first) {
-        if (started)
+        if (started) {
+            //onDestroy 不保证执行（进程级回收），此时再 start 会永远卡在 started=true：
+            //不重复启动第二条下载循环，但给出可感知的提示而不是静默失效
+            MsgUtil.showMsg("下载队列已在进行中");
             return;
+        }
         started = true;
         Logu.d("start");
         firstDown = first;

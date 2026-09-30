@@ -82,10 +82,10 @@ public class CookieRefreshApi {
         JSONObject result = new JSONObject(Objects.requireNonNull(response.body()).string());
         if (result.getInt("code") == 0) {
             String refreshToken_new = result.getJSONObject("data").getString("refresh_token");
-            Logu.v("新的RefreshToken", refreshToken_new);
+            //不打印 refresh_token（长期登录凭证）
 
             String cookies_new = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
-            Logu.v("新的cookies", cookies_new);
+            //不打印新 Cookie（登录凭证）
 
 
             //使老的Cookie失效

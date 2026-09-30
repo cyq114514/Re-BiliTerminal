@@ -57,6 +57,13 @@ public class ConfInfoApi {
     }
 
     public static String signWBI(String url_query) throws JSONException, IOException {
+        //取密钥要联网且写两份缓存，并发时会出现互相覆盖/半写入状态，签名互斥到方法级
+        synchronized (ConfInfoApi.class) {
+            return signWBIInternal(url_query);
+        }
+    }
+
+    private static String signWBIInternal(String url_query) throws JSONException, IOException {
         String mixin_key = SharedPreferencesUtil.getString("wbi_mixin_key", "");
         int curr = getDateCurr();
         //缓存为空也要重新取，否则空密钥会一直参与签名（服务端一律判签名失败）
@@ -86,11 +93,13 @@ public class ConfInfoApi {
         Map<String, String> paramMap = new HashMap<>();
         String[] params = encodedParam.split("&");
         for (String param : params) {
-            String[] keyValue = param.split("=");
-            if (keyValue.length == 2) {
-                paramMap.put(keyValue[0], keyValue[1]);
-            } else if (keyValue.length == 1) {
-                paramMap.put(keyValue[0], "");
+            //必须按第一个 = 切分：base64/URL 类参数的值里含 =，limit=2 否则整条被丢弃，
+            //签名串与服务端计算不一致，接口直接报签名失败
+            int eq = param.indexOf('=');
+            if (eq < 0) {
+                paramMap.put(param, "");
+            } else {
+                paramMap.put(param.substring(0, eq), param.substring(eq + 1));
             }
         }
 
@@ -115,6 +124,7 @@ public class ConfInfoApi {
 
     public static int getDateCurr() {
         Calendar calendar = Calendar.getInstance();
-        return calendar.get(Calendar.YEAR) * 10000 + calendar.get(Calendar.MONTH) * 100 + calendar.get(Calendar.DATE);
+        //MONTH 是 0-based（1月=0），必须 +1，否则日期缓存键在语义上错位一个月
+        return calendar.get(Calendar.YEAR) * 10000 + (calendar.get(Calendar.MONTH) + 1) * 100 + calendar.get(Calendar.DATE);
     }
 }

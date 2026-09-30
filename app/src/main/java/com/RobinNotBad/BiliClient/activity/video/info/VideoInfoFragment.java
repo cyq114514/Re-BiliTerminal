@@ -547,9 +547,12 @@ public class VideoInfoFragment extends BaseFragment {
                         try {
                             int code = LikeCoinFavApi.triple(aid);
                             if (code == 0) {
-                                coin.setImageResource(R.drawable.icon_coin_1);
-                                like.setImageResource(R.drawable.icon_like_1);
-                                fav.setImageResource(R.drawable.icon_fav_1);
+                                //后台线程不能直接改 View（CalledFromWrongThreadException），统一回主线程
+                                runOnUiThread(() -> {
+                                    coin.setImageResource(R.drawable.icon_coin_1);
+                                    like.setImageResource(R.drawable.icon_like_1);
+                                    fav.setImageResource(R.drawable.icon_fav_1);
+                                });
                                 MsgUtil.showMsg("三连成功");
                             } else MsgUtil.showMsg("三连失败，错误码：" + code);
                         } catch (Exception e) {

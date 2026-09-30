@@ -25,6 +25,11 @@ public class Cookies {
     }
 
     public void set(String key, String value) {
+        //value 为 null 视为删除该键：否则 toString 会拼出 "key=null" 字面量污染 Cookie 串
+        if (value == null) {
+            cookieMap.remove(key);
+            return;
+        }
         cookieMap.put(key, value);
     }
 

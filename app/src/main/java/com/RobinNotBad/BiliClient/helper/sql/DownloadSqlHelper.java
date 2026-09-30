@@ -30,19 +30,21 @@ public class DownloadSqlHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion != newVersion)
-            try {
-                // 兼容升级：如果从版本3升级，添加新字段
-                if (oldVersion == 3 && newVersion == 4) {
+        if (oldVersion >= newVersion) return;
+        try {
+            //逐级迁移：任何旧版本升上来都先尝试 ALTER 补列，保住历史下载记录；
+            //只有表结构异常（ALTER 失败，如列已存在/表损坏）才降级重建
+            if (oldVersion < 4) {
+                try {
                     db.execSQL("ALTER TABLE download ADD COLUMN download_type TEXT DEFAULT 'video'");
                     db.execSQL("ALTER TABLE download ADD COLUMN audio_url TEXT");
-                } else {
-                    // 其他情况重建表
+                } catch (Throwable e) {
                     db.execSQL("drop table if exists download");
                     onCreate(db);
                 }
-            } catch (Throwable e) {
-                MsgUtil.err(e);
             }
+        } catch (Throwable e) {
+            MsgUtil.err(e);
+        }
     }
 }

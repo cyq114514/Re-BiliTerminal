@@ -300,7 +300,7 @@ public class PlayerApi {
     }
 
     public static Uri getVideoUri(Context context, String path) {
-        return FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", new File(path));
+        return FileProvider.getUriForFile(context, context.getPackageName() + ".FileProvider", new File(path));
     }
 
     public static SubtitleLink[] getSubtitleLinks(File folder) {

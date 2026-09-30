@@ -453,4 +453,11 @@ public class SearchActivity extends InstanceActivity {
             }
         }
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        //清掉搜索建议/延迟显隐的 Handler 任务：页面销毁后任务残留会触碰已销毁 View
+        if (handler != null) handler.removeCallbacksAndMessages(null);
+    }
 }

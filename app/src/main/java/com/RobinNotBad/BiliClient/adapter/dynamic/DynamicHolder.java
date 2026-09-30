@@ -79,6 +79,12 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
     private String lastAvatarUrl;
     private String lastImageUrl;
 
+    /**复用前清掉“同 URL 跳过加载”的缓存，供 Adapter.onViewRecycled 调用。*/
+    public void clearImageCache() {
+        lastAvatarUrl = null;
+        lastImageUrl = null;
+    }
+
     public DynamicHolder(@NonNull View itemView, BaseActivity mActivity, boolean isChild) {
         super(itemView);
         this.itemView = itemView;
@@ -216,17 +222,32 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                 if (dynamicList.get(finalPosition).canDelete) {
                     long currentTime = System.currentTimeMillis();
                     if (longClickPosition == finalPosition && currentTime - longClickTime < 10000) {
+                        final long deletingId = dynamicList.get(finalPosition).dynamicId;
                         CenterThreadPool.run(() -> {
                             try {
-                                int result = DynamicApi.deleteDynamic(dynamicList.get(finalPosition).dynamicId);
+                                int result = DynamicApi.deleteDynamic(deletingId);
                                 if (result == 0) {
-                                    dynamicList.remove(finalPosition);
+                                    //删除成功后回到主线程按 dynamicId 反查当前位置：
+                                    //长按期间列表可能已刷新，bind 时的快照下标会删错条目；
+                                    //列表本身的 remove 也必须与 UI 线程的读取互斥
                                     dynamicActivity.runOnUiThread(() -> {
-                                        int offset = showRecentUp ? 2 : 1;
-                                        adapter.notifyItemRemoved(finalPosition + offset);
-                                        adapter.notifyItemRangeChanged(finalPosition + offset,
-                                                dynamicList.size() - finalPosition);
+                                        int realIndex = -1;
+                                        for (int i = 0; i < dynamicList.size(); i++) {
+                                            if (dynamicList.get(i).dynamicId == deletingId) {
+                                                realIndex = i;
+                                                break;
+                                            }
+                                        }
                                         longClickPosition = -1;
+                                        if (realIndex < 0) {
+                                            MsgUtil.showMsg("删除成功~");
+                                            return;
+                                        }
+                                        dynamicList.remove(realIndex);
+                                        int offset = showRecentUp ? 2 : 1;
+                                        adapter.notifyItemRemoved(realIndex + offset);
+                                        adapter.notifyItemRangeChanged(realIndex + offset,
+                                                dynamicList.size() - realIndex);
                                         MsgUtil.showMsg("删除成功~");
                                     });
                                 } else {
@@ -336,7 +357,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
         } else
             content.setVisibility(View.GONE);
 
-        if (!dynamic.userInfo.avatar.equals(lastAvatarUrl)) {
+        if (dynamic.userInfo.avatar != null && !dynamic.userInfo.avatar.equals(lastAvatarUrl)) {
             lastAvatarUrl = dynamic.userInfo.avatar;
             Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(dynamic.userInfo.avatar))
                     .transition(GlideUtil.getTransitionOptions())

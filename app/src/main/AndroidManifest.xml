@@ -50,18 +50,18 @@
 
         <activity
             android:name=".activity.settings.TestActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="测试页面"
             android:screenOrientation="locked" />
 
         <activity
             android:name=".activity.video.local.DownloadListActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="下载列表"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.series.SeriesInfoActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="系列详情"
             android:screenOrientation="locked" />
         <activity
@@ -137,12 +137,12 @@
         <activity
             android:name=".activity.player.PlayerActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:exported="true"
+            android:exported="false"
             android:label="内置播放器"
             android:theme="@style/Theme.NoSwipe" />
         <activity
             android:name=".activity.article.OpusInfoActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="文章详情"
             android:screenOrientation="locked" />
         <activity
@@ -172,7 +172,7 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.local.LocalListActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="缓存"
             android:screenOrientation="locked" />
         <activity
@@ -227,12 +227,12 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.setup.IntroductionActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="介绍"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.login.SpecialLoginActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="特殊登录"
             android:screenOrientation="locked" />
         <activity
@@ -256,7 +256,7 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.ShowTextActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="文本显示"
             android:screenOrientation="locked" />
         <activity
@@ -351,7 +351,7 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.ImageViewerActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="图片查看"
             android:screenOrientation="locked"
             android:theme="@style/Theme.NoSwipe" />
@@ -388,7 +388,7 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.SettingUIActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="界面设置"
             android:screenOrientation="locked" />
         <activity
@@ -398,10 +398,9 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.AboutActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="关于"
             android:screenOrientation="locked" />
-
         <activity
             android:name=".activity.settings.UpdateLogActivity"
             android:exported="false"
@@ -409,12 +408,12 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.SettingMainActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="设置"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.user.EditSignActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="修改描述"
             android:screenOrientation="locked" />
         <activity
@@ -434,7 +433,7 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.search.SearchActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="搜索"
             android:screenOrientation="locked" />
         <activity
@@ -444,33 +443,33 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.MenuActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="菜单"
             android:launchMode="singleTask"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.PreciousActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="入站必刷"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.PopularActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="热门"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.HotSearchActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="热搜"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.RankingActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="全站排行榜"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.video.RecommendActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="推荐"
             android:screenOrientation="locked" />
         <activity
@@ -480,7 +479,7 @@
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.login.LoginActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="登录"
             android:screenOrientation="locked" />
         <activity

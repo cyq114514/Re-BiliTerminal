@@ -142,8 +142,12 @@ public class SendDynamicActivity extends BaseActivity {
             Dynamic forward = null;
             if (TerminalContext.getInstance().getForwardContent() instanceof VideoInfo) {
                 video = (VideoInfo) TerminalContext.getInstance().getForwardContent();
-            } else {
+            } else if (TerminalContext.getInstance().getForwardContent() instanceof Dynamic) {
                 forward = (Dynamic) TerminalContext.getInstance().getForwardContent();
+            } else if (TerminalContext.getInstance().getForwardContent() != null) {
+                MsgUtil.showMsg("暂不支持转发该类型内容");
+                finish();
+                return;
             }
             if (forward != null) {
                 View childCard = View.inflate(this, R.layout.cell_dynamic, extraCard);

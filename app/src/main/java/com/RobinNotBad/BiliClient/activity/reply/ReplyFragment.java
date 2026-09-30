@@ -47,9 +47,11 @@ public class ReplyFragment extends RefreshListFragment {
     private String pagination = "";
     private boolean isManager = false;
     //游标分页的到底标志：与父类 bottom 配合，到底后阻止继续请求（pagination 会被置空，避免误用空游标重拉第一页导致重复）
-    private boolean isEnd = false;
+    //volatile：主线程写（世代守卫内）、后台加载循环读
+    private volatile boolean isEnd = false;
     //已加载评论的 rpid 集合，作为游标分页的兜底去重，防止 B站 API 在游标边界返回重复评论
-    private final Set<Long> loadedRpids = new HashSet<>();
+    //后台解析线程 add 与主线程 refresh clear/add 并发，需同步包装
+    private final Set<Long> loadedRpids = java.util.Collections.synchronizedSet(new HashSet<>());
     //刷新/翻页世代号：refresh 时自增，旧任务的所有回调按世代丢弃，防止旧数据写进新列表造成通知错位
     private int loadGeneration = 0;
     //连续加载空页的总时长上限：弱网+重试瀑布下防止"翻页无反应"无限拖延，超时静默停在当前游标，下次下滑可续传
@@ -186,8 +188,9 @@ public class ReplyFragment extends RefreshListFragment {
             try {
                 //B站对某些游标值可能只返回 cursor 不返回 replies，这里自动连续加载直到拿到评论或到底，避免用户看到"翻页无反应"
                 int emptyPages = 0;
+                boolean endReached = false;
                 String cursor = pagination;   //游标先在局部推进，提交回字段统一走主线程，避免与 refresh 并发写
-                while (!isEnd && !bottom && emptyPages < 5 && System.currentTimeMillis() < deadline) {
+                while (!isEnd && !bottom && !endReached && emptyPages < 5 && System.currentTimeMillis() < deadline) {
                     if (generation != loadGeneration) return;   //已被刷新作废
                     List<Reply> list = new ArrayList<>();
                     ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, 0, cursor, type, sort, list);
@@ -195,6 +198,7 @@ public class ReplyFragment extends RefreshListFragment {
                     if (!result.isSuccess()) {
                         //失败时回退 page，使父类页码与游标状态一致；失败不更新游标，允许按原游标重新触发
                         runOnUiThread(() -> {
+                            if (generation != loadGeneration) return;
                             this.page--;
                             setRefreshing(false);
                             showLoadErrorMsg(result);
@@ -205,21 +209,25 @@ public class ReplyFragment extends RefreshListFragment {
                     cursor = result.nextOffset;
                     //兜底去重：过滤掉 rpid 已存在的评论
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
-                    if (result.isEnd()) {
-                        isEnd = true;
-                        bottom = true;
-                    }
+                    if (result.isEnd()) endReached = true;
                     if (!list.isEmpty()) {
                         final List<Reply> unique = list;
                         final String next = cursor;
+                        final boolean finalEnd = endReached;
                         runOnUiThread(() -> {
                             if (generation != loadGeneration) return;
                             this.pagination = next;
                             replyList.addAll(unique);
                             if (replyAdapter != null)
                                 replyAdapter.notifyItemRangeInserted(replyList.size() - unique.size() + 1, unique.size());
+                            //isEnd/bottom 的写入收敛到主线程的世代守卫内：
+                            //后台直接写会在新一代 refresh 重置之后到达，把新列表污染成"已到底"
+                            if (finalEnd) {
+                                isEnd = true;
+                                bottom = true;
+                            }
+                            setRefreshing(false);
                         });
-                        setRefreshing(false);
                         return;   //拿到评论，退出等用户继续下滑
                     }
                     //本页无新评论：若未到底则继续加载下一页，连续空页达上限则提示
@@ -228,17 +236,23 @@ public class ReplyFragment extends RefreshListFragment {
                 }
                 //空页耗尽或超时：把已推进的游标落回字段，下次下滑从断点续传
                 final String finalCursor = cursor;
+                final boolean finalEnd = endReached;
                 runOnUiThread(() -> {
                     if (generation != loadGeneration) return;
                     this.pagination = finalCursor;
+                    if (finalEnd) {
+                        isEnd = true;
+                        bottom = true;
+                    }
+                    setRefreshing(false);
                 });
-                setRefreshing(false);
-                if (generation == loadGeneration && emptyPages >= 5 && !isEnd) {
+                if (generation == loadGeneration && emptyPages >= 5 && !endReached) {
                     runOnUiThread(() -> MsgUtil.showMsgLong("暂时没有更多评论了"));
                 }
             } catch (Exception e) {
                 if (generation == loadGeneration) {
                     runOnUiThread(() -> {
+                        if (generation != loadGeneration) return;
                         this.page--;
                         report(e);
                         setRefreshing(false);
@@ -283,6 +297,7 @@ public class ReplyFragment extends RefreshListFragment {
             int dataIndex = Math.max(firstVisible - 1, 0);
             if (dataIndex > replyList.size()) dataIndex = replyList.size();
             replyList.add(dataIndex, reply);
+            loadedRpids.add(reply.rpid);   //手工插入的评论也要进去重集，否则翻页拉到同一条会重复显示
             int adapterPos = dataIndex + 1;   //头部占一格
             replyAdapter.notifyItemInserted(adapterPos);
             layoutManager.scrollToPositionWithOffset(adapterPos, 0);
@@ -318,40 +333,44 @@ public class ReplyFragment extends RefreshListFragment {
                 ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, seek, pagination, type, sort, list);
                 if (generation != loadGeneration) return;   //已被更新的刷新作废
                 if (result.isSuccess()) {
-                    this.pagination = result.nextOffset;
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
                     final List<Reply> unique = list;
-                    setRefreshing(false);
-                    if (isAdded()) {
-                        runOnUiThread(() -> {
-                            if (!isAdded()) return;
-                            if (generation != loadGeneration) return;
-                            if (replyList != null) replyList.clear();
-                            else replyList = new ArrayList<>();
-                            replyList.addAll(unique);
-                            if (replyAdapter == null) {
-                                replyAdapter = createReplyAdapter();
-                                replyAdapter.count = count;
-                                replyAdapter.isManager = isManager;
-                                setOnSortSwitch();
-                                setAdapter(replyAdapter);
-                            } else {
-                                replyAdapter.notifyDataSetChanged();
-                            }
-                        });
+                    //分页状态（pagination/isEnd/bottom）统一在主线程的世代守卫内落库：
+                    //后台线程直写会在新一代 refresh 重置之后到达，把新列表污染成"已到底/错游标"
+                    runOnUiThread(() -> {
+                        if (!isAdded()) return;
+                        if (generation != loadGeneration) return;
+                        this.pagination = result.nextOffset;
                         if (result.isEnd()) {
                             Logu.d("ReplyFragment", "评论到底 type=" + type + " oid=" + aid);
                             isEnd = true;
                             bottom = true;
                         }
-                    }
+                        if (replyList != null) replyList.clear();
+                        else replyList = new ArrayList<>();
+                        replyList.addAll(unique);
+                        if (replyAdapter == null) {
+                            replyAdapter = createReplyAdapter();
+                            replyAdapter.count = count;
+                            replyAdapter.isManager = isManager;
+                            setOnSortSwitch();
+                            setAdapter(replyAdapter);
+                        } else {
+                            replyAdapter.notifyDataSetChanged();
+                        }
+                        setRefreshing(false);
+                    });
                 } else if (isAdded()) {
-                    setRefreshing(false);
-                    runOnUiThread(() -> showLoadErrorMsg(result));
+                    runOnUiThread(() -> {
+                        if (generation != loadGeneration) return;
+                        setRefreshing(false);
+                        showLoadErrorMsg(result);
+                    });
                 }
             } catch (Exception e) {
                 if (generation == loadGeneration) {
                     runOnUiThread(() -> {
+                        if (generation != loadGeneration) return;
                         this.page--;
                         report(e);
                         setRefreshing(false);

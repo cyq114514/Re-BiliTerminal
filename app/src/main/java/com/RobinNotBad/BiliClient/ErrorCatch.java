@@ -43,6 +43,11 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
         }
 
         throwable.printStackTrace();
+        //startActivity 是异步的，立即杀进程崩溃页来不及起来；给系统一小段时间完成页面启动
+        try {
+            Thread.sleep(300);
+        } catch (InterruptedException ignored) {
+        }
         android.os.Process.killProcess(android.os.Process.myPid());
     }
 }

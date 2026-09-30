@@ -155,7 +155,9 @@ public class CookiesApi {
     }};
 
     public static void checkCookies() throws JSONException, IOException {
-        NetWorkUtil.get("https://www.bilibili.com/");
+        try (okhttp3.Response ignored = NetWorkUtil.get("https://www.bilibili.com/")) {
+            //仅借该响应更新 Cookie 拦截器状态，body 无需消费，但必须关闭连接
+        }
 
         Cookies cookies = NetWorkUtil.getCookies();
 

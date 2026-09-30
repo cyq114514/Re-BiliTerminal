@@ -80,6 +80,13 @@ public class ImageApi {
      * 其余解码后按最长边2048缩放、按EXIF方向转正，重压缩为jpg。
      */
     public static PreparedImage prepareImage(Context context, Uri uri) throws IOException {
+        //读取前先预判大小：整份文件读进内存后再判上限已无法防 OOM（40MB 原图峰值内存可达数十 MB）
+        try (android.content.res.AssetFileDescriptor afd = context.getContentResolver().openAssetFileDescriptor(uri, "r")) {
+            long sourceSize = afd != null ? afd.getLength() : -1;
+            if (sourceSize > 25 * 1024 * 1024) throw new IOException("图片过大（超过25MB），无法上传");
+        } catch (java.io.FileNotFoundException ignored) {
+            //Provider 拒绝探测时退回原路径（readAllBytes 内部会给出读取错误）
+        }
         byte[] raw = readAllBytes(context, uri);
         if (raw == null || raw.length == 0) throw new IOException("无法读取图片");
 

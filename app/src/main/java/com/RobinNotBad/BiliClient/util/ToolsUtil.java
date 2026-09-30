@@ -30,7 +30,7 @@ public class ToolsUtil {
         byte[] secretBytes;
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            md.update(plainText.getBytes());
+            md.update(plainText.getBytes(java.nio.charset.StandardCharsets.UTF_8));   //平台默认字符集下不同设备签名结果可能不同
             secretBytes = md.digest();
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("没有md5这个算法！");

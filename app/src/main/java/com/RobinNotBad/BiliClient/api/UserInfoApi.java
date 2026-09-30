@@ -395,7 +395,7 @@ public class UserInfoApi {
         String postData = arg.toString();
         
         Log.e("UpdateUserInfo", "URL: " + url);
-        Log.e("UpdateUserInfo", "PostData: " + postData);
+        //不打印 PostData（含 csrf）
         
         // 构建Cookie
         StringBuilder cookieBuilder = new StringBuilder();
@@ -404,8 +404,7 @@ public class UserInfoApi {
         if (dedeUserId != null && !dedeUserId.isEmpty()) cookieBuilder.append("DedeUserID=").append(dedeUserId).append("; ");
         if (buvid3 != null && !buvid3.isEmpty()) cookieBuilder.append("buvid3=").append(buvid3);
         String cookieStr = cookieBuilder.toString();
-        
-        Log.e("UpdateUserInfo", "Cookie: " + cookieStr);
+        //不打印 Cookie（登录凭证）
 
         // 直接使用OkHttpClient创建请求
         okhttp3.RequestBody body = okhttp3.RequestBody.create(
@@ -514,9 +513,7 @@ public class UserInfoApi {
         }
         String cookieStr = cookieBuilder.toString();
         
-        Log.e("AvatarUpload", "CSRF: " + csrf);
-        Log.e("AvatarUpload", "Cookie: " + cookieStr);
-        Log.e("AvatarUpload", "File name: " + fileName + ", Size: " + imageData.length);
+        //不打印 CSRF / Cookie（登录凭证）
 
         okhttp3.RequestBody fileBody = okhttp3.RequestBody.create(Objects.requireNonNull(MediaType.parse("image/jpeg")), imageData);
         

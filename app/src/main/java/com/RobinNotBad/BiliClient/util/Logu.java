@@ -68,7 +68,16 @@ public class Logu {
     }
 
     private static String getCaller() {
-        StackTraceElement caller = Thread.currentThread().getStackTrace()[4];
+        //getStackTrace: [0]VM [1]Thread [2]getCaller [3]Logu.x(业务直接调用的重载) [4]…
+        //不同重载深度不同，向前找第一个 Logu 之外的帧，避免硬编码下标错位/越界
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        StackTraceElement caller = stack[stack.length - 1];
+        for (int i = 3; i < stack.length; i++) {
+            if (!stack[i].getClassName().equals(Logu.class.getName())) {
+                caller = stack[i];
+                break;
+            }
+        }
         String name = caller.getClassName();
         int index = name.length();
         for (; index > 1; index--) {

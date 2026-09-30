@@ -227,6 +227,8 @@ public class BaseActivity extends AppCompatActivity {
     protected void asyncInflate(int id, InflateCallBack callBack) {
         setContentView(R.layout.activity_loading);
         new AsyncLayoutInflaterX(this).inflate(id, null, (view, layoutId, parent) -> {
+            //低配设备 inflate 期间页面可能已被销毁，对已销毁窗口 setContentView 会崩
+            if (isDestroyed()) return;
             setContentView(view);
 
             //低性能设备（手表/低端机）上布局加载耗时可能超过转场动画时长：

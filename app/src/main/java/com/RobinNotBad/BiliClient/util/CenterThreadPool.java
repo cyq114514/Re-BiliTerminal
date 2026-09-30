@@ -8,7 +8,7 @@ import androidx.core.util.Consumer;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -41,17 +41,23 @@ public class CenterThreadPool {
 
     private static ExecutorService getThreadPoolInstance() {
         if (THREAD_POOL == null) return null;
-        int bestThreadPoolSize = Runtime.getRuntime().availableProcessors();
-        while (THREAD_POOL.get() == null) {
-            THREAD_POOL.compareAndSet(null, new ThreadPoolExecutor(
-                    bestThreadPoolSize / 2,
-                    bestThreadPoolSize * 2,
-                    60,
-                    TimeUnit.SECONDS,
-                    new ArrayBlockingQueue<>(20)
-            ));
+        //synchronized 替代 CAS 自旋：CAS 失败侧线程已经 new 出来的池对象会直接泄漏
+        synchronized (CenterThreadPool.class) {
+            if (THREAD_POOL.get() == null) {
+                int bestThreadPoolSize = Runtime.getRuntime().availableProcessors();
+                //corePoolSize 至少 2：单核设备取 0 会导致队列未满时一个常驻线程都没有；
+                //队列改无界 LinkedBlockingQueue：有界队列满后默认 AbortPolicy 抛
+                //RejectedExecutionException 被 run() 吞掉，网络请求会被静默丢弃
+                THREAD_POOL.compareAndSet(null, new ThreadPoolExecutor(
+                        Math.max(2, bestThreadPoolSize / 2),
+                        bestThreadPoolSize * 2,
+                        60,
+                        TimeUnit.SECONDS,
+                        new LinkedBlockingQueue<>()
+                ));
+            }
+            return THREAD_POOL.get();
         }
-        return THREAD_POOL.get();
     }
 
     static {
@@ -75,7 +81,13 @@ public class CenterThreadPool {
             //能用协程用协程
             if (COROUTINE_SCOPE != null) {
                 BuildersKt.launch(COROUTINE_SCOPE, EmptyCoroutineContext.INSTANCE, CoroutineStart.DEFAULT, (CoroutineScope scope, Continuation<? super Unit> continuation) -> {
-                    runnable.run();
+                    try {
+                        runnable.run();
+                    } catch (Throwable e) {
+                        //协程体内未捕获异常会直接崩掉整个应用（无 CoroutineExceptionHandler 兜底），
+                        //与原生池路径的异常口径保持一致：记日志 + 用户可见的错误提示
+                        MsgUtil.err(e);
+                    }
                     return Unit.INSTANCE;
                 });
                 //协程不可用时尝试以原生线程池运行
@@ -89,7 +101,6 @@ public class CenterThreadPool {
             }
         } catch (Throwable e) {
             //最后再放手一博
-            //new Thread(runnable).start();
             e.printStackTrace();
         }
     }

@@ -294,7 +294,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         isLiveMode = intent.getBooleanExtra("live_mode", false);
         isOnlineVideo = video_url.contains("http");
-        hasDanmaku = !danmaku_url.equals("");
+        hasDanmaku = danmaku_url != null && !danmaku_url.isEmpty();   //本地视频/直播路径可能不传 danmaku extra，getStringExtra 可为 null
 
         if (intent.hasExtra("pagenames") && intent.hasExtra("cids")) {
             pagenames = intent.getStringArrayListExtra("pagenames");
@@ -515,7 +515,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     if (ijkPlayer != null && isPrepared && !isLiveMode) {
                         float x = e.getX();
                         float viewWidth = layout_control.getWidth();
-                        long currentPosition = ijkPlayer.getCurrentPosition();
+                        long currentPosition = video_now;   //进度条由 progressTimer 后台维护，读它不取原生锁
                         long seekOffset = doubleTapSeekSeconds * 1000L;
 
                         gesture_click_disabled = true;
@@ -1054,7 +1054,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     mDanmakuView.show();
                     //DFM 在隐藏期间时钟停走，重新显示时必须按当前播放位置重新对齐，否则弹幕会整体错位
                     if (isPrepared && ijkPlayer != null) {
-                        seekDanmakuTo(ijkPlayer.getCurrentPosition());
+                        seekDanmakuTo(video_now);   //同上：主线程读原生锁有卡死风险
                     }
                 }
                 btn_danmaku.setImageResource((isDanmakuVisible ? R.mipmap.danmakuoff : R.mipmap.danmakuon));
@@ -1378,6 +1378,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (!SharedPreferencesUtil.getBoolean("player_show_online", false) || isLiveMode || aid == 0 || cid == 0)
             return;
 
+        if (onlineTimer != null) {
+            onlineTimer.cancel();   //onPrepared 在切P/切清晰度/重试时会反复触发，不取消旧实例会叠出多个轮询线程
+            onlineTimer = null;
+        }
         onlineTimer = new Timer();
         TimerTask task = new TimerTask() {
             @SuppressLint("SetTextI18n")
@@ -2029,9 +2033,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     @Override
     protected void onDestroy() {
-        if (!isFinishing()) {
+        //部分设备/ROM 会在页面启动阶段先回调一次 onDestroy（isFinishing=false）：
+        //此时播放器与定时器尚未建立，早退是安全的；
+        //但若已经初始化过（系统回收内存、"不保留活动"等非 finish 销毁路径），
+        //跳过清理会让 native 播放器与 5 个 Timer 全部泄漏，EventBus 也未反注册
+        if (!isFinishing() && ijkPlayer == null && progressTimer == null && loadingTimer == null) {
             super.onDestroy();
-            return; // 貌似有些设备启动activity会先调用一下onDestroy，头大…… 不super还会报错
+            return;
         }
 
         Logu.v("结束");
@@ -2496,10 +2504,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     controlVideo();
                     break;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
-                    seekToPosition(ijkPlayer.getCurrentPosition() - 10000L);
+                    seekToPosition(video_now - 10000L);   //D-pad 快退：主线程读原生锁有卡死风险
                     break;
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
-                    seekToPosition(ijkPlayer.getCurrentPosition() + 10000L);
+                    seekToPosition(video_now + 10000L);
                     break;
                 case KeyEvent.KEYCODE_DPAD_UP:
                     changeVolume(true);
@@ -2568,7 +2576,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         // 不保存状态，仅在当前播放会话中切换
 
         if (isPrepared && ijkPlayer != null) {
-            final long currentPosition = ijkPlayer.getCurrentPosition();
+            final long currentPosition = video_now;
             final boolean wasPlaying = isPlaying;
 
             MsgUtil.showMsg(isAudioOnlyMode ? "正在切换到听视频模式..." : "正在切换到普通模式...");
@@ -2966,7 +2974,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     if (destroyed)
                         return;
 
-                    final long currentPosition = ijkPlayer != null ? ijkPlayer.getCurrentPosition() : 0;
+                    final long currentPosition = video_now;
                     final boolean wasPlaying = isPlaying;
 
                     //先摘掉播放状态再释放，避免进度定时器在 release 期间读到已释放实例
@@ -3053,7 +3061,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 viewPointRecycler.setAdapter(viewPointAdapter);
             }
             if (ijkPlayer != null && isPrepared) {
-                int currentPos = (int) (ijkPlayer.getCurrentPosition() / 1000);
+                int currentPos = video_now / 1000;
                 viewPointAdapter.updateCurrentPosition(currentPos);
             }
             layout_card_bg.setVisibility(View.VISIBLE);

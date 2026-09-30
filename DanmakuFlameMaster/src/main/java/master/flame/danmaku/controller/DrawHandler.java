@@ -20,6 +20,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.os.Message;
 import android.util.DisplayMetrics;
 
@@ -328,8 +329,13 @@ public class DrawHandler extends Handler {
                 drawTask.notifyAll();
             }
             thread.quit();
+            //与 DanmakuView/CacheManagingDrawTask 的既有补丁对齐：带超时等待，
+            //更新线程卡在原生绘制锁上时不再无限阻塞 handler 线程
             try {
-                thread.join();
+                thread.join(2000);
+                if (thread.isAlive()) {
+                    Log.e("DrawHandler", "danmaku update thread did not exit within 2000ms, give up waiting");
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

@@ -199,7 +199,9 @@ public class DynamicApi {
     public static long relayVideo(String text, Map<String, Long> atUserUid, long aid, String authorName, long authorMid, String authorContent, Set<String> emoteTexts) throws JSONException, IOException {
         JSONArray contents = text == null ? new JSONArray().put(Content.create("", 1, null)) : buildContents(text, atUserUid, emoteTexts);
         appendRepostQuote(contents, authorName, authorMid, authorContent, emoteTexts);
-        return publishComplex(contents, null, null, null, 5, Map.of("web_repost_src", new JSONObject().put("revs_id", new JSONObject().put("dyn_type", 8).put("rid", aid))));
+        Map<String, Object> repostSrcVideo = new HashMap<>();
+        repostSrcVideo.put("web_repost_src", new JSONObject().put("revs_id", new JSONObject().put("dyn_type", 8).put("rid", aid)));
+        return publishComplex(contents, null, null, null, 5, repostSrcVideo);
     }
 
     public static long relayDynamic(String text, long dyid) throws IOException {
@@ -222,7 +224,9 @@ public class DynamicApi {
     public static long relayDynamic(String text, Map<String, Long> atUserUid, long dyid, String authorName, long authorMid, String authorContent, Set<String> emoteTexts) throws JSONException, IOException {
         JSONArray contents = text == null ? new JSONArray().put(Content.create("", 1, null)) : buildContents(text, atUserUid, emoteTexts);
         appendRepostQuote(contents, authorName, authorMid, authorContent, emoteTexts);
-        return publishComplex(contents, null, null, null, 4, Map.of("web_repost_src", new JSONObject().put("dyn_id_str", String.valueOf(dyid))));
+        Map<String, Object> repostSrcDynamic = new HashMap<>();
+        repostSrcDynamic.put("web_repost_src", new JSONObject().put("dyn_id_str", String.valueOf(dyid)));
+        return publishComplex(contents, null, null, null, 4, repostSrcDynamic);
     }
 
     public static JSONArray parseAtContent(String content, Map<String, Long> atUserUid) throws JSONException {
@@ -230,7 +234,7 @@ public class DynamicApi {
         Set<Pair<Integer, Integer>> indexes = new HashSet<>();
         Map<Pair<Integer, Integer>, Long> uidIndexes = new HashMap<>();
         for (Map.Entry<String, Long> entry : atUserUid.entrySet()) {
-            Pattern pattern = Pattern.compile("@" + entry.getKey() + " ");
+            Pattern pattern = Pattern.compile("@" + java.util.regex.Pattern.quote(entry.getKey()) + " ");   //昵称含 .*[\\ 等元字符时未转义会抛 PatternSyntaxException
             Matcher matcher = pattern.matcher(content);
             List<Pair<Integer, Integer>> mIndex = new ArrayList<>();
             while (matcher.find()) {
@@ -506,7 +510,10 @@ public class DynamicApi {
         if (dynamic.comment_type == 0) dynamic.comment_type = 17;
 
         JSONObject modules = dynamic_json.optJSONObject("modules");
-        if (modules == null) return dynamic;
+        if (modules == null) {
+            dynamic.userInfo = new UserInfo();   //无 author 模块时也必须给默认值，否则下游 bind 读 userInfo.name/avatar 直接 NPE
+            return dynamic;
+        }
 
         UserInfo userInfo = new UserInfo();
         JSONObject module_author = modules.optJSONObject("module_author");

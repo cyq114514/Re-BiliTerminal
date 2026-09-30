@@ -219,7 +219,7 @@ public class StringUtil {
     }
 
     public static void setSingleAt(SpannableStringBuilder spannableString, String atName, long atMid) {
-        Pattern pattern = Pattern.compile("@" + atName);
+        Pattern pattern = Pattern.compile("@" + java.util.regex.Pattern.quote(atName));
         String text = spannableString.toString();
         Matcher matcher = pattern.matcher(text);
         while (matcher.find()) {

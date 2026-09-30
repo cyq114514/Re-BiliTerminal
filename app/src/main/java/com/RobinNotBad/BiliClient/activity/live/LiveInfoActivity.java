@@ -95,7 +95,7 @@ public class LiveInfoActivity extends BaseActivity {
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
                         .into(cover);
 
-                cover.setOnClickListener((view) -> startActivity(new Intent(view.getContext(), ImageViewerActivity.class).putExtra("imageList", new ArrayList<>(List.of(room.user_cover)))));
+                cover.setOnClickListener((view) -> startActivity(new Intent(view.getContext(), ImageViewerActivity.class).putExtra("imageList", new ArrayList<>(java.util.Collections.singletonList(room.user_cover)))));
 
                 title.setText(StringUtil.removeHtml(room.title));
 

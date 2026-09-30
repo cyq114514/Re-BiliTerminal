@@ -45,12 +45,13 @@ public class DynamicActivity extends RefreshMainActivity {
     private long offset = 0;
     private boolean firstRefresh = true;
     private String type = "all";
-    private static final Map<String, String> typeNameMap = Map.of(
-            "全部", "all",
-            "视频投稿", "video",
-            "追番", "pgc",
-            "专栏", "article"
-    );
+    //minSdk<30 不能用 Map.of，改静态块构建
+    private static final Map<String, String> typeNameMap = new HashMap<>() {{
+        put("全部", "all");
+        put("视频投稿", "video");
+        put("追番", "pgc");
+        put("专栏", "article");
+    }};
 
     /**话题页（TopicDynamicActivity）复用本页框架时开启：隐藏发动态入口与UP列表*/
     public boolean isTopicMode() {
@@ -125,8 +126,8 @@ public class DynamicActivity extends RefreshMainActivity {
                         CenterThreadPool.run(() -> {
                             try {
                                 Dynamic dynamic = DynamicApi.getDynamic(dynId);
-                                dynamicList.add(0, dynamic);
                                 runOnUiThread(() -> {
+                                    dynamicList.add(0, dynamic);   //list 突变与 Adapter 通知必须在同一线程
                                     if (type.equals("all")) {
                                         dynamicAdapter.notifyItemInserted(0);
                                         dynamicAdapter.notifyItemRangeChanged(0, dynamicList.size());

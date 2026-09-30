@@ -237,7 +237,7 @@ public class PrivateMsgApi {
         JSONObject result = new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body()).string());
 
         Log.e("debug-发送私信", result.toString());
-        Log.e("debug-发送私信", NetWorkUtil.webHeaders.toString());
+        //不打印请求头（含完整 Cookie）
         return result;
     }
 

@@ -47,7 +47,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 public class BangumiInfoFragment extends Fragment {
     private long mediaId;
@@ -151,7 +150,7 @@ public class BangumiInfoFragment extends Fragment {
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .placeholder(R.mipmap.placeholder)
                 .into(imageMediaCover);
-        imageMediaCover.setOnClickListener((view) -> startActivity(new Intent(view.getContext(), ImageViewerActivity.class).putExtra("imageList", new ArrayList<>(List.of(bangumi.info.cover_horizontal)))));
+        imageMediaCover.setOnClickListener((view) -> startActivity(new Intent(view.getContext(), ImageViewerActivity.class).putExtra("imageList", new ArrayList<>(java.util.Collections.singletonList(bangumi.info.cover_horizontal)))));
         title.setText(bangumi.info.title);
 
         // 副标题
@@ -215,7 +214,7 @@ public class BangumiInfoFragment extends Fragment {
 
         // 标签
         if (bangumi.info.styles != null && !bangumi.info.styles.isEmpty()) {
-            String styleText = "标签：" + String.join(" ", bangumi.info.styles);
+            String styleText = "标签：" + android.text.TextUtils.join(" ", bangumi.info.styles);
             styles.setText(styleText);
             styles.setVisibility(View.VISIBLE);
         } else {
@@ -338,14 +337,17 @@ public class BangumiInfoFragment extends Fragment {
         if (section == null || section.episodeList == null || section.episodeList.isEmpty()) return;
         Bangumi.Episode episode = section.episodeList.get(selectedEpisode);
         if (episode == null || episode.aid == 0 || episode.cid == 0) return;
+        //season 维度必须在主线程快照：后台执行时 currentSeasonId 可能已被切季改变，
+        //会把这一集上报到别的季的 season_id/sub_type 上
+        final long fSeasonId = currentSeasonId;
+        final int fSeasonType = currentSeasonType();
         CenterThreadPool.run(() -> {
             try {
                 long progress = PlayerApi.getLastPlayProgress(episode.aid, episode.cid);
-                //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录；
-                //季维度取"当前展示的季"（页内切季后与 info.season_id 可能不同）
+                //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录
                 HistoryApi.reportHistoryPgc(episode.aid, episode.cid, episode.id,
-                        currentSeasonId,
-                        currentSeasonType(),
+                        fSeasonId,
+                        fSeasonType,
                         progress / 1000);
             } catch (Exception e) {
                 Logu.e("BangumiInfoFragment", "历史上报失败: " + e.getMessage());
@@ -385,6 +387,7 @@ public class BangumiInfoFragment extends Fragment {
         }
         if (epIds.isEmpty()) return false;
 
+        final long seasonAtStart = currentSeasonId;   //定位期间用户切季的话，结果按旧季下标套新季数据会错位
         CenterThreadPool.run(() -> {
             long epid = HistoryApi.findLastWatchedEpid(epIds);
             if (epid == 0) return; //从未看过本季：不上报，避免产生"progress=0"的污染记录
@@ -392,6 +395,7 @@ public class BangumiInfoFragment extends Fragment {
             if (position == null) return;
             CenterThreadPool.runOnUiThread(() -> {
                 if (!isAdded()) return;
+                if (currentSeasonId != seasonAtStart) return;   //已经切到别的季：本轮定位作废
                 //定位到第 1 集第 1 个时视觉上没有变化，就不弹提示，避免每次进详情页都打扰
                 boolean moved = position[0] != 0 || position[1] != 0;
                 Bangumi.Episode located = selectEpisode(position[0], position[1], true);
@@ -543,7 +547,16 @@ public class BangumiInfoFragment extends Fragment {
         CenterThreadPool.run(() -> {
             try {
                 BangumiApi.SeasonMeta meta = BangumiApi.getSeasonDetail(target.season_id);
-                if (meta.sectionList.isEmpty()) {
+                //必须确保目标季"至少有一个非空分区"：只有空附加分区（或空 episodes）的季不能进 applySeason，
+                //否则会留下 tab 高亮/列表/选中下标半更新的状态，用户再点集卡片就会越界崩溃
+                boolean hasEpisodes = false;
+                for (Bangumi.Section section : meta.sectionList) {
+                    if (section.episodeList != null && !section.episodeList.isEmpty()) {
+                        hasEpisodes = true;
+                        break;
+                    }
+                }
+                if (!hasEpisodes) {
                     CenterThreadPool.runOnUiThread(() -> {
                         if (isAdded()) MsgUtil.showMsg("该季暂无内容");
                         switchingSeason = false;
@@ -744,7 +757,8 @@ public class BangumiInfoFragment extends Fragment {
                     org.json.JSONObject result = root.optJSONObject("result");
                     if (result != null && result.optInt("follow", 0) == 1) {
                         SharedPreferencesUtil.putBoolean("bangumi_follow_" + sid, true);
-                        requireActivity().runOnUiThread(() -> btn.setText("已追番"));
+                        //不能用 requireActivity().runOnUiThread：fragment 可能已 detach，会抛异常
+                        CenterThreadPool.runOnUiThread(() -> btn.setText("已追番"));
                     }
                 }
             } catch (Exception ignored) {}
@@ -762,12 +776,14 @@ public class BangumiInfoFragment extends Fragment {
                 String body = "season_id=" + sid + "&csrf=" + SharedPreferencesUtil.getString("csrf", "");
                 NetWorkUtil.post(url, body, NetWorkUtil.webHeaders).body().string();
                 SharedPreferencesUtil.putBoolean(cacheKey, !isFollowing);
-                requireActivity().runOnUiThread(() -> {
+                //回调统一走 Handler 投递：请求完成时 fragment 可能已 detach，
+                //requireActivity() 在 try 与 catch 里抛异常都会直接把进程打死
+                CenterThreadPool.runOnUiThread(() -> {
                     btn.setText(isFollowing ? "追番" : "已追番");
                     MsgUtil.showMsg(isFollowing ? "已取消追番" : "已追番");
                 });
             } catch (Exception e) {
-                requireActivity().runOnUiThread(() -> MsgUtil.showMsg("操作失败，请稍后重试"));
+                CenterThreadPool.runOnUiThread(() -> MsgUtil.showMsg("操作失败，请稍后重试"));
             }
         });
     }

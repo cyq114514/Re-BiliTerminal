@@ -120,6 +120,10 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         super.onViewRecycled(holder);
+        //复用前清掉“同 URL 跳过加载”的缓存，否则 recycled 的 holder 可能残留上一个动态的头图/配图
+        if (holder instanceof DynamicHolder) {
+            ((DynamicHolder) holder).clearImageCache();
+        }
     }
 
     @Override
@@ -230,7 +234,8 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 this.userOfficial.setVisibility(View.VISIBLE);
                 String[] official_signs = {"哔哩哔哩不知名UP主", "哔哩哔哩知名UP主", "哔哩哔哩大V达人", "哔哩哔哩企业认证",
                         "哔哩哔哩组织认证", "哔哩哔哩媒体认证", "哔哩哔哩政府认证", "哔哩哔哩高能主播", "社会不知名人士", "社会知名人士"};
-                this.userOfficial.setText(official_signs[userInfo.official]
+                int officialIdx = Math.max(0, Math.min(userInfo.official, official_signs.length - 1));
+                this.userOfficial.setText(official_signs[officialIdx]
                         + (userInfo.officialDesc.isEmpty() ? "" : ("\n" + userInfo.officialDesc)));
             } else {
                 this.officialIcon.setVisibility(View.GONE);

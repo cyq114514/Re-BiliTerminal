@@ -110,8 +110,8 @@ public class DmImgParamUtil {
                 .put("p", new JSONArray().put(xyz1[0]).put(xyz1[2]).put(xyz1[1]))
                 .put("s", new JSONArray().put(xyz2[2]).put(xyz2[0]).put(xyz2[1])));
         result.put("ds", ds)
-                .put("wh", new JSONArray(List.of(f114(width, height))))
-                .put("of", new JSONArray(List.of(f514(y, x))));
+                .put("wh", new JSONArray(new Object[]{f114(width, height)}))
+                .put("of", new JSONArray(new Object[]{f514(y, x)}));
         return result.toString();
     }
 

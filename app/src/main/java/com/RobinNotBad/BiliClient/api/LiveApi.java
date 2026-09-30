@@ -141,7 +141,9 @@ public class LiveApi {
         String json = NetWorkUtil.getJson(url).toString();
         ApiResponse<LiveRoom> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<LiveRoom>>(){}.getType());
         if (resp == null || !resp.isSuccess() || resp.data == null) return null;
-        List<LiveRoom> rooms = postProcessRooms(List.of(resp.data));
+        ArrayList<LiveRoom> singleRoom = new ArrayList<>();
+        singleRoom.add(resp.data);
+        List<LiveRoom> rooms = postProcessRooms(singleRoom);
         return !rooms.isEmpty() ? rooms.get(0) : null;
     }
 

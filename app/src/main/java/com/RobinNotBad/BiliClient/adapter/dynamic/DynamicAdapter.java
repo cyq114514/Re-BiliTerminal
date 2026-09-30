@@ -137,6 +137,10 @@ public class DynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         super.onViewRecycled(holder);
+        //复用前清掉“同 URL 跳过加载”的缓存，否则 recycled 的 holder 可能残留上一个动态的头图/配图
+        if (holder instanceof DynamicHolder) {
+            ((DynamicHolder) holder).clearImageCache();
+        }
     }
 
     @Override

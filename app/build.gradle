@@ -26,11 +26,11 @@ android {
     defaultConfig {
         //作为独立分支使用的新包名，与上游哔哩终端互不覆盖、可共存
         applicationId "com.RobinNotBad.BiliClient.re"
-        minSdk 14
+        minSdk 19
         //noinspection ExpiredTargetSdkVersion
         targetSdk 26
-        versionCode 20261002
-        versionName "1.1.1"
+        versionCode 20261003
+        versionName "1.1.1-fix"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
@@ -66,7 +66,6 @@ android {
     buildTypes {
         release {
             buildConfigField "boolean", "BETA", String.valueOf(betaVer > 0)
-            buildConfigField "boolean", "LOG_DEBUG", "true"
             shrinkResources true
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
