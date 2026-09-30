@@ -4,24 +4,32 @@ import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.text.SpannableStringBuilder;
 import android.text.style.ImageSpan;
+import android.util.LruCache;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.model.Emote;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.FutureTarget;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 
 //表情包工具，用于将文本中的表情包替换为对应图片，部分代码来自catGPT
 //2023-07-23
 
 public class EmoteUtil {
-    public static SpannableStringBuilder textReplaceEmote(String text, JSONArray emote, float scale, Context context) throws JSONException, ExecutionException, InterruptedException {
+    //单个表情的同步加载上限：评论解析线程会阻塞在这里，弱网下无界等待会把加载链路彻底卡死
+    private static final long LOAD_TIMEOUT_SECONDS = 3L;
+    //进程级 Drawable 复用：同一表情在一屏评论里可能出现多次，不去重的话每条评论都要重新解码
+    private static final LruCache<String, Drawable> EMOTE_DRAWABLE_CACHE = new LruCache<>(96);
+
+    public static SpannableStringBuilder textReplaceEmote(String text, JSONArray emote, float scale, Context context) throws JSONException, InterruptedException {
         SpannableStringBuilder result = new SpannableStringBuilder(text);
         if (emote != null && emote.length() > 0) {
             for (int i = 0; i < emote.length(); i++) {    //遍历每一个表情包
@@ -62,10 +70,11 @@ public class EmoteUtil {
 
     public static void replaceSingle(SpannableStringBuilder spannableString, String name, String url, int size, float scale, Context context) {
         try {
-            String origText = spannableString.toString();
-            Drawable drawable = Glide.with(context).asDrawable().load(url).submit().get();  //获得url并通过glide得到一张图片
+            int emotePx = (int) (size * ToolsUtil.sp2px(18) * scale);
+            Drawable drawable = loadEmoteDrawable(context, url, emotePx);
+            if (drawable == null) return;   //超时/失败跳过该表情，保留文本，不再无限阻塞解析
 
-            drawable.setBounds(0, 0, (int) (size * ToolsUtil.sp2px(18) * scale), (int) (size * ToolsUtil.sp2px(18) * scale));  //参考了隔壁腕上哔哩并进行了改进
+            String origText = spannableString.toString();
 
             int start = origText.indexOf(name);    //检测此字符串的起始位置
             while (start >= 0) {
@@ -80,11 +89,43 @@ public class EmoteUtil {
 
     public static void replaceSingle(SpannableStringBuilder spannableString, String url, int size, int start, int end, float scale) {
         try {
-            Drawable drawable = Glide.with(BiliTerminal.context).asDrawable().load(url).submit().get();
-            drawable.setBounds(0, 0, (int) (size * ToolsUtil.sp2px(18) * scale), (int) (size * ToolsUtil.sp2px(18) * scale));
+            int emotePx = (int) (size * ToolsUtil.sp2px(18) * scale);
+            Drawable drawable = loadEmoteDrawable(BiliTerminal.context, url, emotePx);
+            if (drawable == null) return;
+
+            drawable.setBounds(0, 0, emotePx, emotePx);
             ImageSpan imageSpan = new ImageSpan(drawable, ImageSpan.ALIGN_BOTTOM);
             spannableString.setSpan(imageSpan, start, end, SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 同步取一个表情 Drawable：带超时、按"URL+显示尺寸"复用缓存。
+     * 只允许在后台线程调用（评论/动态/私信解析均在后台），否则会阻塞主线程。
+     *
+     * @return 取不到（超时/网络失败）时返回 null
+     */
+    private static Drawable loadEmoteDrawable(Context context, String url, int sizePx) {
+        if (url == null || url.isEmpty()) return null;
+        String cacheKey = url + "|" + sizePx;
+        Drawable cached = EMOTE_DRAWABLE_CACHE.get(cacheKey);
+        if (cached != null) return cached;
+
+        FutureTarget<Drawable> target = null;
+        try {
+            //显式给出目标尺寸：submit() 不带参数会按原图尺寸解码，浪费内存
+            target = Glide.with(context).asDrawable().load(url).submit(sizePx, sizePx);
+            Drawable drawable = target.get(LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            drawable.setBounds(0, 0, sizePx, sizePx);
+            EMOTE_DRAWABLE_CACHE.put(cacheKey, drawable);
+            return drawable;
+        } catch (TimeoutException e) {
+            if (target != null) Glide.with(context).clear(target);   //取消滞留请求，避免 FutureTarget 泄漏
+            return null;
+        } catch (Exception e) {
+            if (target != null) Glide.with(context).clear(target);
+            return null;
         }
     }
 

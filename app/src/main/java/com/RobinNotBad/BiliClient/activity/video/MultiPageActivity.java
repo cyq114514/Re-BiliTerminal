@@ -63,16 +63,19 @@ public class MultiPageActivity extends BaseActivity {
                     }
                 });
             } else {        //普通播放模式
-                adapter.setOnItemClickListener(position -> {
-                    long cid_curr = videoInfo.cids.get(position);
-                    if (cid_curr != playerData.cidHistory) {
-                        playerData = videoInfo.toPlayerData(position);
-                        playerData.cidHistory = cid_curr;
-                        playerData.timeStamp = 0;
-                    }
+                //上次观看的P（详情页预取 playurl 时由 last_play_cid 带回），列表里高亮提示
+                int historyIndex = playerData.cidHistory > 0 ? videoInfo.cids.indexOf(playerData.cidHistory) : -1;
+                if (historyIndex >= 0) {
+                    adapter.setHistoryIndex(historyIndex);
+                    textView.setText("请选择分页（上次看到P" + (historyIndex + 1) + "）");
+                }
 
-                    PlayerApi.startGettingUrl(playerData);
+                //无论选哪一P都用所选P重建 PlayerData：旧逻辑在"点回上次看的P"时复用了 cid 仍是P1的旧对象，
+                //导致实际播放的是P1；续播进度由 PlayerApi 按 last_play_cid 配对校验后填入
+                adapter.setOnItemClickListener(position -> {
+                    playerData = videoInfo.toPlayerData(position);
                     playerData.timeStamp = 0;
+                    PlayerApi.startGettingUrl(playerData);
                 });
             }
 

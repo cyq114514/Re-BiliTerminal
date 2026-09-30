@@ -23,7 +23,8 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity;
-import com.RobinNotBad.BiliClient.adapter.video.MediaEpisodeAdapter;
+import com.RobinNotBad.BiliClient.adapter.video.EpisodeCardAdapter;
+import com.RobinNotBad.BiliClient.adapter.video.SeasonTabAdapter;
 import com.RobinNotBad.BiliClient.api.BangumiApi;
 import com.RobinNotBad.BiliClient.api.HistoryApi;
 import com.RobinNotBad.BiliClient.api.PlayerApi;
@@ -32,7 +33,6 @@ import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import androidx.lifecycle.MutableLiveData;
 
-import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
@@ -46,6 +46,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class BangumiInfoFragment extends Fragment {
@@ -54,9 +55,19 @@ public class BangumiInfoFragment extends Fragment {
     private Dialog dialog;
     private View rootView;
     private RecyclerView episodeRecyclerView;
-    private Button section_choose;
-    private TextView episode_choose;
+    private RecyclerView seasonTabsRecyclerView;
+    private TextView episodeStatus;
     private Bangumi bangumi;
+    private EpisodeCardAdapter episodeCardAdapter;
+    private SeasonTabAdapter seasonTabAdapter;
+
+    //季 tab 运行时状态（官方式页内切季）：
+    private long currentSeasonId;          //当前展示的季
+    private boolean switchingSeason = false; //切季请求防抖
+    //各季数据缓存：seasonId → 分区列表/季类型/状态文案/上次看到 epid
+    private final Map<Long, BangumiApi.SeasonMeta> seasonCache = new HashMap<>();
+    //各季离开时的选中位置记忆：seasonId → {sectionIdx, epIdx}
+    private final Map<Long, int[]> seasonSelection = new HashMap<>();
 
     public static BangumiInfoFragment newInstance(long mediaId) {
         Bundle args = new Bundle();
@@ -128,8 +139,8 @@ public class BangumiInfoFragment extends Fragment {
         ImageView staffArrow = rootView.findViewById(R.id.icon_staff_arrow);
         TextView staff = rootView.findViewById(R.id.text_staff);
         TextView record = rootView.findViewById(R.id.text_record);
-        section_choose = rootView.findViewById(R.id.section_choose);
-        episode_choose = rootView.findViewById(R.id.episode_choose);
+        episodeStatus = rootView.findViewById(R.id.episode_status);
+        seasonTabsRecyclerView = rootView.findViewById(R.id.rv_season_tabs);
         selectedSection = 0;
 
         rootView.setVisibility(View.GONE);
@@ -248,8 +259,9 @@ public class BangumiInfoFragment extends Fragment {
         } else {
             record.setVisibility(View.GONE);
         }
-        //section selector setting.
-        MediaEpisodeAdapter adapter = new MediaEpisodeAdapter();
+        //选集区设置：标题行 + 季 tab 行 + 横向集卡片
+        EpisodeCardAdapter adapter = new EpisodeCardAdapter();
+        episodeCardAdapter = adapter;
 
         adapter.setOnItemClickListener(index -> {
             selectedEpisode = index;
@@ -260,19 +272,32 @@ public class BangumiInfoFragment extends Fragment {
         indexShow.setText(bangumi.info.indexShow);
 
         if (bangumi.sectionList.isEmpty()) {
-            section_choose.setText("敬请期待");
+            episodeStatus.setText("敬请期待");
+            seasonTabsRecyclerView.setVisibility(View.GONE);
             playButton.setVisibility(View.GONE);
             rootView.findViewById(R.id.episodes).setVisibility(View.GONE);    //未上线的番剧Activity activity = getActivity();
-            Activity activity = requireActivity();
+            Activity activity = getActivity();
             if (activity instanceof VideoInfoActivity) {
                 ((VideoInfoActivity) activity).replyFragment.setRefreshing(false);
             }
             return;
         }
 
-        section_choose.setText(bangumi.sectionList.get(0).title + " 点击切换");
-        section_choose.setOnClickListener(v -> getSectionChooseDialog().show());
-        episode_choose.setOnClickListener(v -> getEposideChooseDialog().show());
+        //初始季入缓存：切走再切回时无需重新请求
+        currentSeasonId = bangumi.info.season_id;
+        BangumiApi.SeasonMeta initialMeta = new BangumiApi.SeasonMeta();
+        initialMeta.sectionList = bangumi.sectionList;
+        initialMeta.seasonType = bangumi.info != null ? bangumi.info.type : 0;
+        initialMeta.statusDesc = bangumi.info != null ? bangumi.info.newEpDesc : null;
+        seasonCache.put(currentSeasonId, initialMeta);
+
+        setupSeasonTabs();
+        updateEpisodeStatusText();
+
+        episodeStatus.setOnClickListener(v -> {
+            Dialog dialog = getEpisodeChooseDialog();
+            if (dialog != null) dialog.show();
+        });
 
         adapter.setData(bangumi.sectionList.get(0).episodeList);
         episodeRecyclerView.setLayoutManager(new CustomLinearManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
@@ -280,18 +305,8 @@ public class BangumiInfoFragment extends Fragment {
 
         //play button setting
         playButton.setOnClickListener(v -> {
-            Bangumi.Episode episode = bangumi.sectionList.get(selectedSection).episodeList.get(selectedEpisode);
-            Glide.get(requireContext()).clearMemory();
-            Intent intent = new Intent(v.getContext(), JumpToPlayerActivity.class);
-            PlayerData data = episode.toPlayerData();
-            //epid 已由 Episode.toPlayerData() 带上；season 维度只有详情页拿得到 Info，在这里补齐，
-            //番剧进度上报(x/click-interface/web/heartbeat)需要 sid/sub_type
-            if (bangumi.info != null) {
-                data.seasonId = bangumi.info.season_id;
-                data.seasonType = bangumi.info.type;
-            }
-            intent.putExtra("data", data);
-            startActivity(intent);
+            Bangumi.Episode episode = getCurrentEpisode();
+            if (episode != null) playEpisode(episode);
         });
         playButton.setOnLongClickListener(v -> {
             Intent intent = new Intent(v.getContext(), SettingPlayerChooseActivity.class);
@@ -326,10 +341,11 @@ public class BangumiInfoFragment extends Fragment {
         CenterThreadPool.run(() -> {
             try {
                 long progress = PlayerApi.getLastPlayProgress(episode.aid, episode.cid);
-                //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录
+                //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录；
+                //季维度取"当前展示的季"（页内切季后与 info.season_id 可能不同）
                 HistoryApi.reportHistoryPgc(episode.aid, episode.cid, episode.id,
-                        bangumi.info != null ? bangumi.info.season_id : 0,
-                        bangumi.info != null ? bangumi.info.type : 0,
+                        currentSeasonId,
+                        currentSeasonType(),
                         progress / 1000);
             } catch (Exception e) {
                 Logu.e("BangumiInfoFragment", "历史上报失败: " + e.getMessage());
@@ -388,12 +404,11 @@ public class BangumiInfoFragment extends Fragment {
     }
 
     /**
-     * 切换当前选中集，并同步 分区文案 / 列表数据 / 高亮 / 滚动 / 评论区。
-     * 与"点选集列表""选集数弹窗"相比，这里支持跨分区跳转，供自动定位使用。
+     * 切换当前选中集，并同步 列表数据 / 高亮 / 滚动 / 评论区。
+     * 与"点选集列表"相比，这里支持跨分区跳转，供自动定位使用。
      *
      * @return 实际选中的剧集；参数非法时返回 null
      */
-    @SuppressLint("SetTextI18n")
     private Bangumi.Episode selectEpisode(int sectionIndex, int episodeIndex, boolean scrollToIt) {
         if (bangumi == null || bangumi.sectionList == null) return null;
         if (sectionIndex < 0 || sectionIndex >= bangumi.sectionList.size()) return null;
@@ -405,9 +420,7 @@ public class BangumiInfoFragment extends Fragment {
         selectedSection = sectionIndex;
         selectedEpisode = episodeIndex;
 
-        section_choose.setText(section.title + " 点击切换");
-
-        MediaEpisodeAdapter adapter = episodeRecyclerView != null ? (MediaEpisodeAdapter) episodeRecyclerView.getAdapter() : null;
+        EpisodeCardAdapter adapter = episodeCardAdapter;
         if (adapter != null) {
             //setData() 会把选中下标重置为 0，所以必须先 setData 再 setSelectedItemIndex
             if (sectionChanged) adapter.setData(section.episodeList);
@@ -421,57 +434,269 @@ public class BangumiInfoFragment extends Fragment {
     }
 
     @SuppressLint("SetTextI18n")
-    private Dialog getSectionChooseDialog() {
-        String[] choices = new String[bangumi.sectionList.size()];
-        for (int i = 0; i < bangumi.sectionList.size(); i++) {
-            choices[i] = bangumi.sectionList.get(i).title;
+    /**
+     * 全量选集弹窗（标题行右侧"已完结，全N话 >"点击呼出）：
+     * 扁平列出当前季全部分区的剧集（附加分区如"预告花絮"带前缀），选中后经 selectEpisode 跨分区跳转。
+     */
+    private Dialog getEpisodeChooseDialog() {
+        ArrayList<String> choices = new ArrayList<>();
+        ArrayList<int[]> positions = new ArrayList<>();
+        boolean multipleSections = bangumi.sectionList.size() > 1;
+        for (int s = 0; s < bangumi.sectionList.size(); s++) {
+            Bangumi.Section section = bangumi.sectionList.get(s);
+            if (section == null || section.episodeList == null) continue;
+            for (int e = 0; e < section.episodeList.size(); e++) {
+                Bangumi.Episode episode = section.episodeList.get(e);
+                String name = (multipleSections ? "【" + section.title + "】" : "")
+                        + episode.title
+                        + (episode.title_long != null && !episode.title_long.isEmpty() ? " " + episode.title_long : "");
+                choices.add(name);
+                positions.add(new int[]{s, e});
+            }
+        }
+        if (choices.isEmpty()) return null;
+
+        int currentFlatIndex = -1;
+        for (int i = 0; i < positions.size(); i++) {
+            int[] p = positions.get(i);
+            if (p[0] == selectedSection && p[1] == selectedEpisode) {
+                currentFlatIndex = i;
+                break;
+            }
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setSingleChoiceItems(choices, selectedSection, (dialog, which) -> {
-            selectedSection = which;
-            selectedEpisode = 0;
-
-            refreshReplies();
-            Bangumi.Section section = bangumi.sectionList.get(which);
-            section_choose.setText(section.title + " 点击切换");
-            MediaEpisodeAdapter adapter = (MediaEpisodeAdapter) episodeRecyclerView.getAdapter();
-            if (adapter != null) {
-                adapter.setData(bangumi.sectionList.get(which).episodeList);
-                episodeRecyclerView.scrollToPosition(0);
-            }
-            episode_choose.setOnClickListener(v -> getEposideChooseDialog().show());
+        builder.setSingleChoiceItems(choices.toArray(new String[0]), Math.max(currentFlatIndex, 0), (dialog, which) -> {
+            if (which < 0 || which >= positions.size()) return;
+            int[] position = positions.get(which);
+            selectEpisode(position[0], position[1], true);
             dialog.dismiss();
         });
-        dialog = builder.create();
+        this.dialog = builder.create();
 
-        return dialog;
+        return this.dialog;
     }
 
-    private Dialog getEposideChooseDialog() {
-        ArrayList<Bangumi.Episode> episodeList = bangumi.sectionList.get(selectedSection).episodeList;
+    // ------------------------ 季 tab（官方式页内切季） ------------------------
 
-        String[] choices = new String[episodeList.size()];
-        for (int i = 0; i < episodeList.size(); i++) {
-            Bangumi.Episode episode = episodeList.get(i);
-            choices[i] = episode.title + "." + episode.title_long;
+    /**
+     * 初始化季 tab：数据源为 info.seasons（同系列所有季，与官方 tab 同源）。
+     * 个别番剧 seasons 里不含当前季，此时把当前季补成第一个 tab（标题"正片"）。
+     * 只有 tab 数 > 1 才显示整行（对齐 PiliPlus EpisodePanel 的 _isMulti 规则）。
+     */
+    private void setupSeasonTabs() {
+        ArrayList<Bangumi.Season> tabs = new ArrayList<>();
+        if (bangumi.info != null && bangumi.info.seasons != null) tabs.addAll(bangumi.info.seasons);
+
+        int currentIndex = -1;
+        for (int i = 0; i < tabs.size(); i++) {
+            if (tabs.get(i).season_id == currentSeasonId) {
+                currentIndex = i;
+                break;
+            }
+        }
+        if (currentIndex < 0) {
+            Bangumi.Season current = new Bangumi.Season();
+            current.season_id = currentSeasonId;
+            current.season_title = "正片";
+            current.seasonType = bangumi.info != null ? bangumi.info.type : 0;
+            current.statusDesc = bangumi.info != null ? bangumi.info.newEpDesc : null;
+            tabs.add(0, current);
+            currentIndex = 0;
+        }
+        //初始季的元数据回填（后续切回来时使用）
+        Bangumi.Season initial = tabs.get(currentIndex);
+        if (initial.seasonType == 0 && bangumi.info != null) initial.seasonType = bangumi.info.type;
+        if ((initial.statusDesc == null || initial.statusDesc.isEmpty()) && bangumi.info != null)
+            initial.statusDesc = bangumi.info.newEpDesc;
+
+        if (tabs.size() <= 1) {
+            seasonTabsRecyclerView.setVisibility(View.GONE);
+            return;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setSingleChoiceItems(choices, selectedEpisode, (dialog, which) -> {
-            selectedEpisode = which;
-            refreshReplies();
+        seasonTabAdapter = new SeasonTabAdapter(tabs);
+        seasonTabAdapter.selectedIndex = currentIndex;
+        seasonTabAdapter.setOnTabClickListener(this::switchSeason);
+        seasonTabsRecyclerView.setLayoutManager(new CustomLinearManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
+        seasonTabsRecyclerView.setAdapter(seasonTabAdapter);
+        seasonTabsRecyclerView.setVisibility(View.VISIBLE);
+    }
 
-            MediaEpisodeAdapter adapter = (MediaEpisodeAdapter) episodeRecyclerView.getAdapter();
-            if (adapter != null) {
-                adapter.setSelectedItemIndex(which);
-                episodeRecyclerView.scrollToPosition(which);
+    /**
+     * 切季：缓存命中直接应用，否则后台拉取（getSeasonDetail 一次带回集列表/季类型/状态文案/上次看到 epid）。
+     * 请求期间忽略重复点击；失败提示并停留当前季。
+     */
+    private void switchSeason(int tabIndex) {
+        if (seasonTabAdapter == null || switchingSeason) return;
+        if (tabIndex < 0 || tabIndex >= seasonTabAdapter.getItemCount()) return;
+        Bangumi.Season target = seasonTabAdapter.getItem(tabIndex);
+        if (target == null || target.season_id == currentSeasonId) return;
+
+        BangumiApi.SeasonMeta cached = seasonCache.get(target.season_id);
+        if (cached != null && !cached.sectionList.isEmpty()) {
+            applySeason(tabIndex, target, cached);
+            return;
+        }
+
+        switchingSeason = true;
+        CenterThreadPool.run(() -> {
+            try {
+                BangumiApi.SeasonMeta meta = BangumiApi.getSeasonDetail(target.season_id);
+                if (meta.sectionList.isEmpty()) {
+                    CenterThreadPool.runOnUiThread(() -> {
+                        if (isAdded()) MsgUtil.showMsg("该季暂无内容");
+                        switchingSeason = false;
+                    });
+                    return;
+                }
+                seasonCache.put(target.season_id, meta);
+                CenterThreadPool.runOnUiThread(() -> {
+                    switchingSeason = false;
+                    if (!isAdded()) return;
+                    applySeason(tabIndex, target, meta);
+                });
+            } catch (Exception e) {
+                Logu.e("BangumiInfoFragment", "切季失败: " + e.getMessage());
+                CenterThreadPool.runOnUiThread(() -> {
+                    switchingSeason = false;
+                    if (isAdded()) MsgUtil.showMsg("切换失败，请稍后重试");
+                });
             }
-            dialog.dismiss();
         });
-        dialog = builder.create();
+    }
 
-        return dialog;
+    /**
+     * 应用切季结果（主线程）：记忆/恢复各季选中位置，交换分区列表，
+     * 命中"上次看到"（user/status 的 progress）时优先定位并提示。
+     */
+    private void applySeason(int tabIndex, Bangumi.Season tab, BangumiApi.SeasonMeta meta) {
+        //记住离开的这一季的选中位置
+        seasonSelection.put(currentSeasonId, new int[]{selectedSection, selectedEpisode});
+
+        long previousSeasonId = currentSeasonId;
+        currentSeasonId = tab.season_id;
+        tab.seasonType = meta.seasonType != 0 ? meta.seasonType : (bangumi.info != null ? bangumi.info.type : 0);
+        tab.statusDesc = meta.statusDesc;
+
+        bangumi.sectionList = meta.sectionList;
+
+        //恢复目标季的选中位置：上次看到 epid 优先，其次上次离开时的记忆，最后第1集
+        int[] selection = seasonSelection.containsKey(currentSeasonId)
+                ? seasonSelection.get(currentSeasonId) : new int[]{0, 0};
+        boolean locatedByProgress = false;
+        if (meta.lastEpid > 0) {
+            int[] found = findEpisodePositionByEpid(meta.lastEpid);
+            if (found != null) {
+                selection = found;
+                locatedByProgress = true;
+            }
+        }
+        //越界兜底（服务端数据可能变化）
+        int sectionIdx = Math.min(Math.max(selection[0], 0), bangumi.sectionList.size() - 1);
+        Bangumi.Section section = bangumi.sectionList.get(sectionIdx);
+        int episodeIdx = selection[1];
+        if (section.episodeList == null || section.episodeList.isEmpty()) {
+            //记忆的分区已空：回落到正片（getSeasonDetail 保证 index 0 是非空正片）
+            sectionIdx = 0;
+            episodeIdx = 0;
+            section = bangumi.sectionList.get(0);
+            if (section.episodeList == null || section.episodeList.isEmpty()) return;
+        }
+        episodeIdx = Math.min(Math.max(episodeIdx, 0), section.episodeList.size() - 1);
+
+        selectedSection = sectionIdx;
+        selectedEpisode = episodeIdx;
+
+        seasonTabAdapter.setSelectedIndex(tabIndex);
+        updateEpisodeStatusText();
+
+        episodeCardAdapter.setData(section.episodeList);
+        episodeCardAdapter.setSelectedItemIndex(episodeIdx);
+        episodeRecyclerView.scrollToPosition(episodeIdx);
+
+        refreshReplies();
+
+        Bangumi.Episode located = section.episodeList.get(episodeIdx);
+        if (locatedByProgress && !(sectionIdx == 0 && episodeIdx == 0)) {
+            MsgUtil.showMsg("已定位到上次观看的 " + located.title);
+        }
+        //与进入详情页同语义：切到某季的某集后上报该集（reportHistoryPgc 内部会拒绝 0 进度，不会产生污染记录）
+        if (previousSeasonId != currentSeasonId) reportEpisodeHistory();
+    }
+
+    /**在该季分区列表里按 epid 查 (sectionIdx, epIdx)，查不到返回 null。*/
+    private int[] findEpisodePositionByEpid(long epid) {
+        if (epid <= 0 || bangumi.sectionList == null) return null;
+        for (int s = 0; s < bangumi.sectionList.size(); s++) {
+            Bangumi.Section section = bangumi.sectionList.get(s);
+            if (section == null || section.episodeList == null) continue;
+            for (int e = 0; e < section.episodeList.size(); e++) {
+                Bangumi.Episode episode = section.episodeList.get(e);
+                if (episode != null && episode.id == epid) return new int[]{s, e};
+            }
+        }
+        return null;
+    }
+
+    // ------------------------ 播放与状态文案 ------------------------
+
+    private Bangumi.Episode getCurrentEpisode() {
+        if (bangumi == null || bangumi.sectionList == null
+                || selectedSection < 0 || selectedSection >= bangumi.sectionList.size()) return null;
+        Bangumi.Section section = bangumi.sectionList.get(selectedSection);
+        if (section == null || section.episodeList == null
+                || selectedEpisode < 0 || selectedEpisode >= section.episodeList.size()) return null;
+        return section.episodeList.get(selectedEpisode);
+    }
+
+    /**
+     * 当前季的类型（心跳上报 sub_type）：优先 tab 元数据（切季懒加载回填），回退 info.type。
+     */
+    private int currentSeasonType() {
+        if (seasonTabAdapter != null) {
+            Bangumi.Season tab = seasonTabAdapter.getItem(seasonTabAdapter.selectedIndex);
+            if (tab != null && tab.seasonType != 0) return tab.seasonType;
+        }
+        return bangumi.info != null ? bangumi.info.type : 0;
+    }
+
+    private void playEpisode(Bangumi.Episode episode) {
+        Glide.get(requireContext()).clearMemory();
+        Intent intent = new Intent(requireContext(), JumpToPlayerActivity.class);
+        PlayerData data = episode.toPlayerData();
+        //epid 已由 Episode.toPlayerData() 带上；season 维度必须用"当前展示的季"（页内切季后与 info.season_id 不同），
+        //番剧进度上报(x/click-interface/web/heartbeat)需要 sid/sub_type
+        data.seasonId = currentSeasonId;
+        data.seasonType = currentSeasonType();
+        intent.putExtra("data", data);
+        startActivity(intent);
+    }
+
+    /**
+     * 标题行右侧的状态文案：优先该季的 new_ep.desc（"已完结, 全N话"，与官方同源），
+     * 缺失时用完结状态 + 正片集数拼接。
+     */
+    @SuppressLint("SetTextI18n")
+    private void updateEpisodeStatusText() {
+        if (episodeStatus == null || bangumi == null || bangumi.info == null) return;
+        String desc = null;
+        if (seasonTabAdapter != null) {
+            Bangumi.Season tab = seasonTabAdapter.getItem(seasonTabAdapter.selectedIndex);
+            if (tab != null && tab.statusDesc != null && !tab.statusDesc.isEmpty()) desc = tab.statusDesc;
+        }
+        if (desc == null && currentSeasonId == bangumi.info.season_id
+                && bangumi.info.newEpDesc != null && !bangumi.info.newEpDesc.isEmpty())
+            desc = bangumi.info.newEpDesc;
+
+        if ((desc == null || desc.isEmpty()) && bangumi.sectionList != null && !bangumi.sectionList.isEmpty()
+                && bangumi.sectionList.get(0).episodeList != null) {
+            int count = bangumi.sectionList.get(0).episodeList.size();
+            boolean finished = bangumi.info.publish != null && bangumi.info.publish.is_finish == 1;
+            desc = (finished ? "已完结" : "连载中") + "，共" + count + "话";
+        }
+        if (desc == null) desc = "选集";
+        episodeStatus.setText(desc);
     }
 
     private void refreshReplies() {

@@ -47,16 +47,21 @@ public class JumpToPlayerActivity extends BaseActivity {
             int progress = (code == RESULT_OK && result != null)
                     ? result.getIntExtra("progress", playerData.progress)
                     : playerData.progress;
+            //播放器内可能切换过分P：最终观看的 cid 以播放器回传为准，不能沿用进入时的旧 cid，
+            //否则会拿新P的进度去覆盖旧P的记录，把正确的续播位置冲掉
+            long finalCid = (code == RESULT_OK && result != null && result.hasExtra("cid"))
+                    ? result.getLongExtra("cid", playerData.cid)
+                    : playerData.cid;
             Logu.d("进度回调", String.valueOf(progress));
 
             CenterThreadPool.run(() -> {
                 if (!playerData.isLive() && !playerData.isLocal() && playerData.mid != 0 && playerData.aid != 0) try {
                     //番剧必须走带 epid/sid 的心跳接口，否则观看记录不会按番剧维度落库——进度等于没上报
                     if (playerData.isBangumi() && playerData.epid != 0)
-                        HistoryApi.reportHistoryPgc(playerData.aid, playerData.cid, playerData.epid,
+                        HistoryApi.reportHistoryPgc(playerData.aid, finalCid, playerData.epid,
                                 playerData.seasonId, playerData.seasonType, progress / 1000);
                     else
-                        HistoryApi.reportHistory(playerData.aid, playerData.cid, progress / 1000);
+                        HistoryApi.reportHistory(playerData.aid, finalCid, progress / 1000);
                 } catch (Exception e) {
                     MsgUtil.err("进度上报：", e);
                 }

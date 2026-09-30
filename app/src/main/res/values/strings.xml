@@ -244,15 +244,6 @@
     <string name="use_tip">如果你在部分页面出现了无法加载的问题（如推荐列表等），请尝试退出登录后重新登录。</string>
     <string name="update_tip">此版本为 Re：哔哩终端，属非官方分支，使用过程中出现的问题请勿在官方群聊反馈。</string>
 
-    #新增功能放到上面，修复问题放下面，方便用户看见
-    <string-array name="update_log_items">
-        <item>修复搜索建议永远无法显示的问题（B站接口响应结构变更导致解析为空）</item>
-        <item>修复点击联想词后建议卡片重新弹出、覆盖搜索结果的问题</item>
-        <item>修复部分设备（如一加13/ColorOS16）上搜索后第一次点击搜索框无法拉起输入法的问题</item>
-        <item>低性能设备（手表）上页面内容就绪后改为渐入显示，消除硬切跳变</item>
-        <item>关于页新增动画缩放诊断显示（用于排查系统禁用转场动画的手表ROM）</item>
-    </string-array>
-
     <string name="tutorial_pager">提示\n\n←这个页面可以左右翻页喵→\n\n（共有%d页，滑动一下不再显示）</string>
     <string name="btn_confirm_settings">确认设置</string>
     <string name="btn_preview">查看预览</string>

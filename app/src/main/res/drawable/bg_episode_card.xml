@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 番剧选集卡片圆角底：默认深灰，选中态靠文字/图标变色区分 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#cc262626" />
+    <corners android:radius="6dp" />
+</shape>

@@ -375,10 +375,11 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                                 try {
                                     int result = ReplyApi.deleteReply(oid, reply.rpid, replyType);
                                     if (result == 0) {
-                                        replyList.remove(realPosition);
                                         ((Activity) context).runOnUiThread(() -> {
+                                            //列表数据的修改与 notify 必须同在主线程，后台先删会让布局读到中间状态
+                                            replyList.remove(realPosition);
                                             notifyItemRemoved(position);
-                                            notifyItemRangeChanged(position, replyList.size() - position);
+                                            notifyItemRangeChanged(position, replyList.size() + 1 - position);
                                             longClickPosition = -1;
                                             MsgUtil.showMsg("删除成功~");
                                             if (realPosition == 0 && isDetail) {

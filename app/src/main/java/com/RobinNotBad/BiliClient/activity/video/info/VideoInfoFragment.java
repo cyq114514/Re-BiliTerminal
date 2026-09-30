@@ -301,7 +301,10 @@ public class VideoInfoFragment extends BaseFragment {
                 playerData = videoInfo.toPlayerData(0);
                 PlayerApi.getVideo(playerData, false);
                 if (playerData == null) return;
-                HistoryApi.reportHistory(videoInfo.aid, playerData.cidHistory, playerData.progress / 1000);
+                //progress=0 意味着上次看的是别的分P（进度只跟 last_play_cid 配对），
+                //此时不能再按 cidHistory 上报 0，会把服务端那P的续播进度覆盖掉
+                if (playerData.progress > 0)
+                    HistoryApi.reportHistory(videoInfo.aid, playerData.cidHistory, playerData.progress / 1000);
             } catch (Exception e) {
                 MsgUtil.err(e);
             }

@@ -14,6 +14,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.SplashActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
@@ -61,7 +62,8 @@ public class SpecialLoginActivity extends BaseActivity {
                     runOnUiThread(() -> MsgUtil.showMsg("登录成功！"));
                     SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.setup, true);
 
-                    NetWorkUtil.refreshHeaders();
+                    //refreshHeaders 可能触发 buvid/bili_ticket 的网络请求（带重试），绝不能在主线程做
+                    CenterThreadPool.run(NetWorkUtil::refreshHeaders);
 
                     Intent intent1 = new Intent();
                     intent1.setClass(SpecialLoginActivity.this, SplashActivity.class);
@@ -93,7 +95,8 @@ public class SpecialLoginActivity extends BaseActivity {
                         SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies);
                         runOnUiThread(() -> MsgUtil.showMsg("导入cookies成功"));
 
-                        NetWorkUtil.refreshHeaders();
+                        //同上：可能触发网络请求，放后台线程
+                        CenterThreadPool.run(NetWorkUtil::refreshHeaders);
                     } catch (JSONException e) {
                         runOnUiThread(() -> MsgUtil.showMsg("请检查输入的内容，不要有多余空格或字符"));
                     }

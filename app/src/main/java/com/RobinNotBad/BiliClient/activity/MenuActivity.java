@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 import androidx.lifecycle.Lifecycle;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
+import com.RobinNotBad.BiliClient.BuildConfig;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
@@ -22,6 +23,7 @@ import com.RobinNotBad.BiliClient.activity.live.RecommendLiveActivity;
 import com.RobinNotBad.BiliClient.activity.message.MessageActivity;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity;
+import com.RobinNotBad.BiliClient.activity.settings.UpdateLogActivity;
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity;
 import com.RobinNotBad.BiliClient.activity.user.MySpaceActivity;
 import com.RobinNotBad.BiliClient.activity.video.PopularActivity;
@@ -33,6 +35,7 @@ import com.RobinNotBad.BiliClient.activity.video.TimelineActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.UpdateLog;
 import com.bumptech.glide.Glide;
 import com.google.android.material.button.MaterialButton;
 
@@ -188,6 +191,18 @@ public class MenuActivity extends BaseActivity {
                 });
             }
             layout.addView(materialButton, params);
+        }
+
+        //首次安装/升级到新版本后，首次进入主菜单时自动打开当前版本的更新日志
+        String lastVersion = SharedPreferencesUtil.getString(SharedPreferencesUtil.last_version, "");
+        if (!BuildConfig.VERSION_NAME.equals(lastVersion)) {
+            SharedPreferencesUtil.putString(SharedPreferencesUtil.last_version, BuildConfig.VERSION_NAME);
+            int logIndex = UpdateLog.indexOf(BuildConfig.VERSION_NAME);
+            if (logIndex >= 0) {
+                Intent logIntent = new Intent(this, UpdateLogActivity.class);
+                logIntent.putExtra("version_index", logIndex);
+                startActivity(logIntent);
+            }
         }
 
         Log.e("debug", "MenuActivity onCreate in: " + (System.currentTimeMillis() - time));

@@ -10,6 +10,7 @@ import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.google.gson.annotations.SerializedName;
 
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -75,6 +76,8 @@ public class BangumiApi {
     public static class NewEpData {
         @SerializedName("index_show")
         public String index_show;
+        @SerializedName("desc")
+        public String desc;
     }
 
     public static class RatingData {
@@ -123,6 +126,10 @@ public class BangumiApi {
         public List<SeasonItem> seasons;
         @SerializedName("episodes")
         public List<EpisodeData> episodes;
+        @SerializedName("section")
+        public List<SectionItem> section;
+        @SerializedName("new_ep")
+        public NewEpData new_ep;
     }
 
     public static class PublishData {
@@ -350,6 +357,7 @@ public class BangumiApi {
                 info.series.series_id = r.series.series_id;
                 info.series.series_title = r.series.series_title;
             }
+            if (r.new_ep != null) info.newEpDesc = r.new_ep.desc;
             if (r.seasons != null) {
                 info.seasons = new ArrayList<>();
                 for (SeasonItem s : r.seasons) {
@@ -381,6 +389,62 @@ public class BangumiApi {
         return sectionList;
     }
 
+    /**
+     * 切季所需的一份运行时数据：分区列表（正片+附加）、季类型、状态文案、上次看到 epid。
+     */
+    public static class SeasonMeta {
+        public ArrayList<Bangumi.Section> sectionList = new ArrayList<>();
+        public int seasonType;      //季类型（心跳上报 sub_type；0 表示未取到，调用方回退 info.type）
+        public String statusDesc;   //该季的选集状态文案（new_ep.desc，如"已完结, 全12话"）
+        public long lastEpid;       //该季上次观看的 epid（未登录/无记录为 0）
+    }
+
+    /**
+     * 拉取任意一季的完整数据，供番剧详情页"季 tab"懒加载切换。
+     * 走 pgc/view/web/season 而不是轻量的 section 接口：一个请求同时带回
+     * 正片集列表（episodes）、附加分区（section）、季类型（type）与状态文案（new_ep.desc）；
+     * 已登录时附带查询该季的观看进度（user/status 的 progress.last_ep_id）用于切季自动定位。
+     */
+    public static SeasonMeta getSeasonDetail(long seasonId) throws IOException, JSONException {
+        String json = NetWorkUtil.getJson("https://api.bilibili.com/pgc/view/web/season?season_id=" + seasonId).toString();
+        SeasonDetailData detail = GsonUtil.fromJson(json, SeasonDetailData.class);
+        SeasonMeta meta = new SeasonMeta();
+        if (detail == null || detail.result == null) return meta;
+        SeasonResult r = detail.result;
+        meta.seasonType = r.type;
+        if (r.new_ep != null) meta.statusDesc = r.new_ep.desc;
+
+        if (r.episodes != null && !r.episodes.isEmpty()) {
+            Bangumi.Section main = new Bangumi.Section();
+            main.title = "正片";
+            main.episodeList = new ArrayList<>();
+            for (EpisodeData ep : r.episodes) {
+                if (ep != null) main.episodeList.add(buildEpisode(ep));
+            }
+            meta.sectionList.add(main);
+        }
+        if (r.section != null) {
+            for (SectionItem item : r.section) {
+                if (item != null) meta.sectionList.add(buildSection(item));
+            }
+        }
+
+        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) != 0) {
+            try {
+                String statusJson = NetWorkUtil.getJson("https://api.bilibili.com/pgc/view/web/season/user/status?season_id=" + seasonId).toString();
+                JSONObject statusRoot = new JSONObject(statusJson);
+                if (statusRoot.optInt("code") == 0) {
+                    JSONObject statusResult = statusRoot.optJSONObject("result");
+                    JSONObject progress = statusResult != null ? statusResult.optJSONObject("progress") : null;
+                    if (progress != null) meta.lastEpid = progress.optLong("last_ep_id", 0);
+                }
+            } catch (Exception e) {
+                //进度查询失败不影响切季，仅没有"上次看到"定位
+            }
+        }
+        return meta;
+    }
+
     private static Bangumi.Section buildSection(SectionItem item) {
         Bangumi.Section section = new Bangumi.Section();
         section.id = item.id;
@@ -390,17 +454,21 @@ public class BangumiApi {
         if (item.episodes != null) {
             for (EpisodeData ep : item.episodes) {
                 if (ep == null) continue;
-                Bangumi.Episode episode = new Bangumi.Episode();
-                episode.id = ep.id;
-                episode.aid = ep.aid;
-                episode.cid = ep.cid;
-                episode.cover = ep.cover;
-                episode.badge = ep.badge;
-                episode.title = ep.title;
-                episode.title_long = ep.long_title;
-                section.episodeList.add(episode);
+                section.episodeList.add(buildEpisode(ep));
             }
         }
         return section;
+    }
+
+    private static Bangumi.Episode buildEpisode(EpisodeData ep) {
+        Bangumi.Episode episode = new Bangumi.Episode();
+        episode.id = ep.id;
+        episode.aid = ep.aid;
+        episode.cid = ep.cid;
+        episode.cover = ep.cover;
+        episode.badge = ep.badge;
+        episode.title = ep.title;
+        episode.title_long = ep.long_title;
+        return episode;
     }
 }

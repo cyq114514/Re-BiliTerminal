@@ -236,22 +236,61 @@
             app:layout_constraintTop_toBottomOf="@+id/text_staff"
             tools:text="备案号：xxxxxxxxx" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/section_choose"
-            android:layout_width="match_parent"
+        <!-- 选集标题行：左"选集"，右侧完结状态（点击打开全量选集弹窗） -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/episode_header"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="正片 点击切换"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/text_record" />
+            app:layout_constraintTop_toBottomOf="@+id/text_record">
+
+            <TextView
+                android:id="@+id/episode_header_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选集"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/episode_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.75"
+                android:drawableEnd="@drawable/arrow_forward"
+                android:drawablePadding="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:paddingStart="6dp"
+                android:text="已完结，全12话"
+                android:textSize="13sp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- 季 tab 行：同系列多季才显示，单季 GONE -->
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+            android:id="@+id/rv_season_tabs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/episode_header"
+            tools:listitem="@layout/cell_season_tab" />
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/episodes"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             android:layout_marginTop="4dp"
-            app:layout_constraintTop_toBottomOf="@id/section_choose"
+            app:layout_constraintTop_toBottomOf="@id/rv_season_tabs"
             android:layout_width="0dp"
             android:layout_height="wrap_content">
 
@@ -259,32 +298,20 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    android:id="@+id/episode_choose"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_marginTop="4dp"
-                    android:drawableEnd="@drawable/arrow_forward"
-                    android:paddingHorizontal="3dp"
-                    android:text="快速选择"
-                    android:textSize="14sp"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
                 <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
                     android:id="@+id/rv_episode_list"
-                    app:layout_constraintTop_toBottomOf="@+id/episode_choose"
+                    app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="4dp"
                     android:orientation="horizontal"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
 
                     app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                    tools:listitem="@layout/cell_episode" />
+                    tools:listitem="@layout/cell_episode_card" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>
         </com.google.android.material.card.MaterialCardView>

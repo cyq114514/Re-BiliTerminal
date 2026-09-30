@@ -194,7 +194,8 @@ public class ReplyApi {
         String url = "https://api.bilibili.com" + path + reqData;
         String finalUrl = useWbi ? ConfInfoApi.signWBI(url) : url;
         //直接用 JSONObject 解析，绕过 Gson 泛型/类型适配器偶发解析失败的问题（B站返回合法 JSON 但 Gson 可能返回 null）
-        JSONObject root = NetWorkUtil.getJson(finalUrl);
+        //doctype 重试压到 2 次：外层 tryWithRetry 已有 3+1 次退避重试，两层相乘会把弱网加载拖到分钟级
+        JSONObject root = NetWorkUtil.getJson(finalUrl, NetWorkUtil.webHeaders, 2);
         Logu.d("ReplyApi", "getRepliesLazy " + (useWbi ? "wbi" : "nowbi") + " type=" + type + " oid=" + oid + " sort=" + sort + " offset=" + pagination);
 
         int code = root.optInt("code", -1);

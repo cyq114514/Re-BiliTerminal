@@ -125,13 +125,21 @@ public class NetWorkUtil {
     }
 
     public static JSONObject getJson(String url) throws IOException, JSONException {
-        String bodyString = getBodyStringWithDoctypeRetry(url, webHeaders);
-        if (bodyString != null) return new JSONObject(bodyString);
-        throw new JSONException("在访问" + url + "时返回数据为空");
+        return getJson(url, webHeaders, 0);
     }
 
     public static JSONObject getJson(String url, ArrayList<String> headers) throws IOException, JSONException {
-        String bodyString = getBodyStringWithDoctypeRetry(url, headers);
+        return getJson(url, headers, 0);
+    }
+
+    /**
+     * 指定 doctype 重试次数的 getJson。
+     * maxRetryTimes<=0 时走全局设置（api_retry_max_times，默认 5）。
+     * 已带自身重试/降级逻辑的接口（如评论的 WBI 主备双路）应传较小值（如 2），
+     * 否则外层 4 次 × 内层 5 次的乘法重试在弱网下会把一次加载拖到分钟级，表现为"列表卡死"。
+     */
+    public static JSONObject getJson(String url, ArrayList<String> headers, int maxRetryTimes) throws IOException, JSONException {
+        String bodyString = getBodyStringWithDoctypeRetry(url, headers, maxRetryTimes);
         if (bodyString != null) return new JSONObject(bodyString);
         throw new JSONException("在访问" + url + "时返回数据为空");
     }
@@ -242,7 +250,12 @@ public class NetWorkUtil {
     }
 
     private static String getBodyStringWithDoctypeRetry(String url, ArrayList<String> headers) throws IOException {
-        int maxTimes = Math.max(1, SharedPreferencesUtil.getInt(SharedPreferencesUtil.API_RETRY_MAX_TIMES, 5));
+        return getBodyStringWithDoctypeRetry(url, headers, 0);
+    }
+
+    private static String getBodyStringWithDoctypeRetry(String url, ArrayList<String> headers, int maxRetryTimes) throws IOException {
+        int maxTimes = maxRetryTimes > 0 ? maxRetryTimes
+                : Math.max(1, SharedPreferencesUtil.getInt(SharedPreferencesUtil.API_RETRY_MAX_TIMES, 5));
         float intervalSeconds = SharedPreferencesUtil.getFloat(SharedPreferencesUtil.API_RETRY_INTERVAL_SECONDS, 0.1f);
         long intervalMillis = Math.max(0L, (long) (intervalSeconds * 1000));
 
@@ -377,7 +390,9 @@ public class NetWorkUtil {
         if (setCookies.length() >= 2) {
             Logu.d("save-result", setCookies.substring(0, setCookies.length() - 2));
             SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, setCookies.substring(0, setCookies.length() - 2));
-            refreshHeaders();
+            //只重建请求头，不触发 ensureCookies：本方法跑在 OkHttp 拦截器线程上，
+            //嵌套网络请求会在弱网下递归占用请求线程并拖慢所有接口
+            updateWebHeaders();
         }
     }
 
@@ -392,8 +407,10 @@ public class NetWorkUtil {
             Cookies cookies = new Cookies(SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
             cookies.set(key, val);
             SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies.toString());
-            refreshHeaders();
+            //锁内只做 SharedPreferences 写入；刷新请求头（可能触发 buvid/bili_ticket 的网络请求）
+            //必须在锁外做，否则 getCookies() 的调用方（如弹幕连接）会被网络超时锁死数分钟
         }
+        updateWebHeaders();
     }
 
     /**
@@ -404,8 +421,8 @@ public class NetWorkUtil {
     public static void setCookies(Cookies cookies) {
         synchronized (NetWorkUtil.class) {
             SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies.toString());
-            refreshHeaders();
         }
+        updateWebHeaders();
     }
 
     /**
@@ -443,8 +460,21 @@ public class NetWorkUtil {
         add("?0");
     }};
 
+    /**
+     * 补齐 buvid3/bili_ticket 等设备 Cookie 后刷新请求头。涉及网络请求，只能在后台线程调用。
+     * 显式的初始化时机（Splash、登录成功）调用这个；其余场景一律用 {@link #updateWebHeaders()}。
+     */
     public static void refreshHeaders() {
         CookieGenerator.ensureCookies();
+        updateWebHeaders();
+    }
+
+    /**
+     * 仅根据当前存储的 Cookie 重建请求头，不做任何网络请求。
+     * CookieSaveInterceptor / putCookie / setCookies 必须走这里：
+     * 它们运行在 OkHttp 线程上，若触发 ensureCookies 的嵌套网络请求，会递归占用请求线程并拖慢所有接口。
+     */
+    public static void updateWebHeaders() {
         webHeaders.set(1, CookieGenerator.getCookieString(true));
     }
 

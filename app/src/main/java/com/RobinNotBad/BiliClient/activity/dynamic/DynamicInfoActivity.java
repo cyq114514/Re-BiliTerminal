@@ -79,7 +79,8 @@ public class DynamicInfoActivity extends BaseActivity {
         return true;
     }
 
-    @Subscribe(threadMode = ThreadMode.ASYNC, sticky = true, priority = 1)
+    //必须留在主线程：rFragment.notifyReplyInserted 会改列表数据并通知 RecyclerView
+    @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEvent(ReplyEvent event) {
         rFragment.notifyReplyInserted(event);
     }

@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp"
+    android:height="12dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 正在播放声波图标：三根竖条，中间最高（官方选集卡同款造型） -->
+    <path
+        android:fillColor="#FB7299"
+        android:pathData="M3,9.5h3v5h-3z M10.5,5h3v14h-3z M18,9.5h3v5h-3z" />
+</vector>

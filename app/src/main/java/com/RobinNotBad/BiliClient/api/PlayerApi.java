@@ -144,8 +144,10 @@ public class PlayerApi {
             return;
         }
 
+        //last_play_cid/last_play_time 是 aid 级"上次播放"数据：进度只属于 last_play_cid 那一P。
+        //请求的 cid 与上次播放的 cid 不一致时（多P视频换P续播）不能把别人的进度套在本P上，应从头播
         playerData.cidHistory = data.last_play_cid;
-        playerData.progress = data.last_play_time;
+        playerData.progress = adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
         if (playerData.cidHistory == 0) { playerData.cidHistory = playerData.cid; playerData.progress = 0; }
 
         if (data.accept_description != null && data.accept_quality != null) {
@@ -168,7 +170,7 @@ public class PlayerApi {
         PlayUrlData data = resp.data;
         if (data.durl == null || data.durl.isEmpty()) throw new JSONException("durl is empty");
         playerData.videoUrl = data.durl.get(0).url;
-        playerData.cidHistory = data.last_play_cid; playerData.progress = data.last_play_time;
+        playerData.cidHistory = data.last_play_cid; playerData.progress = adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
         if (playerData.cidHistory == 0) { playerData.cidHistory = playerData.cid; playerData.progress = 0; }
         if (data.accept_description != null && data.accept_quality != null) {
             playerData.qnStrList = data.accept_description.toArray(new String[0]);
@@ -225,6 +227,16 @@ public class PlayerApi {
             Logu.e("history-last", "获取上次播放进度失败: " + e.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * last_play_time 是与 last_play_cid 配对的"上次播放"进度，只属于那一P。
+     * 仅当上次播放的P就是本次请求的P时才作为续播进度采纳；换P播放一律从头开始，
+     * 否则会出现"选了P3却从P2的位置开始播"的进度错乱。
+     */
+    private static int adoptLastPlayTime(long lastPlayCid, long requestCid, long lastPlayTime) {
+        if (lastPlayCid != requestCid || lastPlayTime <= 0) return 0;
+        return (int) lastPlayTime;
     }
 
     /**

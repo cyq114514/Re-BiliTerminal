@@ -401,6 +401,12 @@
             android:exported="true"
             android:label="关于"
             android:screenOrientation="locked" />
+
+        <activity
+            android:name=".activity.settings.UpdateLogActivity"
+            android:exported="false"
+            android:label="历史更新日志"
+            android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.SettingMainActivity"
             android:exported="true"

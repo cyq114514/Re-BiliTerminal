@@ -2761,10 +2761,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     private void switchToPage(int pageIndex) {
-        if (!hasMultiplePages() || pageIndex < 0 || pageIndex >= pagenames.size())
+        if (!hasMultiplePages())
+            return;
+        if (pageIndex < 0 || pageIndex >= pagenames.size())
             return;
         if (pageIndex == currentPageIndex)
             return;
+
+        //切走前把旧P当前位置立即上报：周期上报粒度15s，不兜底的话旧P尾部进度会丢
+        reportProgressNow(true);
 
         currentPageIndex = pageIndex;
         long newCid = cids.get(pageIndex);
@@ -2811,6 +2816,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     }
 
                     cid = newCid;
+                    //节流字段按cid区分语义：切P后必须重置，否则新P前15s的上报会被旧P的进度数值拦掉
+                    lastReportedProgressSec = -1;
+                    lastReportedProgressMs = -1;
                     video_url = playerData.videoUrl;
                     danmaku_url = playerData.danmakuUrl;
                     text_title.setText(newTitle);
@@ -3564,6 +3572,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             //且卡在这里连 setResult 都执行不到，连进度都会一起丢。250ms 的精度对续播足够。
             int progressMs = video_now;
             result.putExtra("progress", progressMs);
+            //回传最终观看的 cid：播放中可能切过分P，跳转页(JumpToPlayerActivity)退出上报必须用这个 cid，
+            //否则会用进入时的旧P cid + 新P的进度覆盖掉播放器已上报的正确记录
+            result.putExtra("cid", cid);
             Logu.d("进度回传", String.valueOf(progressMs));
             setResult(RESULT_OK, result);
         } else

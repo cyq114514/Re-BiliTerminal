@@ -35,6 +35,7 @@ public class Bangumi {
         public UpInfo up_info; // UP主信息
         public Series series; // 系列信息
         public ArrayList<Season> seasons; // 同系列所有季信息
+        public String newEpDesc; // 选集状态文案（new_ep.desc，如"已完结, 全12话"），官方选集区右上角同款
     }
 
     public static class Publish {
@@ -68,6 +69,9 @@ public class Bangumi {
         public String season_title;
         public String cover;
         public String badge;
+        //切季懒加载后回填的该季运行时数据：
+        public int seasonType;     //季类型（心跳上报的 sub_type；0 表示未取到）
+        public String statusDesc;  //该季的选集状态文案（"已完结, 全N话"）
     }
 
     public static class Section {

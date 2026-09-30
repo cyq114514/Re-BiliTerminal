@@ -43,9 +43,10 @@ public class ToolsUtil {
     }
 
 
+    /**关于页"更新细节"：显示当前版本（日志数据第一条）的更新条目，数据源见 {@link UpdateLog}。*/
     public static String getUpdateLog(Context context) {
         StringBuilder str = new StringBuilder();
-        String[] logItems = context.getResources().getStringArray(R.array.update_log_items);
+        String[] logItems = UpdateLog.currentItems();
         for (int i = 0; i < logItems.length; i++)
             str.append("\n").append((i + 1)).append(".").append(logItems[i]);
         return str.toString();

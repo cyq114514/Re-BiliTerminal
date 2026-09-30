@@ -68,6 +68,10 @@ public class AboutActivity extends BaseActivity {
                 } catch (Exception ignored) {
                 }
                 StringUtil.setCopy(findViewById(R.id.updatelog_view), updateLog);
+
+                //历史更新日志子页面（按版本分选项卡）
+                findViewById(R.id.update_log_entry).setOnClickListener(v ->
+                        startActivity(new Intent(this, UpdateLogActivity.class)));
             } catch (PackageManager.NameNotFoundException e) {
                 e.printStackTrace();
             }

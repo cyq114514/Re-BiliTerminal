@@ -9,7 +9,6 @@ import android.widget.ImageView;
 import androidx.fragment.app.Fragment;
 import androidx.viewpager.widget.ViewPager;
 
-import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.activity.reply.ReplyFragment;
@@ -22,7 +21,6 @@ import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
-import com.bumptech.glide.Glide;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -142,7 +140,8 @@ public class VideoInfoActivity extends BaseActivity {
         return true;
     }
 
-    @Subscribe(threadMode = ThreadMode.ASYNC, sticky = true, priority = 1)
+    //必须留在主线程：notifyReplyInserted 会改 replyList 并通知 RecyclerView，后台线程回调会与布局并发冲突
+    @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEvent(ReplyEvent event) {
         replyFragment.notifyReplyInserted(event);
     }
@@ -150,7 +149,8 @@ public class VideoInfoActivity extends BaseActivity {
     @Override
     protected void onDestroy() {
         Logu.d("onDestroy");
-        Glide.get(BiliTerminal.context).clearMemory();
+        //不再在 onDestroy 里 Glide.clearMemory()：那是主线程全量释放位图+GC 的重操作，退出页面时肉眼可见地顿一下；
+        //内存缓存本身有上限，退到后台的位图交给系统按需回收即可
         TerminalContext.getInstance().leaveDetailPage();
         super.onDestroy();
     }

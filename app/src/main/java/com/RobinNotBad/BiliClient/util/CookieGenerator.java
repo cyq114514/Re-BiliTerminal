@@ -16,8 +16,14 @@ public class CookieGenerator {
     private static final String CHARSET = "0123456789ABCDEF";
     private static final int[] PCK = {8, 4, 4, 4, 12};
     private static final String[] MP = {"1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","10"};
+    //生成防重入标志：generateBuvids/generateBiliTicket 是同步网络请求，
+    //并发触发（Splash+拦截器+登录）会同时发起多份请求，失败时还会互相拖慢
+    private static final java.util.concurrent.atomic.AtomicBoolean GENERATING =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     public static void ensureCookies() {
+        //已有并发生成在跑时直接跳过：本方法是尽力补齐，不需要每个调用方都拿到结果
+        if (!GENERATING.compareAndSet(false, true)) return;
         try {
             if (SharedPreferencesUtil.getString("buvid3", "").isEmpty()) {
                 generateBuvids();
@@ -39,6 +45,8 @@ public class CookieGenerator {
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed to ensure cookies", e);
+        } finally {
+            GENERATING.set(false);
         }
     }
 

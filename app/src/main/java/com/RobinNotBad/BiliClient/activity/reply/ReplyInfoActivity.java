@@ -34,7 +34,6 @@ import org.greenrobot.eventbus.ThreadMode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Future;
 
@@ -156,7 +155,9 @@ public class ReplyInfoActivity extends BaseActivity {
                 ReplyApi.filterDuplicateReplies(list, loadedRpids);
                 runOnUiThread(() -> {
                     replyList.addAll(list);
-                    replyAdapter.notifyItemRangeInserted(replyList.size() - list.size() + 2, list.size());  //顶上有两个固定项
+                    //数据末位 i 对应 adapter 位 i+1（详情模式头部只有根评论+回复框一个额外格）
+                    //旧代码写成 +2，插入位比实际多 1，第二批数据开始通知与数据错位导致列表卡死
+                    replyAdapter.notifyItemRangeInserted(replyList.size() - list.size() + 1, list.size());
                     refreshLayout.setRefreshing(false);
                 });
                 if (result == 1) {
@@ -232,25 +233,18 @@ public class ReplyInfoActivity extends BaseActivity {
         return true;
     }
 
-    @Subscribe(threadMode = ThreadMode.ASYNC, sticky = true, priority = 1)
+    //必须留在主线程：直接改 replyList 并通知 RecyclerView，后台线程回调会与布局并发冲突
+    @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEvent(ReplyEvent event) {
         if (event.getOid() != oid) return;
-        LinearLayoutManager layoutManager = (LinearLayoutManager) Objects.requireNonNull(recyclerView.getLayoutManager());
-        int pos = layoutManager.findFirstCompletelyVisibleItemPosition();
-        pos--;
-        if (pos <= 0) {
-            pos = layoutManager.findFirstVisibleItemPosition();
-            pos--;
-        }
-        pos = pos <= 0 ? 1 : pos;
-        replyList.add(pos, event.getMessage());
-        int finalPos = pos;
-        runOnUiThread(() -> {
-            if (replyAdapter != null) {
-                replyAdapter.notifyItemInserted(finalPos);
-                replyAdapter.notifyItemRangeChanged(finalPos, replyList.size() - finalPos + 1);
-                layoutManager.scrollToPositionWithOffset(finalPos + 1, 0);
-            }
-        });
+        if (replyAdapter == null || replyList == null) return;
+        Reply reply = event.getMessage();
+        if (reply == null) return;
+        //楼中楼详情页：新回复追加到子评论末尾（数据末位 i 对应 adapter 位 i+1，头部固定项是根评论+回复框）
+        replyList.add(reply);
+        replyAdapter.notifyItemInserted(replyList.size());
+        LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
+        if (layoutManager != null)
+            layoutManager.scrollToPositionWithOffset(replyList.size(), 0);
     }
 }

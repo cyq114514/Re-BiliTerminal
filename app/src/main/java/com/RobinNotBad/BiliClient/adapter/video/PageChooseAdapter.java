@@ -1,12 +1,14 @@
 package com.RobinNotBad.BiliClient.adapter.video;
 
 import android.content.Context;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
@@ -22,6 +24,10 @@ public class PageChooseAdapter extends RecyclerView.Adapter<PageChooseAdapter.Ho
 
     final Context context;
     final ArrayList<String> nameList;
+    //上次观看的分P下标（-1 表示无记录），bind 时必须双向赋色，避免复用残影
+    private int historyIndex = -1;
+    private final int defaultTextColor;
+    private static final int HISTORY_COLOR = 0xfffb7299;
 
     OnItemClickListener onItemClickListener;
     OnItemLongClickListener onItemLongClickListener;
@@ -29,6 +35,15 @@ public class PageChooseAdapter extends RecyclerView.Adapter<PageChooseAdapter.Ho
     public PageChooseAdapter(Context context, ArrayList<String> nameList) {
         this.context = context;
         this.nameList = nameList;
+        TypedValue typedValue = new TypedValue();
+        context.getTheme().resolveAttribute(android.R.attr.textColorPrimary, typedValue, true);
+        defaultTextColor = typedValue.resourceId != 0
+                ? ContextCompat.getColor(context, typedValue.resourceId)
+                : typedValue.data;
+    }
+
+    public void setHistoryIndex(int historyIndex) {
+        this.historyIndex = historyIndex;
     }
 
     public void setOnItemClickListener(OnItemClickListener listener) {
@@ -52,6 +67,7 @@ public class PageChooseAdapter extends RecyclerView.Adapter<PageChooseAdapter.Ho
             return;
 
         holder.folder_name.setText(nameList.get(position));
+        holder.folder_name.setTextColor(position == historyIndex ? HISTORY_COLOR : defaultTextColor);
 
         holder.itemView.setOnClickListener(view -> {
             if (onItemClickListener != null)

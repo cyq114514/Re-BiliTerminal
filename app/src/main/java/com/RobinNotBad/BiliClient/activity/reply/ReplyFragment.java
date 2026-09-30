@@ -27,7 +27,6 @@ import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 //视频下评论页面，评论详情见ReplyInfoActivity
@@ -51,6 +50,10 @@ public class ReplyFragment extends RefreshListFragment {
     private boolean isEnd = false;
     //已加载评论的 rpid 集合，作为游标分页的兜底去重，防止 B站 API 在游标边界返回重复评论
     private final Set<Long> loadedRpids = new HashSet<>();
+    //刷新/翻页世代号：refresh 时自增，旧任务的所有回调按世代丢弃，防止旧数据写进新列表造成通知错位
+    private int loadGeneration = 0;
+    //连续加载空页的总时长上限：弱网+重试瀑布下防止"翻页无反应"无限拖延，超时静默停在当前游标，下次下滑可续传
+    private static final long LOAD_DEADLINE_MS = 30_000L;
 
     public static ReplyFragment newInstance(long aid, int type) {
         ReplyFragment fragment = new ReplyFragment();
@@ -177,24 +180,29 @@ public class ReplyFragment extends RefreshListFragment {
             setRefreshing(false);
             return;
         }
+        final int generation = loadGeneration;   //期间发生刷新/新翻页则本轮整体作废
+        final long deadline = System.currentTimeMillis() + LOAD_DEADLINE_MS;
         CenterThreadPool.run(() -> {
             try {
                 //B站对某些游标值可能只返回 cursor 不返回 replies，这里自动连续加载直到拿到评论或到底，避免用户看到"翻页无反应"
                 int emptyPages = 0;
-                while (!isEnd && !bottom && emptyPages < 5) {
+                String cursor = pagination;   //游标先在局部推进，提交回字段统一走主线程，避免与 refresh 并发写
+                while (!isEnd && !bottom && emptyPages < 5 && System.currentTimeMillis() < deadline) {
+                    if (generation != loadGeneration) return;   //已被刷新作废
                     List<Reply> list = new ArrayList<>();
-                    ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, 0, pagination, type, sort, list);
+                    ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, 0, cursor, type, sort, list);
+                    if (generation != loadGeneration) return;
                     if (!result.isSuccess()) {
                         //失败时回退 page，使父类页码与游标状态一致；失败不更新游标，允许按原游标重新触发
-                        this.page--;
                         runOnUiThread(() -> {
+                            this.page--;
                             setRefreshing(false);
                             showLoadErrorMsg(result);
                         });
                         return;
                     }
                     //仅当本次请求成功时才推进游标
-                    this.pagination = result.nextOffset;
+                    cursor = result.nextOffset;
                     //兜底去重：过滤掉 rpid 已存在的评论
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
                     if (result.isEnd()) {
@@ -203,7 +211,10 @@ public class ReplyFragment extends RefreshListFragment {
                     }
                     if (!list.isEmpty()) {
                         final List<Reply> unique = list;
+                        final String next = cursor;
                         runOnUiThread(() -> {
+                            if (generation != loadGeneration) return;
+                            this.pagination = next;
                             replyList.addAll(unique);
                             if (replyAdapter != null)
                                 replyAdapter.notifyItemRangeInserted(replyList.size() - unique.size() + 1, unique.size());
@@ -215,12 +226,26 @@ public class ReplyFragment extends RefreshListFragment {
                     emptyPages++;
                     Logu.d("ReplyFragment", "本页无新评论，自动加载下一页 (empty=" + emptyPages + ")");
                 }
+                //空页耗尽或超时：把已推进的游标落回字段，下次下滑从断点续传
+                final String finalCursor = cursor;
+                runOnUiThread(() -> {
+                    if (generation != loadGeneration) return;
+                    this.pagination = finalCursor;
+                });
                 setRefreshing(false);
-                if (emptyPages >= 5 && !isEnd) {
+                if (generation == loadGeneration && emptyPages >= 5 && !isEnd) {
                     runOnUiThread(() -> MsgUtil.showMsgLong("暂时没有更多评论了"));
                 }
             } catch (Exception e) {
-                loadFail(e);
+                if (generation == loadGeneration) {
+                    runOnUiThread(() -> {
+                        this.page--;
+                        report(e);
+                        setRefreshing(false);
+                    });
+                } else {
+                    setRefreshing(false);
+                }
             }
         });
     }
@@ -243,24 +268,36 @@ public class ReplyFragment extends RefreshListFragment {
         }
     }
 
+    //由 EventBus MAIN 线程回调（VideoInfoActivity/DynamicInfoActivity 订阅），所有数据修改必须在主线程，
+    //否则与 RecyclerView 的布局/滚动并发会造成通知与数据错位，列表直接卡死
     public void notifyReplyInserted(ReplyEvent replyEvent) {
         if (replyEvent.getOid() != aid) return;
+        if (replyAdapter == null || replyList == null || recyclerView == null || recyclerView.getLayoutManager() == null)
+            return;
         Reply reply = replyEvent.getMessage();
+        if (reply == null) return;
         if (reply.root == 0) {
-            LinearLayoutManager layoutManager = (LinearLayoutManager) Objects.requireNonNull(recyclerView.getLayoutManager());
-            int pos = layoutManager.findFirstCompletelyVisibleItemPosition();
-            pos = Math.max(pos, 0);
-            replyList.add(pos, reply);
-            int finalPos = pos;
-            runOnUiThread(() -> {
-                replyAdapter.notifyItemInserted(finalPos);
-                replyAdapter.notifyItemRangeChanged(finalPos, replyList.size() - finalPos + 1);
-                layoutManager.scrollToPositionWithOffset(finalPos + 1, 0);
-            });
-        } else if (replyEvent.getPos() >= 0) {
-            replyList.get(replyEvent.getPos()).childMsgList.add(reply);
-            replyList.get(replyEvent.getPos()).childCount++;
-            runOnUiThread(() -> replyAdapter.notifyItemChanged(replyEvent.getPos() + 1));
+            LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
+            //findFirstCompletelyVisibleItemPosition 返回 adapter 位（0 是头部发送按钮），换算数据位要减 1
+            int firstVisible = layoutManager.findFirstCompletelyVisibleItemPosition();
+            int dataIndex = Math.max(firstVisible - 1, 0);
+            if (dataIndex > replyList.size()) dataIndex = replyList.size();
+            replyList.add(dataIndex, reply);
+            int adapterPos = dataIndex + 1;   //头部占一格
+            replyAdapter.notifyItemInserted(adapterPos);
+            layoutManager.scrollToPositionWithOffset(adapterPos, 0);
+        } else {
+            //楼中楼回复：按根评论 rpid 定位。事件的 pos 只对发起回复的那个页面有效，
+            //视频页/动态页/评论详情页可能同时收到同一事件，用 pos 会改错行甚至越界
+            for (int i = 0; i < replyList.size(); i++) {
+                Reply root = replyList.get(i);
+                if (root != null && root.rpid == reply.root) {
+                    root.childMsgList.add(reply);
+                    root.childCount++;
+                    replyAdapter.notifyItemChanged(i + 1);
+                    break;
+                }
+            }
         }
     }
 
@@ -273,11 +310,13 @@ public class ReplyFragment extends RefreshListFragment {
         loadedRpids.clear();
         page = 1;
         this.aid = aid;
+        final int generation = ++loadGeneration;   //使在途的旧翻页/旧刷新回调全部作废
         setRefreshing(true);
         CenterThreadPool.run(() -> {
             try {
                 List<Reply> list = new ArrayList<>();
                 ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, seek, pagination, type, sort, list);
+                if (generation != loadGeneration) return;   //已被更新的刷新作废
                 if (result.isSuccess()) {
                     this.pagination = result.nextOffset;
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
@@ -286,6 +325,7 @@ public class ReplyFragment extends RefreshListFragment {
                     if (isAdded()) {
                         runOnUiThread(() -> {
                             if (!isAdded()) return;
+                            if (generation != loadGeneration) return;
                             if (replyList != null) replyList.clear();
                             else replyList = new ArrayList<>();
                             replyList.addAll(unique);
@@ -310,7 +350,15 @@ public class ReplyFragment extends RefreshListFragment {
                     runOnUiThread(() -> showLoadErrorMsg(result));
                 }
             } catch (Exception e) {
-                loadFail(e);
+                if (generation == loadGeneration) {
+                    runOnUiThread(() -> {
+                        this.page--;
+                        report(e);
+                        setRefreshing(false);
+                    });
+                } else {
+                    setRefreshing(false);
+                }
             }
         });
     }
