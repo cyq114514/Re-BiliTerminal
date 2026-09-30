@@ -156,7 +156,8 @@
 
 | 项目 | 说明 |
 | --- | --- |
-| 系统要求 | **Android 4.0.4 及以上**（`minSdk 14`，`targetSdk 26`） |
+| 系统要求 | **Android 4.4 及以上**（`minSdk 19`，`targetSdk 26`） |
+| 旧设备 | Android 4.0.4–4.3 的设备请安装 `1.1.1` 或更早版本 |
 | ABI | `armeabi-v7a`、`x86`（**不含 arm64-v8a**，与上游一致；arm64 设备走 32 位兼容模式） |
 | 签名 | 正式证书。同签名版本**直接覆盖安装即可**，无需卸载、不丢登录态 |
 | 共存 | 若设备上同时装有原版「哔哩终端」，两者会并存，属正常现象 |
@@ -189,7 +190,7 @@ ALIAS_PASSWORD=******
 
 ## 技术栈
 
-- **语言 / 界面**：Java + XML（`minSdk 14`，无 Kotlin、无 Compose）
+- **语言 / 界面**：Java + XML（`minSdk 19`，无 Kotlin、无 Compose）
 - **播放器**：`ijkplayer-java`（模块内置，源自 [bilibili/ijkplayer](https://github.com/bilibili/ijkplayer)）
 - **弹幕**：`DanmakuFlameMaster`（模块内置，已打本地补丁）
 - **网络 / 解析**：OkHttp 3.12.1 · Gson 2.8.9 · protobuf-javalite（弹幕协议）
