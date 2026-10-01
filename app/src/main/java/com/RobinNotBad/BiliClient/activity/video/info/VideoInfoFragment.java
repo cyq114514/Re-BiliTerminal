@@ -140,7 +140,8 @@ public class VideoInfoFragment extends BaseFragment {
             }
         }
     });
-    private PlayerData playerData;
+    //在后台线程的历史上报任务中赋值、主线程点击播放/下载时读取，volatile 保证可见性
+    private volatile PlayerData playerData;
     private long aid;
     private String bvid;
     private TextView description;
@@ -642,6 +643,12 @@ public class VideoInfoFragment extends BaseFragment {
             return;
         }
 
+        //playerData 由后台线程的历史上报任务赋值，任务未完成时点播放会 NPE
+        if (playerData == null) {
+            MsgUtil.showMsg("视频信息还在加载中");
+            return;
+        }
+
         Glide.get(getAppContext()).clearMemory();
         //在播放前清除内存缓存，因为手表内存太小了，播放完回来经常把Activity全释放掉
         //...经过测试，还是会释放，但会好很多
@@ -663,6 +670,11 @@ public class VideoInfoFragment extends BaseFragment {
                 MsgUtil.showMsg(file_sign.exists() ? "已在下载队列\n如有异常，长按可清空文件" : "已下载完成");
             } else {
                 if (videoInfo.pagenames.size() > 1) {
+                    //playerData 由后台线程的历史上报任务赋值，未完成时为 null
+                    if (playerData == null) {
+                        MsgUtil.showMsg("视频信息还在加载中");
+                        return;
+                    }
                     Intent intent = new Intent();
                     intent.setClass(requireContext(), MultiPageActivity.class)
                             .putExtra("download", 1)

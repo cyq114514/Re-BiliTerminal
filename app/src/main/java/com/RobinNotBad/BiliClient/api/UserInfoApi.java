@@ -335,7 +335,11 @@ public class UserInfoApi {
     }
 
     public static void exitLogin() {
-        try { NetWorkUtil.get("https://passport.bilibili.com/login/exit/v2", NetWorkUtil.webHeaders); } catch (Exception ignored) {}
+        //正式的注销端点是 POST + csrf：GET 不带参数调不动它，服务端会话（含 refresh_token）不会被失效
+        try {
+            String csrf = NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+            NetWorkUtil.post("https://passport.bilibili.com/login/exit/v2", "csrf=" + csrf, NetWorkUtil.webHeaders);
+        } catch (Exception ignored) {}
     }
 
     public static int addContract(long upMid) throws IOException, JSONException {

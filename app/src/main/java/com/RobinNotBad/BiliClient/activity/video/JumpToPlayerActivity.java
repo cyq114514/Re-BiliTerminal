@@ -82,6 +82,13 @@ public class JumpToPlayerActivity extends BaseActivity {
 
         playerData = (PlayerData) intent.getParcelableExtra("data");
 
+        //被外部拉起/进程重建等场景下 extra 可能缺失，直接退出而不是 NPE
+        if (playerData == null) {
+            MsgUtil.showMsgLong("启动参数缺失，请从应用内重新进入");
+            finish();
+            return;
+        }
+
         title = playerData.title;
 
         download = intent.getIntExtra("download", 0);

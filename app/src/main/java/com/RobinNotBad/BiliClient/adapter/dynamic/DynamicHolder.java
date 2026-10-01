@@ -337,7 +337,12 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
 
         username.setText(dynamic.userInfo.name);
         if (!dynamic.userInfo.vip_nickname_color.isEmpty()) {
-            username.setTextColor(Color.parseColor(dynamic.userInfo.vip_nickname_color));
+            try {
+                username.setTextColor(Color.parseColor(dynamic.userInfo.vip_nickname_color));
+            } catch (IllegalArgumentException e) {
+                //API 返回过非 #RRGGBB 格式的颜色串，解析失败不能让整个动态列表崩掉
+                username.setTextColor(0xFFFFFFFF);
+            }
         } else {
             username.setTextColor(0xFFFFFFFF);
         }

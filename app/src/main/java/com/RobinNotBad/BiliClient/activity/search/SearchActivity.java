@@ -93,7 +93,10 @@ public class SearchActivity extends InstanceActivity {
                     try {
                         defaultSearchContent = SearchApi.getDefaultSearchContent();
                         if (defaultSearchContent != null && !defaultSearchContent.isEmpty()) {
-                            runOnUiThread(() -> keywordInput.setHint(defaultSearchContent));
+                            runOnUiThread(() -> {
+                                if (isDestroyed() || isFinishing()) return;
+                                keywordInput.setHint(defaultSearchContent);
+                            });
                         }
                     } catch (Exception e) {
                         Log.e("SearchActivity", "获取默认搜索内容失败", e);
@@ -131,6 +134,7 @@ public class SearchActivity extends InstanceActivity {
             suggestionsRecyclerview.setVisibility(View.GONE);
             List<Fragment> fragmentList = new ArrayList<>();
             fragmentList.add(SearchVideoFragment.newInstance());
+            fragmentList.add(SearchBangumiFragment.newInstance());
             fragmentList.add(SearchArticleFragment.newInstance());
             fragmentList.add(SearchUserFragment.newInstance());
             fragmentList.add(SearchLiveFragment.newInstance());

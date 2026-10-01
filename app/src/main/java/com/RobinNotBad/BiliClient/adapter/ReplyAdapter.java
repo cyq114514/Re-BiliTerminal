@@ -320,7 +320,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 }
                 if (!reply.liked) {
                     try {
-                        if (ReplyApi.likeReply(oid, reply.rpid, true) == 0) {
+                        if (ReplyApi.likeReply(oid, reply.rpid, replyType, true) == 0) {
                             reply.liked = true;
                             ((Activity) context).runOnUiThread(() -> {
                                 MsgUtil.showMsg("点赞成功");
@@ -339,7 +339,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                     }
                 } else {
                     try {
-                        if (ReplyApi.likeReply(oid, reply.rpid, false) == 0) {
+                        if (ReplyApi.likeReply(oid, reply.rpid, replyType, false) == 0) {
                             reply.liked = false;
                             ((Activity) context).runOnUiThread(() -> {
                                 MsgUtil.showMsg("取消成功");

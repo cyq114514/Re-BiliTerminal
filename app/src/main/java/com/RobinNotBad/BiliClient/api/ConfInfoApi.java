@@ -28,6 +28,9 @@ import okhttp3.HttpUrl;
 
 public class ConfInfoApi {
 
+    //WBI mixin key 的缓存时长。B 站大约小时级轮换密钥，取 30 分钟兼顾请求量与失效窗口
+    private static final long WBI_KEY_TTL_MS = 30L * 60 * 1000;
+
 
     /*
     这里是WBI签名校验
@@ -65,16 +68,17 @@ public class ConfInfoApi {
 
     private static String signWBIInternal(String url_query) throws JSONException, IOException {
         String mixin_key = SharedPreferencesUtil.getString("wbi_mixin_key", "");
-        int curr = getDateCurr();
-        //缓存为空也要重新取，否则空密钥会一直参与签名（服务端一律判签名失败）
-        if (mixin_key.isEmpty() || SharedPreferencesUtil.getInt("last_wbi", 0) < curr) {    //限制一天一次
+        //B 站轮换 img_key/sub_key 比一天频繁得多，按“日”缓存会在服务端轮换后让当天所有 WBI
+        //请求签名失败（表现为番剧进度等静默失败），改为固定 TTL
+        long now = System.currentTimeMillis();
+        if (mixin_key.isEmpty() || now - SharedPreferencesUtil.getLong("last_wbi_time", 0L) > WBI_KEY_TTL_MS) {
             Logu.d("检查WBI");
-            //必须先取到密钥再落 last_wbi：取密钥要联网，失败时若已经写了 last_wbi，
-            //当天后续所有 WBI 请求都会拿着空/过期密钥签名——番剧续播进度就是这么静默取不到的
+            //必须先取到密钥再落缓存时间：取密钥要联网，失败时若已经写了时间戳，
+            //TTL 内后续所有 WBI 请求都会拿着空/过期密钥签名
             String rawKey = ConfInfoApi.getWBIRawKey();
             mixin_key = ConfInfoApi.getWBIMixinKey(rawKey);
             SharedPreferencesUtil.putString("wbi_mixin_key", mixin_key);
-            SharedPreferencesUtil.putInt("last_wbi", curr);
+            SharedPreferencesUtil.putLong("last_wbi_time", now);
         }
 
         String wts = String.valueOf(System.currentTimeMillis() / 1000);

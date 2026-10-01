@@ -38,7 +38,8 @@ public class LinkUrlUtil {
 
     public static void handleWebURL(Context context, String text) {
         try {
-            text = (text.startsWith("http://") || text.startsWith("https://") ? text : (text.startsWith("//") ? "http:" + text : "http://" + text));
+            //无协议前缀的链接统一按 https 补全：解析出的 b23.tv 短链随后会带着登录 Cookie 请求，走明文没有必要
+            text = (text.startsWith("http://") || text.startsWith("https://") ? text : (text.startsWith("//") ? "https:" + text : "https://" + text));
             // 很傻逼的一系列解析
             URL url = new URL(text);
             String path = url.getPath();
@@ -123,8 +124,8 @@ public class LinkUrlUtil {
 
     private static void handleShortUrl(Context context, String url) {
         CenterThreadPool.run(() -> {
-            try {
-                Response response = NetWorkUtil.get(url, NetWorkUtil.webHeaders, location -> handleWebURL(context, location));
+            //Response 必须整体关闭：原来 code!=200 或 body 为空的分支直接返回，连接一直被占用
+            try (Response response = NetWorkUtil.get(url, NetWorkUtil.webHeaders, location -> handleWebURL(context, location))) {
                 ResponseBody body;
                 if (response.code() == 200 && (body = response.body()) != null) {
                     JSONObject json = new JSONObject(body.string());

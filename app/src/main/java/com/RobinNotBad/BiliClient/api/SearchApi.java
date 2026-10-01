@@ -175,6 +175,18 @@ public class SearchApi {
         }
     }
 
+    /**单独搜索番剧（search_type=media_bangumi）的结果转视频卡片：点击走 VideoCardAdapter 的 media_bangumi 分支进番剧详情页。*/
+    public static void getBangumiFromSearchResult(JSONArray input, ArrayList<VideoCard> videoCardList) {
+        List<SearchVideoItem> items = GsonUtil.fromJson(input.toString(),
+                new com.google.gson.reflect.TypeToken<List<SearchVideoItem>>(){}.getType());
+        if (items == null) return;
+        for (SearchVideoItem card : items) {
+            if (card == null) continue;
+            String title = StringUtil.htmlToString(card.title.replace("<em class=\"keyword\">", "").replace("</em>", ""));
+            videoCardList.add(new VideoCard(title, card.areas, card.index_show, card.cover, card.media_id, card.season_id, "media_bangumi"));
+        }
+    }
+
     public static void getUsersFromSearchResult(JSONArray input, List<UserInfo> userInfoList) {
         List<SearchUserItem> users = GsonUtil.fromJson(input.toString(),
                 new com.google.gson.reflect.TypeToken<List<SearchUserItem>>(){}.getType());

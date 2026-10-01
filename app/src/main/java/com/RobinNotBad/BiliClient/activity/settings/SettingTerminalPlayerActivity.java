@@ -26,7 +26,8 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "双击优先还原缩放/移动", "player_doubletap_reset_first",
                         "开启后，双击会优先还原视频缩放与位置，再进行播放/暂停切换", "true"));
                 add(new SettingSection("switch", "洗脑循环", "player_loop", "", "false"));
-                add(new SettingSection("switch", "熄屏继续播放", "player_background", "", "false"));
+                add(new SettingSection("switch", "后台/熄屏继续播放", "player_background",
+                        "退到后台或熄屏时继续播放，并挂出通知栏遥控", "false"));
                 add(new SettingSection("switch", "默认横屏", "player_autolandscape", "", "false"));
                 add(new SettingSection("switch", "从历史位置播放", "player_from_last",
                         getString(R.string.desc_fromlast),

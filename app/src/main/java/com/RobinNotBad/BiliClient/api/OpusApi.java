@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
 
+import okhttp3.HttpUrl;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
@@ -52,12 +53,20 @@ public class OpusApi {
         else url = "https://www.bilibili.com/read/cv" + id;
         try {
             Response response = NetWorkUtil.get(url);
-            // /read/cv{id} 有多层301重定向（加斜杠、跳转到/opus/），循环跟随直到拿到最终页面
+            // /read/cv{id} 有多层301重定向（加斜杠、跳转到/opus/），循环跟随直到拿到最终页面。
+            // Location 可能是 //开头的协议相对地址（Request.Builder.url 会直接抛
+            // IllegalArgumentException），用 HttpUrl.resolve 基于当前 URL 解析出绝对地址；
+            // 这里每次 get 都带完整登录 Cookie，跳转目标必须过 B 站域名白名单，绝不把凭据跟到任意域
             for (int i = 0; i < 5; i++) {
                 String location = response.header("Location");
                 if (location == null || location.isEmpty()) break;
+                HttpUrl current = HttpUrl.parse(response.request().url().toString());
+                HttpUrl target = current != null ? current.resolve(location) : null;
                 response.close();
-                response = NetWorkUtil.get(location);
+                if (target == null || !NetWorkUtil.isBilibiliHost(target.host())) {
+                    return opus;    //非 B 站域名的跳转不带凭据跟进，放弃抓取
+                }
+                response = NetWorkUtil.get(target.toString());
             }
             ResponseBody responseBody = response.body();
             if (responseBody == null) return opus;

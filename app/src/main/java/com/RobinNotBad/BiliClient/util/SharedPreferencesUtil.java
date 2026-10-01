@@ -52,8 +52,10 @@ public class SharedPreferencesUtil {
         return sharedPreferences;
     }
 
+    //所有读取方法都做空保护：webHeaders 等静态初始化器会在 Application.onCreate 赋值 sharedPreferences
+    //之前触发类加载，不保护的话一个读取顺序变化就是启动即 NPE
     public static String getString(String key, String def) {
-        return sharedPreferences.getString(key, def);
+        return sharedPreferences != null ? sharedPreferences.getString(key, def) : def;
     }
 
     public static void putString(String key, String value) {
@@ -61,7 +63,7 @@ public class SharedPreferencesUtil {
     }
 
     public static int getInt(String key, int def) {
-        return sharedPreferences.getInt(key, def);
+        return sharedPreferences != null ? sharedPreferences.getInt(key, def) : def;
     }
 
     public static void putInt(String key, int value) {
@@ -69,7 +71,7 @@ public class SharedPreferencesUtil {
     }
 
     public static long getLong(String key, long def) {
-        return sharedPreferences.getLong(key, def);
+        return sharedPreferences != null ? sharedPreferences.getLong(key, def) : def;
     }
 
     public static void putLong(String key, long value) {
@@ -77,7 +79,7 @@ public class SharedPreferencesUtil {
     }
 
     public static boolean getBoolean(String key, boolean def) {
-        return sharedPreferences.getBoolean(key, def);
+        return sharedPreferences != null ? sharedPreferences.getBoolean(key, def) : def;
     }
 
     public static void putBoolean(String key, boolean value) {
@@ -89,7 +91,7 @@ public class SharedPreferencesUtil {
     }
 
     public static float getFloat(String key, float def) {
-        return sharedPreferences.getFloat(key, def);
+        return sharedPreferences != null ? sharedPreferences.getFloat(key, def) : def;
     }
 
     public static void removeValue(String key) {

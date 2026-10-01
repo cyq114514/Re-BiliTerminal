@@ -356,9 +356,14 @@ public class ReplyApi {
     }
 
     public static int likeReply(long oid, long root, boolean action) throws IOException, JSONException {
-        //FIXME: 这里 type 硬编码为 1（视频），动态/专栏评论点赞时应传对应 type，否则会被服务端拒绝
+        return likeReply(oid, root, REPLY_TYPE_VIDEO, action);
+    }
+
+    //type 必须传评论所属的评论区类型（1=视频 11=图片动态 12=专栏 17=文字动态等），
+    //原来硬编码为 1，给动态/专栏的评论点赞会被服务端拒绝
+    public static int likeReply(long oid, long root, int type, boolean action) throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/v2/reply/action";
-        String arg = "oid=" + oid + "&type=1&rpid=" + root + "&action=" + (action ? "1" : "0") + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        String arg = "oid=" + oid + "&type=" + type + "&rpid=" + root + "&action=" + (action ? "1" : "0") + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
         return new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string()).optInt("code", -1);
     }
 

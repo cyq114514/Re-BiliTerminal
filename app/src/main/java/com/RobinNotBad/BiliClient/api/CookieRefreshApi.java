@@ -96,7 +96,14 @@ public class CookieRefreshApi {
                 return false;
             }
             SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, refreshToken_new);
-            SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, Long.parseLong(NetWorkUtil.getInfoFromCookie("DedeUserID", cookies_new)));
+            //DedeUserID 理论上不因刷新而变；新 Cookie 缺失该字段时 parseLong 会抛 NFE 并中断刷新（此时 refresh_token 已更新，状态不一致），改为沿用本地已知的 mid
+            long mid_new;
+            try {
+                mid_new = Long.parseLong(NetWorkUtil.getInfoFromCookie("DedeUserID", cookies_new));
+            } catch (NumberFormatException e) {
+                mid_new = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L);
+            }
+            SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, mid_new);
             SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new));
             Logu.v("Cookie刷新成功");
             NetWorkUtil.refreshHeaders();

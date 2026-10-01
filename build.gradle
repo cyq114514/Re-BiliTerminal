@@ -1,25 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
-buildscript {
-    repositories {
-        maven {
-            url 'http://maven.aliyun.com/nexus/content/groups/public/'
-            allowInsecureProtocol = true
-        }
-        maven {
-            url 'http://maven.aliyun.com/nexus/content/repositories/jcenter'
-            allowInsecureProtocol = true
-        }
-        maven { url'https://maven.aliyun.com/repository/public/' }
-        maven { url'https://maven.aliyun.com/repository/google/' }
-        maven { url'https://maven.aliyun.com/repository/jcenter/' }
-        maven { url'https://maven.aliyun.com/repository/central/' }
-        maven { url 'https://jitpack.io' }
-        google()
-        jcenter()
-        mavenCentral()
-        mavenLocal()
-    }
-}
+// 原来的 buildscript 仓库块是残留配置：插件实际经 settings.gradle 的 pluginManagement 解析，
+// 块里还挂着 http:// 明文仓库（allowInsecureProtocol，存在依赖被中间人替换的风险）、
+// 已停止服务的 jcenter() 和环境相关的 mavenLocal()，一并删除。
 plugins {
     id 'com.android.application' version '8.10.0' apply false
     id 'com.android.library' version '8.10.0' apply false

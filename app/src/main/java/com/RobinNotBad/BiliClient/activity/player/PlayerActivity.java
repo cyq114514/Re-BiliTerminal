@@ -66,6 +66,7 @@ import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.Subtitle;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
 import com.RobinNotBad.BiliClient.model.ViewPoint;
+import com.RobinNotBad.BiliClient.service.PlaybackService;
 import com.RobinNotBad.BiliClient.ui.widget.BatteryView;
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
@@ -219,6 +220,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private final String[] speed_strs = {"x 0.5", "x 0.75", "x 1.0", "x 1.25", "x 1.5", "x 1.75", "x 2.0", "x 3.0"};
 
     private boolean finishWatching = false;
+    //播放器错误态：onError 置位，点播放按钮触发重新载入（见 controlVideo / retryAfterPlayerError）
+    private boolean playerError = false;
     private boolean loop_enabled;
     private boolean auto_next_enabled = false;
 
@@ -932,6 +935,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void MPPrepare(String nowurl) {
         ijkPlayer.setOnPreparedListener(this);
+        playerError = false;   //任何新的载入（切P/切清晰度/重试）都清除错误态
 
         if (isLiveMode) {
             runOnUiThread(() -> loading_text0.setText("载入直播中"));
@@ -987,8 +991,23 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         ijkPlayer.setOnErrorListener((iMediaPlayer, what, extra) -> {
             String EReport = "播放器可能遇到错误！\n错误码：" + what + "\n附加：" + extra;
             Logu.e("ijk-err", EReport);
-            // Toast.makeText(PlayerActivity.this, EReport, Toast.LENGTH_LONG).show();
-            return false;
+            //原来返回 false，错误会继续走到 onCompletion 被当成“播放完毕”，用户会误以为视频播完了；
+            //改为标记错误态并提示，点播放按钮重新载入重试（controlVideo 里分发）
+            playerError = true;
+            if (!destroyed) {
+                MsgUtil.showMsgLong(EReport);
+                runOnUiThread(() -> {
+                    isPlaying = false;
+                    if (hasDanmaku && mDanmakuView != null) {
+                        mDanmakuView.pause();
+                    }
+                    btn_control.setImageResource(R.drawable.btn_player_play);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+                        updateMediaSessionPlaybackState();
+                    }
+                });
+            }
+            return true;
         });
 
         ijkPlayer.setOnBufferingUpdateListener(
@@ -1845,11 +1864,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     public void controlVideo() {
+        //错误态下点播放＝重试。error 状态的实例上 resume 不会有任何反应，必须重新走载入链路
+        if (playerError) {
+            retryAfterPlayerError();
+            autohideReset();
+            return;
+        }
         if (isPlaying) {
             playerPause();
         } else {
             if (video_now >= video_all - 250) {
-                if (interactionData != null && interactionData.edges != null && 
+                if (interactionData != null && interactionData.edges != null &&
                     interactionData.edges.questions != null && !questionShown) {
                     if (!questionShown) {
                         ijkPlayer.seekTo(0);
@@ -1865,6 +1890,42 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             playerResume();
         }
         autohideReset();
+    }
+
+    //错误重试复用音频模式切换的同一条重载链路：释放播放器 → 重建 → setDisplay() 由 surface 定时器触发 MPPrepare
+    private void retryAfterPlayerError() {
+        playerError = false;
+        CenterThreadPool.run(() -> {
+            try {
+                final long resumePosition = video_now;
+                runOnUiThread(() -> {
+                    isPrepared = false;
+                    isPlaying = false;
+                    if (ijkPlayer != null) {
+                        ijkPlayer.stop();
+                        ijkPlayer.release();
+                        ijkPlayer = null;
+                    }
+                    loading_info.setVisibility(View.VISIBLE);
+                    anim_loading.start();
+                    loading_text0.setText("重新载入");
+                });
+                Thread.sleep(100);
+                runOnUiThread(() -> {
+                    //休眠期间页面可能已退出：对已销毁的窗口 setDisplay 会创建无人认领的播放器实例（native 泄漏）
+                    if (destroyed || isFinishing()) return;
+                    ijkPlayer = new IjkMediaPlayer();
+                    progress_history = resumePosition;
+                    setDisplay();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    MsgUtil.showMsg("重新载入失败，请重试");
+                    loading_info.setVisibility(View.GONE);
+                    anim_loading.stop();
+                });
+            }
+        });
     }
 
     @SuppressLint("SetTextI18n")
@@ -2005,12 +2066,53 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         finish();
     }
 
+    //======= PlaybackService 状态桥：后台通知读这些状态、动作统一回 UI 线程执行 =======
+
+    public boolean serviceGone() {
+        return destroyed;
+    }
+
+    public boolean serviceIsPlaying() {
+        return isPlaying && isPrepared && !destroyed;
+    }
+
+    public String serviceTitle() {
+        return videoTitle != null ? videoTitle : "";
+    }
+
+    public int servicePositionMs() {
+        return video_now;
+    }
+
+    public int serviceDurationMs() {
+        return video_all;
+    }
+
+    public void serviceTogglePlay() {
+        runOnUiThread(() -> {
+            if (!destroyed && !isFinishing()) controlVideo();
+        });
+    }
+
+    public void serviceStopPlayback() {
+        runOnUiThread(() -> {
+            if (!isFinishing()) finish();
+        });
+    }
+
+    public void serviceReportNow() {
+        runOnUiThread(() -> reportProgressNow(true));
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
         Logu.v("onPause");
         if (!SharedPreferencesUtil.getBoolean("player_background", false)) {
             playerPause();
+        } else if (!isFinishing() && isPrepared && !finishWatching) {
+            //后台/熄屏继续播放：起前台服务保活并挂通知遥控（回前台/销毁时撤掉）
+            PlaybackService.start(this, this);
         }
         //兜底上报：进程被系统回收、直接杀后台时 onDestroy 不保证执行，进度不能只依赖退出路径
         reportProgressNow(false);
@@ -2020,6 +2122,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     protected void onResume() {
         super.onResume();
         Logu.v("onResume");
+        //回到前台，后台播放通知没有存在的意义了
+        PlaybackService.stop(this);
     }
 
     @Override
@@ -2046,6 +2150,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         //进度兜底上报要在播放器释放前取位置，这是退出路径最可靠的一道保险
         reportProgressNow(true);
+        //无论哪种退出原因，后台播放通知都不能留存
+        PlaybackService.stop(this);
 
         if (eventBusInit) {
             EventBus.getDefault().unregister(this);
@@ -2144,7 +2250,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 url = "wss://" + host.getString("host") + ":" + host.getInt("wss_port") + "/sub";
                 Logu.v("连接WebSocket", url);
 
-                okHttpClient = new OkHttpClient();
+                //复用全局客户端：裸 OkHttpClient 没有全局的 TLS 兼容配置（API≤22 默认不启用 TLS1.2，wss 握手会失败）、
+                //超时和 IPv4 DNS，且每个直播间新建实例从不释放，线程池随连接次数累积
+                okHttpClient = NetWorkUtil.getOkHttpInstance();
                 Request request = new Request.Builder()
                         .url(url)
                         .header("Cookie", CookieGenerator.getCookieString(true))
@@ -2608,6 +2716,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     Thread.sleep(100);
 
                     runOnUiThread(() -> {
+                        //休眠期间页面可能已退出：对已销毁的窗口 setDisplay 会创建无人认领的播放器实例（native 泄漏）
+                        if (destroyed || isFinishing()) return;
                         ijkPlayer = new IjkMediaPlayer();
                         progress_history = currentPosition;
 

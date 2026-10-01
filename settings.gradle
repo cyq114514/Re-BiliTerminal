@@ -1,6 +1,6 @@
 pluginManagement {
     repositories {
-        maven { url "https://maven.aliyun.com/repositories/jcenter" }
+        //阿里云镜像在前是国内网络的现实选择，但 jcenter 镜像对应的上游仓库已冻结只读，移除
         maven { url "https://maven.aliyun.com/repository/public" }
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
@@ -13,10 +13,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven { url "https://maven.aliyun.com/repositories/jcenter" }
         maven { url "https://maven.aliyun.com/repository/public" }
         maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
         google()
         mavenCentral()
         maven { url "https://www.jitpack.io" }

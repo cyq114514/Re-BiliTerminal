@@ -25,7 +25,8 @@ public class RefreshListActivity extends BaseActivity {
     public RecyclerView recyclerView;
     public TextView emptyView;
     public OnLoadMoreListener listener;
-    public boolean bottom = false;
+    //加载更多监听器在子类里于后台线程写、滚动监听在主线程读，必须 volatile 保证可见性（与 RefreshListFragment.bottom 保持一致）
+    public volatile boolean bottom = false;
     public int page = 1;
     public long lastLoadTimestamp;
 

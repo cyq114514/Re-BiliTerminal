@@ -39,8 +39,9 @@ public class DownloadActivity extends BaseActivity {
     String link;
     int scrHeight;
 
-    String dldText = "";
-    float dldPercent = 0;
+    //下载线程写、100ms 的 UI 计时器读，volatile 保证可见性
+    volatile String dldText = "";
+    volatile float dldPercent = 0;
 
     int type;
 
@@ -120,22 +121,21 @@ public class DownloadActivity extends BaseActivity {
     @SuppressLint("SetTextI18n")
     private void download(String url, File file, String desc, boolean exitOnFinish) {
         dldText = desc;
-        try {
-            Response response = NetWorkUtil.get(url,
-                    no_bili_headers ? AppInfoApi.customHeaders : NetWorkUtil.webHeaders);
+        InputStream inputStream = null;
+        FileOutputStream fileOutputStream = null;
+        try (Response response = NetWorkUtil.get(url,
+                no_bili_headers ? AppInfoApi.customHeaders : NetWorkUtil.webHeaders)) {
             if (!file.exists()) file.createNewFile();
-            InputStream inputStream = Objects.requireNonNull(response.body()).byteStream();
-            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            inputStream = Objects.requireNonNull(response.body()).byteStream();
+            fileOutputStream = new FileOutputStream(file);
             int len;
             byte[] bytes = new byte[1024 * 10];
             long TotalFileSize = Objects.requireNonNull(response.body()).contentLength();
             while ((len = inputStream.read(bytes)) != -1) {
                 fileOutputStream.write(bytes, 0, len);
                 long CompleteFileSize = file.length();
-                dldPercent = 1.0f * CompleteFileSize / TotalFileSize;
+                dldPercent = TotalFileSize > 0 ? 1.0f * CompleteFileSize / TotalFileSize : 0;
             }
-            inputStream.close();
-            fileOutputStream.close();
             if (exitOnFinish) {
                 runOnUiThread(() -> MsgUtil.showMsg("下载完成"));
                 Timer timer = new Timer();
@@ -147,12 +147,20 @@ public class DownloadActivity extends BaseActivity {
                     }
                 }, 200);
             }
-            response.body().close();
-            response.close();
         } catch (IOException e) {
             runOnUiThread(() -> MsgUtil.showMsg("下载失败"));
             e.printStackTrace();
             finish();
+        } finally {
+            //中断/异常路径原来不关流，文件句柄和响应连接都泄漏
+            try {
+                if (inputStream != null) inputStream.close();
+            } catch (IOException ignored) {
+            }
+            try {
+                if (fileOutputStream != null) fileOutputStream.close();
+            } catch (IOException ignored) {
+            }
         }
     }
 

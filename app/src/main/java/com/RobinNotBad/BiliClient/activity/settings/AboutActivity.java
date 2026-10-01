@@ -16,6 +16,9 @@ import android.widget.TextView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
+import com.RobinNotBad.BiliClient.api.UserInfoApi;
+import com.RobinNotBad.BiliClient.model.UserInfo;
+import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -135,6 +138,34 @@ public class AboutActivity extends BaseActivity {
                     startActivity(intent);
                 });
             }
+
+            //分支维护者（cyq114514，mid 3493117674130401）：不打包静态头像，打开页面时从B站实时拉取，
+            //昵称一并动态刷新；点击与其他开发者一致，进入其空间详情页
+            MaterialCardView cyqCard = findViewById(R.id.cyq_card);
+            ImageView cyqAvatarView = findViewById(R.id.cyqAvatar);
+            TextView cyqNameView = findViewById(R.id.cyqName);
+            cyqCard.setOnClickListener(view -> startActivity(new Intent(this, UserInfoActivity.class)
+                    .putExtra("mid", 3493117674130401L)));
+            CenterThreadPool.run(() -> {
+                try {
+                    UserInfo maintainer = UserInfoApi.getUserInfo(3493117674130401L);
+                    if (maintainer == null || isDestroyed()) return;
+                    runOnUiThread(() -> {
+                        if (isDestroyed()) return;
+                        if (!maintainer.name.isEmpty()) cyqNameView.setText(maintainer.name);
+                        if (!maintainer.avatar.isEmpty()) {
+                            Glide.with(this).load(GlideUtil.url(maintainer.avatar))
+                                    .transition(GlideUtil.getTransitionOptions())
+                                    .placeholder(R.mipmap.akari)
+                                    .apply(RequestOptions.circleCropTransform())
+                                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                    .into(cyqAvatarView);
+                        }
+                    });
+                } catch (Exception ignored) {
+                    //拉取失败就保留 XML 里的静态昵称与占位头像，不影响页面其余部分
+                }
+            });
 
             findViewById(R.id.github_repo_card).setOnClickListener(v ->
                     com.RobinNotBad.BiliClient.util.LinkUrlUtil.handleWebURL(this,

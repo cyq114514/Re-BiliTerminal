@@ -179,11 +179,13 @@ public class QRLoginFragment extends Fragment {
             public void run() {
                 try {
                     Response response = LoginApi.getLoginState();
-                    assert response.body() != null;
                     if (!isAdded()) {
+                        //离开页面的竞态：先把响应关掉再退出，否则轮询连接一直被占用
+                        response.close();
                         this.cancel();
                         return;
                     }
+                    assert response.body() != null;
 
                     String str = response.body().string();
                     JSONObject loginJson = new JSONObject(str);

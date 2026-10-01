@@ -192,7 +192,8 @@ public class NetWorkUtil {
             requestBuilder.addHeader(key, val);
         }
         Request request = requestBuilder.build();
-        return executeWithDoctypeRetry(client, request);
+        //POST（点赞/投币/发弹幕等）不重试：弱网下服务端可能已执行成功但响应丢失，重试会造成重复动作
+        return executeWithDoctypeRetry(client, request, false);
     }
 
     public static Response post(String url, String data, List<String> headers) throws IOException {
@@ -212,7 +213,16 @@ public class NetWorkUtil {
     }
 
     private static Response executeWithDoctypeRetry(OkHttpClient client, Request request) throws IOException {
-        int maxTimes = Math.max(1, SharedPreferencesUtil.getInt(SharedPreferencesUtil.API_RETRY_MAX_TIMES, 5));
+        return executeWithDoctypeRetry(client, request, true);
+    }
+
+    /**
+     * retryEnabled=false 时只请求一次。GET 幂等可安全重试；POST 不重试（见 post()）。
+     */
+    private static Response executeWithDoctypeRetry(OkHttpClient client, Request request, boolean retryEnabled) throws IOException {
+        int maxTimes = retryEnabled
+                ? Math.max(1, SharedPreferencesUtil.getInt(SharedPreferencesUtil.API_RETRY_MAX_TIMES, 5))
+                : 1;
         float intervalSeconds = SharedPreferencesUtil.getFloat(SharedPreferencesUtil.API_RETRY_INTERVAL_SECONDS, 0.1f);
         long intervalMillis = Math.max(0L, (long) (intervalSeconds * 1000));
 
@@ -404,13 +414,24 @@ public class NetWorkUtil {
         }
     }
 
-    /**重定向跟随与 Cookie 来源校验共用的域名白名单：B 站主站、短链、视频/图片 CDN。*/
-    private static boolean isBilibiliHost(String host) {
+    /**
+     * 重定向跟随与 Cookie 来源校验共用的域名白名单：B 站主站、短链、视频/图片 CDN。
+     * 手动跟随重定向的调用方（如 OpusApi 的网页抓取）也必须用本校验，保证带 Cookie 的请求不出域。
+     */
+    public static boolean isBilibiliHost(String host) {
         if (host == null) return false;
         String h = host.toLowerCase(Locale.ROOT);
+        //akamai 镜像必须用精确主机名：akamaized.net 是 Akamai 的共享域而非 B 站资产，
+        //后缀放行等于允许任意 *.akamaized.net 收到带 Cookie 的跟随跳转、并向全局 Cookie 注入数据
         return h.equals("b23.tv") || h.equals("bilibili.com") || h.endsWith(".bilibili.com")
-                || h.endsWith(".bilivideo.com") || h.endsWith(".hdslb.com") || h.endsWith(".akamaized.net");
+                || h.endsWith(".bilivideo.com") || h.endsWith(".hdslb.com")
+                || BILIBILI_AKAMAI_MIRROR_HOSTS.contains(h);
     }
+
+    /**B 站视频 CDN 在 Akamai 上的已知镜像主机，有新增镜像时在这里补。*/
+    private static final List<String> BILIBILI_AKAMAI_MIRROR_HOSTS = Arrays.asList(
+            "upos-sz-mirrorakam.akamaized.net",
+            "upos-hz-mirrorakam.akamaized.net");
 
     /**
      * 存储单个Cookie

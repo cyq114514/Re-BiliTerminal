@@ -136,12 +136,26 @@ public class SplashActivity extends Activity {
                         }
                     });
                 } catch (JSONException e) {
-                    runOnUiThread(() -> MsgUtil.err(e));
-                    Intent intent = new Intent();
-                    intent.setClass(SplashActivity.this, LocalListActivity.class);
-                    startActivity(intent);
-                    interruptSplash();
-                    finish();
+                    runOnUiThread(() -> {
+                        MsgUtil.err(e);
+                        Intent intent = new Intent();
+                        intent.setClass(SplashActivity.this, LocalListActivity.class);
+                        startActivity(intent);
+                        interruptSplash();
+                        finish();
+                    });
+                } catch (Exception e) {
+                    //原来只捕 IOException/JSONException，其余异常会被线程池吞掉，启动页会永远停在打字动画上；
+                    //兜底进入本地库，保证任何情况下都能离开启动页
+                    e.printStackTrace();
+                    runOnUiThread(() -> {
+                        MsgUtil.err(e);
+                        Intent intent = new Intent();
+                        intent.setClass(SplashActivity.this, LocalListActivity.class);
+                        startActivity(intent);
+                        interruptSplash();
+                        finish();
+                    });
                 }
             } else {
                 Intent intent = new Intent();
@@ -155,8 +169,16 @@ public class SplashActivity extends Activity {
     }
 
     private void checkCookieRefresh() throws IOException {
+        JSONObject cookieInfo;
         try {
-            JSONObject cookieInfo = CookieRefreshApi.cookieInfo();
+            cookieInfo = CookieRefreshApi.cookieInfo();
+        } catch (JSONException e) {
+            //解析失败大概率是服务端临时故障（code!=0 时 data 也可能缺失），
+            //绝不能因此清空本地登录态——真正确认“已过期”会走下面 refreshCookie() 返回 false 的分支
+            Log.e("Cookies", "cookieInfo 解析失败，跳过本次刷新检查");
+            return;
+        }
+        try {
             if (cookieInfo.optBoolean("refresh")) {
                 Log.e("Cookies", "需要刷新");
                 if (!Objects.equals(SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), "")) {
@@ -171,8 +193,8 @@ public class SplashActivity extends Activity {
                 }
             }
         } catch (JSONException e) {
-            MsgUtil.showMsgLong("登录信息过期，请重新登录！");
-            resetLogin();
+            //刷新流程内的解析异常只放弃本次刷新，不清登录态
+            Log.e("Cookies", "刷新流程解析异常，跳过本次刷新");
         }
     }
 
@@ -194,5 +216,15 @@ public class SplashActivity extends Activity {
         if (splashTimer != null) splashTimer.cancel();
         splashTimer = null;
         runOnUiThread(() -> splashTextView.setText(splashText));
+    }
+
+    @Override
+    protected void onDestroy() {
+        //走不到 interruptSplash 的路径（如启动中途按返回）也要停掉打字计时器
+        if (splashTimer != null) {
+            splashTimer.cancel();
+            splashTimer = null;
+        }
+        super.onDestroy();
     }
 }

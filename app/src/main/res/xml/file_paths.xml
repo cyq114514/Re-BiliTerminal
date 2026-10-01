@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 路径配置。外部播放器打开本地下载视频时会用到。
+  默认下载目录是 /sdcard/Android/media/<包名>/，用户还可以在实验室设置里改成任意路径，
+  所以 external-path 用 "." 覆盖整个外部存储根；provider 本身 exported=false + 按意图授权，暴露面可控。
+-->
 <paths>
     <external-files-path
         name="ext_files"
@@ -12,6 +17,9 @@
     <external-path
         name="external"
         path="terminal" />
+    <external-path
+        name="external_all"
+        path="." />
     <files-path
         name="files"
         path="terminal" />

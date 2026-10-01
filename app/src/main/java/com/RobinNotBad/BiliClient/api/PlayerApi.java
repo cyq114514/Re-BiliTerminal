@@ -281,14 +281,21 @@ public class PlayerApi {
                 }
                 break;
             case "mtvPlayer":
+                //显式 setClassName 锁定用户在设置里选择的播放器包名，Intent 不会被第三方应用截获；
+                //cookie 是 wearbiliPlayer 拉取清晰度/弹幕的既有协作契约，凭据的发送面因此仅限这两个包
                 intent.setClassName(context.getString(R.string.player_package_mtv), "com.xinxiangshicheng.wearbiliplayer.cn.player.PlayerActivity");
                 intent.setAction(Intent.ACTION_VIEW).putExtra("cookie", SharedPreferencesUtil.getString("cookies", "")).putExtra("mode", playerData.isLocal() ? "2" : "0").putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("live_mode", playerData.isLive());
                 break;
             case "aliangPlayer":
                 intent.setClassName(context.getString(R.string.player_package_aliang), "com.aliangmaker.media.PlayVideoActivity");
                 intent.putExtra("name", playerData.title).putExtra("danmaku", playerData.danmakuUrl).putExtra("live_mode", playerData.isLive());
-                intent.setData(Uri.parse(playerData.videoUrl));
-                if (!playerData.isLocal()) {
+                if (playerData.isLocal()) {
+                    //本地文件必须走 FileProvider 的 content:// 并授予只读：裸文件路径在 scoped storage 下
+                    //对方进程读不了，老系统上也不该依赖对方持有存储权限
+                    intent.setData(getVideoUri(context, playerData.videoUrl));
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } else {
+                    intent.setData(Uri.parse(playerData.videoUrl));
                     Map<String, String> headers = new HashMap<>(); headers.put("Cookie", SharedPreferencesUtil.getString("cookies", "")); headers.put("Referer", "https://www.bilibili.com/");
                     intent.putExtra("cookie", (Serializable) headers).putExtra("agent", NetWorkUtil.USER_AGENT_WEB).putExtra("progress", playerData.progress * 1000L);
                 }

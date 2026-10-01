@@ -179,9 +179,9 @@ public class MenuActivity extends BaseActivity {
                 materialButton.setOnLongClickListener(view -> {
                     if (btn.equals(from)) {
                         // 当前已在推荐页，发送刷新广播
-                        RecommendActivity activity = (RecommendActivity) BiliTerminal.getInstanceActivityOnTop();
-                        if (activity != null) {
-                            activity.refreshRecommend();
+                        //顶部不一定是推荐页（可能是搜索/动态等其他 InstanceActivity），盲转 ClassCastException；认准实例再刷新
+                        if (BiliTerminal.getInstanceActivityOnTop() instanceof RecommendActivity) {
+                            ((RecommendActivity) BiliTerminal.getInstanceActivityOnTop()).refreshRecommend();
                         }
                         finish();
                     } else {

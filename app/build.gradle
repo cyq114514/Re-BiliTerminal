@@ -30,7 +30,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdk 26
         versionCode 20261003
-        versionName "1.1.1-fix"
+        versionName "1.1.2"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
@@ -106,13 +106,13 @@ dependencies {
     //noinspection GradleDependency
     implementation 'com.google.android.material:material:1.9.0'
     //noinspection GradleDependency
-    implementation 'com.squareup.okhttp3:okhttp:3.12.1'
+    implementation 'com.squareup.okhttp3:okhttp:3.12.13'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'com.github.bumptech.glide:glide:4.13.2'
     implementation 'com.github.bumptech.glide:okhttp3-integration:4.13.2'
     annotationProcessor 'com.github.bumptech.glide:compiler:4.13.2'
     //noinspection GradleDependency
-    implementation 'org.jsoup:jsoup:1.10.2'
+    implementation 'org.jsoup:jsoup:1.15.3'
     //noinspection GradleCompatible
     implementation 'com.github.chrisbanes:PhotoView:2.3.0'
     implementation 'org.greenrobot:eventbus:3.2.0'

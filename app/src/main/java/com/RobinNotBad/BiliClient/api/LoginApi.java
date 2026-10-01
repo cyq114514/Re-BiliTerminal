@@ -46,7 +46,9 @@ public class LoginApi {
         if (listResult.has("data") && !listResult.isNull("data")) {
             JSONArray sso = listResult.getJSONObject("data").getJSONArray("sso");
             for (int i = 0; i < sso.length(); i++) {
-                NetWorkUtil.post(sso.getString(i), "");
+                //SSO 通知只需触发请求不读响应，但 body 不关闭连接就一直被占用，积累后拖慢连接池
+                try (Response ignored = NetWorkUtil.post(sso.getString(i), "")) {
+                }
             }
         }
     }
@@ -184,8 +186,8 @@ public class LoginApi {
 
         //返回体里的url需要访问一次才能触发Set-Cookie落盘
         if (loginData != null && loginData.has("url")) {
-            try {
-                NetWorkUtil.get(loginData.optString("url"));
+            try (Response ignored = NetWorkUtil.get(loginData.optString("url"))) {
+                //只触发请求，响应无需读取
             } catch (Throwable ignored) {
             }
         }

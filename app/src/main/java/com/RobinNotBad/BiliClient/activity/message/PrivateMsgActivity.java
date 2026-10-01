@@ -204,6 +204,9 @@ public class PrivateMsgActivity extends BaseActivity {
     protected void onDestroy() {
         if (refreshTimer != null) refreshTimer.cancel();
         refreshTimer = null;
+        //animTimer 由聊天动画创建，不取消的话会在页面销毁后继续持有 Activity
+        if (animTimer != null) animTimer.cancel();
+        animTimer = null;
         super.onDestroy();
     }
 

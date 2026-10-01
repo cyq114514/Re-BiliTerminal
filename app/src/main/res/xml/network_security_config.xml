@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置，取代原来全局放开的 android:usesCleartextTraffic="true"。
+
+  - API 24+：全局禁止明文，仅对 B 站媒体/静态资源域放开（部分旧视频的 CDN 地址会以 http:// 返回）。
+    带 Cookie 的 API 请求全部是 https，不受影响。
+  - API < 24：平台不读本配置，走 targetSdk<28 的默认策略（允许明文），行为与原来完全一致。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">bilivideo.com</domain>
+        <domain includeSubdomains="true">bilivideo.cn</domain>
+        <domain includeSubdomains="true">akamaized.net</domain>
+        <domain includeSubdomains="true">hdslb.com</domain>
+        <domain includeSubdomains="true">bilibili.com</domain>
+    </domain-config>
+</network-security-config>
