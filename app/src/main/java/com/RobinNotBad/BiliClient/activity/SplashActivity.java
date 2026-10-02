@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.api.AppInfoApi;
 import com.RobinNotBad.BiliClient.api.CookieRefreshApi;
 import com.RobinNotBad.BiliClient.api.CookiesApi;
+import com.RobinNotBad.BiliClient.util.AccountManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
@@ -186,6 +187,8 @@ public class SplashActivity extends Activity {
                     String refreshCsrf = CookieRefreshApi.getRefreshCsrf(correspondPath);
                     if (CookieRefreshApi.refreshCookie(refreshCsrf)) {
                         MsgUtil.showMsg("Cookies已刷新");
+                        //多账号：刷新后的 cookie 同步回账号列表快照，否则切走再切回会拿到旧凭证
+                        CenterThreadPool.run(AccountManager::saveCurrentAccount);
                     } else {
                         MsgUtil.showMsgLong("登录信息过期，请重新登录！");
                         resetLogin();

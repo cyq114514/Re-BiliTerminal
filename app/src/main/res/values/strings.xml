@@ -207,6 +207,7 @@
     <string name="pagename_default">页面标题</string>
     <string name="pagename_loading">加载中……</string>
     <string name="pagename_catch">Re：哔哩终端崩溃了</string>
+    <string name="pagename_account_switch">账号切换</string>
     <string name="pagename_live_info">直播详情</string>
     <string name="pagename_copy">复制</string>
     <string name="pagename_creative_center">创作中心</string>

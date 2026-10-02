@@ -235,6 +235,11 @@
             android:label="介绍"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.login.AccountSwitchActivity"
+            android:exported="false"
+            android:label="账号切换"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.login.SpecialLoginActivity"
             android:exported="false"
             android:label="特殊登录"

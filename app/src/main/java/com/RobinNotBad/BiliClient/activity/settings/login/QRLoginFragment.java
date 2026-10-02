@@ -22,6 +22,7 @@ import com.RobinNotBad.BiliClient.activity.SplashActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.api.CookiesApi;
 import com.RobinNotBad.BiliClient.api.LoginApi;
+import com.RobinNotBad.BiliClient.util.AccountManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -231,6 +232,9 @@ public class QRLoginFragment extends Fragment {
                                 } catch (Throwable ignored) {
                                 }
                             }
+
+                            //多账号：凭证全部落盘后快照进账号列表（内部有网络请求，丢到线程池避免拖慢跳转）
+                            CenterThreadPool.run(AccountManager::saveCurrentAccount);
 
                             startActivity(new Intent(requireContext(), SplashActivity.class));
 

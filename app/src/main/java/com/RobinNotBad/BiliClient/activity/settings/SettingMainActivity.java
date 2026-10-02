@@ -9,6 +9,7 @@ import android.view.View;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
+import com.RobinNotBad.BiliClient.activity.settings.login.AccountSwitchActivity;
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity;
 import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity;
 import com.RobinNotBad.BiliClient.api.AppInfoApi;
@@ -40,10 +41,16 @@ public class SettingMainActivity extends InstanceActivity {
                 startActivity(intent);
             });
 
+            //账号切换
+            MaterialCardView accountSwitch = findViewById(R.id.account_switch);
+            accountSwitch.setOnClickListener(view ->
+                    startActivity(new Intent(this, AccountSwitchActivity.class)));
+
             //登录
             MaterialCardView login = findViewById(R.id.login);
             if (SharedPreferencesUtil.getLong("mid", 0) == 0) {
                 login_cookie.setVisibility(View.GONE);
+                accountSwitch.setVisibility(View.GONE);
                 login.setVisibility(View.VISIBLE);
                 login.setOnClickListener(view -> {
                     Intent intent = new Intent();
