@@ -43,6 +43,9 @@ public class DynamicActivity extends RefreshMainActivity {
     private DynamicAdapter dynamicAdapter;
     private List<DynamicApi.UpInfo> recentUpList;
     private long offset = 0;
+    //代际守卫：刷新时自增，在途的加载更多请求凭代际整体作废（含 offset 回写），
+    //否则切类型/刷新期间旧请求会把旧页游标写回 offset、旧内容塞进新列表
+    private int loadGeneration = 0;
     private boolean firstRefresh = true;
     private String type = "all";
     //minSdk<30 不能用 Map.of，改静态块构建
@@ -227,8 +230,12 @@ public class DynamicActivity extends RefreshMainActivity {
         if (firstRefresh) {
             dynamicList = new ArrayList<>();
         } else {
-            offset = 0;
-            bottom = false;
+            //与 addDynamic 的 offset 回写互斥：代际先自增再复位游标，旧请求的回写会被代际校验拦下
+            synchronized (this) {
+                loadGeneration++;
+                offset = 0;
+                bottom = false;
+            }
             dynamicList.clear();
             dynamicAdapter.notifyDataSetChanged();
         }
@@ -244,14 +251,23 @@ public class DynamicActivity extends RefreshMainActivity {
     @SuppressLint("NotifyDataSetChanged")
     private void addDynamic(String type, boolean refresh) {
         Log.e("debug", "加载下一页");
+        final int myGeneration = loadGeneration;
         CenterThreadPool.run(() -> {
             try {
                 List<Dynamic> list = new ArrayList<>();
-                offset = fetchPage(list, offset, type);
-                bottom = (offset == -1);
+                long newOffset = fetchPage(list, offset, type);
+                //刷新/切类型已发生：旧页请求整体丢弃，也不回写游标
+                if (myGeneration != loadGeneration) return;
+                synchronized (DynamicActivity.this) {
+                    //锁内复核：与 refreshDynamic 的 offset=0 复位互斥，防止过期游标后写覆盖
+                    if (myGeneration != loadGeneration) return;
+                    offset = newOffset;
+                    bottom = (offset == -1);
+                }
                 setRefreshing(false);
 
                 runOnUiThread(() -> {
+                    if (myGeneration != loadGeneration) return;
                     dynamicList.addAll(list);
                     if (firstRefresh) {
                         firstRefresh = false;
@@ -270,7 +286,7 @@ public class DynamicActivity extends RefreshMainActivity {
                 });
 
             } catch (Exception e) {
-                loadFail(e);
+                if (myGeneration == loadGeneration) loadFail(e);
             }
         });
     }

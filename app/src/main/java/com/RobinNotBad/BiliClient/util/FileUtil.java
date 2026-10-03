@@ -88,9 +88,11 @@ public class FileUtil {
 
         try {
             File nomedia = new File(path, ".nomedia");
-            if (SharedPreferencesUtil.getBoolean("save_ban_gallery", true) && !nomedia.exists())
-                nomedia.createNewFile();
-            else if (nomedia.exists()) nomedia.delete();
+            //此前 else-if 顺序写反：设置开启且 .nomedia 已存在时会走进 else 分支把文件删掉，
+            //默认开启的"不进相册"实际处于"建了又删"的震荡态，相册扫描可能捡到下载的视频
+            if (SharedPreferencesUtil.getBoolean("save_ban_gallery", true)) {
+                if (!nomedia.exists()) nomedia.createNewFile();
+            } else if (nomedia.exists()) nomedia.delete();
         } catch (Exception ignored) {
         }
         return path;
@@ -124,7 +126,8 @@ public class FileUtil {
                 .replace("<", "＜")
                 .replace(">", "＞")
                 .replace("/", "／")
-                .replace("\\", "＼");    //文件名里不能包含非法字符
+                .replace("\\", "＼")
+                .replace("..", "．");    //服务器返回的标题进目录名，防路径穿越到下载根目录之外
     }
 
     public static String getFileNameFromLink(String link) {

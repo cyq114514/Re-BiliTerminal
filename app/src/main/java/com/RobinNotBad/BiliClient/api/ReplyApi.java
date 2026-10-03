@@ -313,7 +313,8 @@ public class ReplyApi {
     public static Pair<Integer, Reply> sendReply(long oid, long root, long parent, String text, int type) throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/v2/reply/add";
         String arg = "oid=" + oid + "&type=" + type + (root == 0 ? "" : ("&root=" + root + "&parent=" + parent))
-                + "&message=" + text + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+                //参数值必须编码：评论含 &/+/% 时裸拼接会截断或改写参数
+                + "&message=" + NetWorkUtil.urlEncode(text) + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
         JSONObject result = new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string());
         int code = result.optInt("code", -1);
         JSONObject data = result.optJSONObject("data");

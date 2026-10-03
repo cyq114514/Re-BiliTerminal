@@ -91,7 +91,7 @@ public class PlayerDanmuClientListener extends WebSocketListener {
             seq++;
 
             System.arraycopy(data, 0, packet, headerSize, data.length);
-            Log.d("BiliClient", "getPackage totalLen=" + totalSize + ", data=" + new String(data) + ", result=" + ByteString.of(packet).hex());
+            //不打印包内容：认证包（action=7）含直播间 token/key，且原生 Log 不受日志开关控制
             return packet;
         }
 

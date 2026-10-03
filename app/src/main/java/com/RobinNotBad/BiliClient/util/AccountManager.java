@@ -173,6 +173,9 @@ public class AccountManager {
         if (account == null || !account.isValid()) return;
 
         synchronized (lock) {
+            //先自增账号代际：切号瞬间在途的旧账号请求返回后，其 Set-Cookie 会被拦截器按代际丢弃，
+            //不再把旧账号的 Cookie 合并进新账号的会话
+            NetWorkUtil.bumpAccountGeneration();
             SharedPreferences.Editor editor = SharedPreferencesUtil.sharedPreferences.edit();
             editor.putLong(SharedPreferencesUtil.mid, account.mid);
             editor.putString(SharedPreferencesUtil.cookies, account.cookies);

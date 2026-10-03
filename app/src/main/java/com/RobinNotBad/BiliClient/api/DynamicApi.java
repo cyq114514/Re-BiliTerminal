@@ -405,7 +405,7 @@ public class DynamicApi {
     }
 
     public static long mentionAtFindUser(String name) throws IOException, JSONException {
-        String url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/mention/search?keyword=" + name;
+        String url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/mention/search?keyword=" + NetWorkUtil.urlEncode(name);
         String json = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders).toString();
         MentionData data = GsonUtil.fromJson(json, MentionData.class);
         if (data == null || data.data == null || data.data.groups == null) return -1;

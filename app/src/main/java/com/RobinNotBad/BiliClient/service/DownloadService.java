@@ -128,6 +128,12 @@ public class DownloadService extends Service {
         Logu.d("onStartCommand");
         startForeground(FOREGROUND_ID, statusBuilder.build());
 
+        //START_STICKY 进程级重启时 intent 为 null：static 标记已复位，若不恢复 started，
+        //下面的 worker 会立即空转退出，队列永久卡在 downloading 且服务空占前台
+        if (serviceIntent == null) {
+            started = true;
+        }
+
         exitCode = ERR_UNKNOWN;
         startNotifyProgress();
 
@@ -148,9 +154,11 @@ public class DownloadService extends Service {
                     // 如果是仅音频下载，使用DASH格式获取音频流
                     if (section.isAudioOnly()) {
                         PlayerApi.getVideoDash(data);
-                        url_audio = section.audioUrl != null && !section.audioUrl.isEmpty()
-                                ? section.audioUrl
-                                : data.audioUrl;
+                        //优先用刚拉取的新链接：数据库里持久化的 URL 数小时就过期，
+                        //重试/延迟下载的音频必然 403
+                        url_audio = data.audioUrl != null && !data.audioUrl.isEmpty()
+                                ? data.audioUrl
+                                : section.audioUrl;
                         url_video = null; // 仅音频模式不需要视频
                     } else {
                         PlayerApi.getVideo(data, true);
@@ -188,6 +196,7 @@ public class DownloadService extends Service {
                             if (!file_sign.exists() && !file_sign.createNewFile()) {
                                 failed = true;
                                 exitCode = ERR_FILE;
+                                setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                 continue;
                             }
 
@@ -196,6 +205,7 @@ public class DownloadService extends Service {
                             if (result != NORMAL) {
                                 failed = true;
                                 exitCode = result;
+                                setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                 continue;
                             }
 
@@ -209,6 +219,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             }
@@ -220,6 +231,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             } else {
@@ -228,6 +240,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             }
@@ -240,6 +253,7 @@ public class DownloadService extends Service {
                             if (!path_page.exists() && !path_page.mkdirs()) {
                                 failed = true;
                                 exitCode = ERR_FILE;
+                                setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                 continue;
                             }
 
@@ -247,6 +261,7 @@ public class DownloadService extends Service {
                             if (!file_sign.exists() && !file_sign.createNewFile()) {
                                 failed = true;
                                 exitCode = ERR_FILE;
+                                setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                 continue;
                             }
 
@@ -257,6 +272,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             }
@@ -271,6 +287,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             }
@@ -282,6 +299,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             } else {
@@ -290,6 +308,7 @@ public class DownloadService extends Service {
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
                             }
@@ -540,20 +559,20 @@ public class DownloadService extends Service {
             exitMessage = "下载服务已退出";
 
         Logu.d("退出下载服务");
-        if (section != null) {
-            final long id = section.id;
-            final File folder = section.getPath();
-            section = null;
+        //无论是否还有未完成条目都要发总结通知：worker 正常收尾时会把 section 置 null，
+        //此前只有 section != null 才通知，成功/失败汇总全部丢失
+        final DownloadSection pendingSection = section;
+        section = null;
 
-            CenterThreadPool.run(() -> {
-                notifyExit(exitMessage);
-                if (exitCode != NORMAL) {
-                    setState(id, "none");
-                    FileUtil.deleteFolder(folder);
-                }
-                refreshDownloadList();
-            });
-        }
+        CenterThreadPool.run(() -> {
+            if (pendingSection != null && exitCode != NORMAL) {
+                //中途退出：残留条目恢复为可重试状态并清理半成品
+                setState(pendingSection.id, "none");
+                FileUtil.deleteFolder(pendingSection.getPath());
+            }
+            notifyExit(exitMessage);
+            refreshDownloadList();
+        });
 
         super.onDestroy();
     }
@@ -595,9 +614,16 @@ public class DownloadService extends Service {
             DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
             database = helper.getReadableDatabase();
 
-            if (firstDown >= 0)
+            if (firstDown >= 0) {
                 cursor = database.rawQuery("select * from download where id=? limit 1",
                         new String[]{String.valueOf(firstDown)});
+                if (cursor != null && cursor.getCount() == 0) {
+                    //指定的行已被删除（如刚被用户移除）：必须回退全表查询继续队列，
+                    //否则直接 return null 让整个下载静默停止
+                    cursor.close();
+                    cursor = null;
+                }
+            }
             if (cursor == null)
                 cursor = database.rawQuery("select * from download where state!=? limit 1", new String[]{"error"});
 

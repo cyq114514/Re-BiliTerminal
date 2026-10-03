@@ -49,10 +49,13 @@ public class SearchUserFragment extends SearchFragment {
     }
 
     private void continueLoading(int page) {
+        final int myGeneration = loadGeneration;
         CenterThreadPool.run(() -> {
             Log.e("debug", "加载下一页");
             try {
                 com.google.gson.JsonElement result = SearchApi.searchType(keyword, page, "bili_user");
+                //代际守卫：过期请求整体丢弃（同 SearchVideoFragment）
+                if (myGeneration != loadGeneration) return;
                 if (result != null) {
                     if (page == 1) showEmptyView(false);
                     if (result.isJsonArray()) {
@@ -60,21 +63,23 @@ public class SearchUserFragment extends SearchFragment {
                         SearchApi.getUsersFromSearchResult(new org.json.JSONArray(result.getAsJsonArray().toString()), list);
                         if (list.size() == 0) setBottom(true);
                         CenterThreadPool.runOnUiThread(() -> {
+                        if (myGeneration != loadGeneration) return;
                         int lastSize = userInfoList.size();
                         userInfoList.addAll(list);
                         userInfoAdapter.notifyItemRangeInserted(lastSize, userInfoList.size() - lastSize);
                         });
                     } else setBottom(true);
                 } else setBottom(true);
+                setRefreshing(false);
             } catch (Exception e) {
-                loadFail(e);
+                if (myGeneration == loadGeneration) loadFail(e);
             }
-            setRefreshing(false);
         });
     }
 
     public void refreshInternal() {
         CenterThreadPool.runOnUiThread(() -> {
+            loadGeneration++;   //清空前先作废在途的旧页请求
             page = 1;
             if (this.userInfoAdapter == null)
                 this.userInfoAdapter = new UserListAdapter(this.requireContext(), this.userInfoList);

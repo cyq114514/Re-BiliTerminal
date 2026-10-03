@@ -1,7 +1,6 @@
 package com.RobinNotBad.BiliClient.util;
 
 import android.content.Context;
-import android.util.Log;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.BuildConfig;
@@ -56,13 +55,9 @@ public class ToolsUtil {
         return BuildConfig.BETA;
     }
 
+    /**把 ARGB 颜色转成弹幕协议的 RGB888 整数（白色应为 16777215）。*/
     public static int getRgb888(int color) {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append((color >> 16) & 0xff);
-        stringBuilder.append((color >> 8) & 0xff);
-        stringBuilder.append((color) & 0xff);
-        Log.e("颜色", stringBuilder.toString());
-        return Integer.parseInt(stringBuilder.toString());
+        return ((color >> 16) & 0xff) << 16 | ((color >> 8) & 0xff) << 8 | (color & 0xff);
     }
 
 }

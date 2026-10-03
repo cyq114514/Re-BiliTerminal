@@ -933,6 +933,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
     }
 
+    /**B 站媒体域的 http:// 播放地址升级为 https；非 B 站域或已是 https 的原样返回。*/
+    private static String upgradeMediaUrlToHttps(String url) {
+        if (url == null) return null;
+        okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+        if (parsed == null || parsed.isHttps()) return url;
+        if (NetWorkUtil.isBilibiliHost(parsed.host()))
+            return parsed.newBuilder().scheme("https").build().toString();
+        return url;
+    }
+
     private void MPPrepare(String nowurl) {
         ijkPlayer.setOnPreparedListener(this);
         playerError = false;   //任何新的载入（切P/切清晰度/重试）都清除错误态
@@ -944,10 +954,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             runOnUiThread(() -> loading_text0.setText("载入视频中"));
         try {
             if (isOnlineVideo) {
+                //ijkplayer 走 native 网络栈，不受 networkSecurityConfig 约束：http 播放地址会以明文拉流，
+                //而请求头带着全量登录 Cookie，同网段嗅探即可截获 SESSDATA。B 站媒体 CDN（bilivideo/
+                //bilivideo.cn/akamai 镜像）均支持 https，这里统一升级，老视频返回的 http:// 地址不再明文传输
+                String playUrl = upgradeMediaUrlToHttps(nowurl);
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Referer", "https://www.bilibili.com/");
                 headers.put("Cookie", CookieGenerator.getCookieString(true));
-                ijkPlayer.setDataSource(nowurl, headers);
+                ijkPlayer.setDataSource(playUrl, headers);
             } else
                 ijkPlayer.setDataSource(nowurl);
         } catch (IOException e) {
@@ -2133,7 +2147,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         reportProgressNow(false);
     }
 
-    WebSocket liveWebSocket = null;
+    //后台线程赋值、主线程 onDestroy 读取，volatile 保证关闭竞态判断的可见性
+    volatile WebSocket liveWebSocket = null;
+
+    //换源竞态守卫：连续切 P/切清晰度时，先发出的请求可能后返回；
+    //回调凭 token 判断自己是否仍是"最新一次切换"，过期请求整体放弃，避免旧响应覆盖新界面
+    private volatile int switchToken = 0;
 
     @Override
     protected void onDestroy() {
@@ -2266,7 +2285,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 listener.key = data.getString("token");
                 listener.playerActivity = this;
 
-                liveWebSocket = okHttpClient.newWebSocket(request, listener);
+                //销毁竞态：进直播间立刻退出时，onDestroy 执行时连接往往还没建立（liveWebSocket 仍为 null，
+                //无人关闭），连接随后才成功——赋值后必须立刻复核 destroyed，否则心跳线程与整个 Activity
+                //连同 View 树一起泄漏，native 播放器已释放但 ws 持续收包
+                WebSocket webSocket = okHttpClient.newWebSocket(request, listener);
+                liveWebSocket = webSocket;
+                if (destroyed) {
+                    webSocket.close(1000, "");
+                    if (liveWebSocket == webSocket) liveWebSocket = null;
+                    return;
+                }
                 // okHttpClient.dispatcher().executorService().shutdown();
             } catch (Exception e) {
                 MsgUtil.showMsg("直播弹幕连接失败");
@@ -2895,6 +2923,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         MsgUtil.showMsg("切换到 P" + (pageIndex + 1));
 
+        final int myToken = ++switchToken;
+
         CenterThreadPool.run(() -> {
             try {
                 PlayerData playerData = new PlayerData();
@@ -2915,7 +2945,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 }
 
                 runOnUiThread(() -> {
-                    if (destroyed)
+                    if (destroyed || myToken != switchToken)
                         return;
 
                     //先摘掉播放状态再释放播放器：250ms 进度定时器若在 release 期间读到已释放的实例，
@@ -2979,7 +3009,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     setDisplay();
 
                     layout_control.postDelayed(() -> CenterThreadPool.run(() -> {
-                        if (destroyed)
+                        if (destroyed || myToken != switchToken)
                             return;
 
                         runOnUiThread(() -> {
@@ -3066,6 +3096,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         MsgUtil.showMsg("正在切换清晰度...");
 
+        final int myToken = ++switchToken;
+
         CenterThreadPool.run(() -> {
             try {
                 PlayerData playerData = new PlayerData();
@@ -3081,7 +3113,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 PlayerApi.getVideo(playerData, false);
 
                 runOnUiThread(() -> {
-                    if (destroyed)
+                    if (destroyed || myToken != switchToken)
                         return;
 
                     final long currentPosition = video_now;

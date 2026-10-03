@@ -44,10 +44,14 @@ public class SearchVideoFragment extends SearchFragment {
     }
 
     private void continueLoading(int page) {
+        final int myGeneration = loadGeneration;
         CenterThreadPool.run(() -> {
             Log.e("debug", "加载下一页");
             try {
                 JSONArray result = SearchApi.search(keyword, page);
+                //代际守卫：刷新/换关键词后，旧关键词的迟到请求在此整体丢弃，
+                //不把旧内容 addAll 进新列表，也不许它动 empty/refreshing/底部状态
+                if (myGeneration != loadGeneration) return;
                 if (result != null) {
                     if (page == 1) showEmptyView(false);
                     ArrayList<VideoCard> list = new ArrayList<>();
@@ -55,21 +59,23 @@ public class SearchVideoFragment extends SearchFragment {
                     Log.d("debug-size", String.valueOf(list.size()));
                     if (list.size() == 0) setBottom(true);
                     else CenterThreadPool.runOnUiThread(() -> {
+                        if (myGeneration != loadGeneration) return;
                         int lastSize = videoCardList.size();
                         videoCardList.addAll(list);
                         videoCardAdapter.notifyItemRangeInserted(lastSize, videoCardList.size() - lastSize);
                     });
                 } else setBottom(true);
+                setRefreshing(false);
             } catch (Exception e) {
                 e.printStackTrace();
-                loadFail(e);
+                if (myGeneration == loadGeneration) loadFail(e);
             }
-            setRefreshing(false);
         });
     }
 
     public void refreshInternal() {
         CenterThreadPool.runOnUiThread(() -> {
+            loadGeneration++;   //清空前先作废在途的旧页请求
             page = 1;
             if (this.videoCardAdapter == null)
                 this.videoCardAdapter = new VideoCardAdapter(this.requireContext(), this.videoCardList);

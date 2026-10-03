@@ -43,10 +43,13 @@ public class SearchBangumiFragment extends SearchFragment {
     }
 
     private void continueLoading(int page) {
+        final int myGeneration = loadGeneration;
         CenterThreadPool.run(() -> {
             Log.e("debug", "加载下一页");
             try {
                 com.google.gson.JsonElement result = SearchApi.searchType(keyword, page, "media_bangumi");
+                //代际守卫：过期请求整体丢弃（同 SearchVideoFragment）
+                if (myGeneration != loadGeneration) return;
                 if (result != null) {
                     if (page == 1) showEmptyView(false);
                     if (result.isJsonArray()) {
@@ -54,6 +57,7 @@ public class SearchBangumiFragment extends SearchFragment {
                         SearchApi.getBangumiFromSearchResult(new JSONArray(result.getAsJsonArray().toString()), list);
                         if (list.size() == 0) setBottom(true);
                         else CenterThreadPool.runOnUiThread(() -> {
+                            if (myGeneration != loadGeneration) return;
                             //列表只在主线程变更，避免 RecyclerView bind 时读到被后台线程修改的数据
                             int lastSize = bangumiCardList.size();
                             bangumiCardList.addAll(list);
@@ -61,15 +65,17 @@ public class SearchBangumiFragment extends SearchFragment {
                         });
                     } else setBottom(true);
                 } else setBottom(true);
+                setRefreshing(false);
             } catch (Exception e) {
                 report(e);
+                if (myGeneration == loadGeneration) setRefreshing(false);
             }
-            setRefreshing(false);
         });
     }
 
     public void refreshInternal() {
         CenterThreadPool.runOnUiThread(() -> {
+            loadGeneration++;   //清空前先作废在途的旧页请求
             page = 1;
             if (this.bangumiCardAdapter == null)
                 this.bangumiCardAdapter = new VideoCardAdapter(this.requireContext(), this.bangumiCardList);

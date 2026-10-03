@@ -25,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 import java.util.zip.Inflater;
 
 import javax.net.ssl.SSLSocketFactory;
@@ -72,7 +73,13 @@ public class NetWorkUtil {
                         String location = response.header("Location");
                         boolean isSslRedirect = false;
                         try {
-                            isSslRedirect = location != null && !request.isHttps() && new URI(location).getScheme().equalsIgnoreCase("https") && request.url().host().equalsIgnoreCase(new URI(location).getHost());
+                            //相对路径 Location 的 getScheme()/getHost() 为 null，必须判空后再比较，
+                            //否则 NPE 会从拦截器直接炸掉整个请求
+                            URI redirectUri = location != null ? new URI(location) : null;
+                            String scheme = redirectUri != null ? redirectUri.getScheme() : null;
+                            String redirectHost = redirectUri != null ? redirectUri.getHost() : null;
+                            isSslRedirect = scheme != null && !request.isHttps() && scheme.equalsIgnoreCase("https")
+                                    && request.url().host().equalsIgnoreCase(redirectHost);
                         } catch (URISyntaxException ignored) {
                         }
 
@@ -81,10 +88,10 @@ public class NetWorkUtil {
                                 handler.handleRedirect(location);
                             } else {
                                 HttpUrl target = HttpUrl.parse(location);
-                                //手动跟跳必须有安全边界：目标要在 B 站域名白名单内才携带请求头跟随，
-                                //否则原样返回（绝不把带 Cookie 的请求转发给任意域名）；
+                                //手动跟跳必须有安全边界：目标必须在 B 站域名白名单内且为 https 才携带请求头跟随，
+                                //否则原样返回（绝不把带 Cookie 的请求转发给任意域名，也绝不跟跳到明文 http）；
                                 //跳数通过 request tag 累计，防恶意循环重定向打爆调用栈
-                                if (target == null || !isBilibiliHost(target.host())) return response;
+                                if (target == null || !target.isHttps() || !isBilibiliHost(target.host())) return response;
                                 int hops = request.tag(Integer.class) != null ? request.tag(Integer.class) : 0;
                                 if (hops >= 5) return response;
                                 Request newRequest = request.newBuilder()
@@ -175,13 +182,16 @@ public class NetWorkUtil {
         for (int i = 0; i < headers.size(); i += 2)
             requestBuilder.addHeader(headers.get(i), headers.get(i + 1));
         if (redirectHandler != null) requestBuilder.tag(RedirectHandler.class, redirectHandler);
-        Request request = requestBuilder.build();
+        Request request = requestBuilder
+                //记录发出时的账号代际，切号后到达的旧账号响应不再回写 Cookie（见 saveCookiesFromResponse）
+                .tag(Long.class, accountGeneration)
+                .build();
         return executeWithDoctypeRetry(client, request);
     }
 
     public static Response post(String url, String data, List<String> headers, String contentType) throws IOException {
         Logu.d("post-url", url);
-        Logu.d("post-data", data);
+        Logu.d("post-data", maskSensitiveData(data));
         OkHttpClient client = getOkHttpInstance();
         RequestBody body = RequestBody.create(MediaType.parse(contentType + "; charset=utf-8"), data);
         Request.Builder requestBuilder = new Request.Builder().url(url).post(body);
@@ -191,7 +201,10 @@ public class NetWorkUtil {
             if (key.equalsIgnoreCase("Content-Type")) val = contentType;
             requestBuilder.addHeader(key, val);
         }
-        Request request = requestBuilder.build();
+        Request request = requestBuilder
+                //记录发出时的账号代际，切号后到达的旧账号响应不再回写 Cookie（见 saveCookiesFromResponse）
+                .tag(Long.class, accountGeneration)
+                .build();
         //POST（点赞/投币/发弹幕等）不重试：弱网下服务端可能已执行成功但响应丢失，重试会造成重复动作
         return executeWithDoctypeRetry(client, request, false);
     }
@@ -354,19 +367,53 @@ public class NetWorkUtil {
         return "";
     }
 
+    /**POST body 日志脱敏：凭据类参数（表单 key=value 与 JSON "key":"..." 两种形态）一律打码。*/
+    private static final Pattern SENSITIVE_PARAM_PATTERN = Pattern.compile(
+            "(?i)(csrf|refresh_token|access_key|password|username|tel|sessdata|token|auth_code)(\\s*(?:=|\":\")\\s*)[^&\"]*");
+
+    public static String maskSensitiveData(String data) {
+        if (data == null) return null;
+        return SENSITIVE_PARAM_PATTERN.matcher(data).replaceAll("$1$2***");
+    }
+
+    /**
+     * 账号代际号：每次写入全局登录态（切号/登录）时自增。
+     * 请求发出时把当前代际打进 tag，响应回写 Cookie 前校验——
+     * 切号瞬间在途的旧账号响应（如旧账号的 SESSDATA 轮换 Set-Cookie）会被整体丢弃，
+     * 不再把旧账号的 Cookie 合并进新账号的会话。
+     */
+    private static volatile long accountGeneration = 0;
+
+    public static void bumpAccountGeneration() {
+        accountGeneration++;
+    }
+
     private static void saveCookiesFromResponse(Response response) {
         List<String> newCookies = response.headers("Set-Cookie");
 
         //如果没有新cookies，直接返回
         if (newCookies.isEmpty()) return;
-        String cookiesStr = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
-        ArrayList<String> oldCookies = (cookiesStr.equals("") ? new ArrayList<>() : new ArrayList<>(Arrays.asList(cookiesStr.split("; "))));  //转list
+        //旧账号时代发出的请求，其 Set-Cookie 属于旧账号会话，切号后到达必须丢弃
+        Long requestGeneration = response.request().tag(Long.class);
+        if (requestGeneration != null && requestGeneration != accountGeneration) {
+            Logu.d("cookie-skip", "stale generation, response discarded");
+            return;
+        }
+
+        synchronized (NetWorkUtil.class) {
+            String cookiesStr = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
+            ArrayList<String> oldCookies = (cookiesStr.equals("") ? new ArrayList<>() : new ArrayList<>(Arrays.asList(cookiesStr.split("; "))));  //转list
 
             for (String newCookie : newCookies) {  //对每一条新cookie遍历
 
                 Cookies cookies = new Cookies(newCookie);
                 if (cookies.containsKey("Domain")) {
-                    if (!cookies.get("Domain").endsWith("bilibili.com"))
+                    String domain = cookies.get("Domain");
+                    String d = domain == null ? "" : domain.toLowerCase(Locale.ROOT);
+                    if (d.startsWith(".")) d = d.substring(1);
+                    //域属性校验必须带点后缀匹配：endsWith("bilibili.com") 会把 evilbilibili.com 放进来，
+                    //浏览器语义是"该域及其子域"，等价于 d.equals("bilibili.com") || d.endsWith(".bilibili.com")
+                    if (!(d.equals("bilibili.com") || d.endsWith(".bilibili.com")))
                         continue;
                 } else if (!isBilibiliHost(response.request().url().host())) {
                     //无 Domain 属性的 Set-Cookie 按响应来源校验：
@@ -384,33 +431,34 @@ public class NetWorkUtil {
                 //不打印 cookie 内容（含登录凭证），只记键名
                 Logu.d("newCookie", newCookie.substring(0, Math.max(key.length() - 1, 0)));
 
-            boolean added = false;
-            for (int i = 0; i < oldCookies.size(); i++) {  //查找旧cookie表有没有
-                String oldCookie = oldCookies.get(i);
-                //必须前缀匹配：contains会把 sid= 误匹配到 b_lsid= 之类的项，导致互相覆盖
-                if (oldCookie.startsWith(key)) {
-                    oldCookies.set(i, newCookie);    //有的话直接换掉
-                    added = true;
-                    break;
+                boolean added = false;
+                for (int i = 0; i < oldCookies.size(); i++) {  //查找旧cookie表有没有
+                    String oldCookie = oldCookies.get(i);
+                    //必须前缀匹配：contains会把 sid= 误匹配到 b_lsid= 之类的项，导致互相覆盖
+                    if (oldCookie.startsWith(key)) {
+                        oldCookies.set(i, newCookie);    //有的话直接换掉
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added) {
+                    oldCookies.add(newCookie);  //没有就加项
                 }
             }
-            if (!added) {
-                oldCookies.add(newCookie);  //没有就加项
-            }
-        }
 
-        StringBuilder setCookies = new StringBuilder();
-        for (String setCookie : oldCookies) {
-            setCookies.append(setCookie).append("; ");
-        }
-        //如果一次setCookies都没有，就不要存了， 因为是个空字符串
-        if (setCookies.length() >= 2) {
-            //不打印完整 cookie 串（含 SESSDATA 等登录凭证）
-            Logu.d("save-result", "cookie jar updated, " + oldCookies.size() + " items");
-            SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, setCookies.substring(0, setCookies.length() - 2));
-            //只重建请求头，不触发 ensureCookies：本方法跑在 OkHttp 拦截器线程上，
-            //嵌套网络请求会在弱网下递归占用请求线程并拖慢所有接口
-            updateWebHeaders();
+            StringBuilder setCookies = new StringBuilder();
+            for (String setCookie : oldCookies) {
+                setCookies.append(setCookie).append("; ");
+            }
+            //如果一次setCookies都没有，就不要存了， 因为是个空字符串
+            if (setCookies.length() >= 2) {
+                //不打印完整 cookie 串（含 SESSDATA 等登录凭证）
+                Logu.d("save-result", "cookie jar updated, " + oldCookies.size() + " items");
+                SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, setCookies.substring(0, setCookies.length() - 2));
+                //只重建请求头，不触发 ensureCookies：本方法跑在 OkHttp 拦截器线程上，
+                //嵌套网络请求会在弱网下递归占用请求线程并拖慢所有接口
+                updateWebHeaders();
+            }
         }
     }
 
@@ -518,6 +566,16 @@ public class NetWorkUtil {
         ArrayList<String> updated = new ArrayList<>(webHeaders);
         updated.set(1, CookieGenerator.getCookieString(true));
         webHeaders = updated;
+    }
+
+    /**对 URL 参数值做表单编码；null 返回空串，编码失败原样返回（不应发生）。*/
+    public static String urlEncode(String value) {
+        if (value == null) return "";
+        try {
+            return URLEncoder.encode(value, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return value;
+        }
     }
 
     public static class FormData {

@@ -295,7 +295,9 @@ public class UserInfoApi {
     }
 
     public static int getUserVideos(long mid, int page, String searchKeyword, List<VideoCard> videoList) throws IOException, JSONException {
-        String url = "https://api.bilibili.com/x/space/wbi/arc/search?keyword=" + searchKeyword + "&mid=" + mid + "&order_avoided=true&order=pubdate&pn=" + page + "&ps=40&tid=0&web_location=333.999";
+        //keyword 必须在签名前先编码：含 &/= 的关键词会破坏 query 结构并使 WBI 签名失配；
+        //服务端校验的就是编码后的参数串，与 web 端行为一致
+        String url = "https://api.bilibili.com/x/space/wbi/arc/search?keyword=" + NetWorkUtil.urlEncode(searchKeyword) + "&mid=" + mid + "&order_avoided=true&order=pubdate&pn=" + page + "&ps=40&tid=0&web_location=333.999";
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(DmImgParamUtil.getDmImgParamsUrl(url))).toString();
         ApiResponse<UserVideoData> resp = GsonUtil.fromJson(json,
                 new com.google.gson.reflect.TypeToken<ApiResponse<UserVideoData>>(){}.getType());

@@ -24,13 +24,17 @@ public class CustomGlideModule extends AppGlideModule {
     @Override
     public void registerComponents(@NonNull Context context, @NonNull Glide glide, @NonNull Registry registry) {
         OkHttpClient.Builder builder = NetWorkUtil.setOkHttpSsl(new OkHttpClient.Builder());
+        //凭据最小化（修复 P0：此前图片管线无域名过滤，把全量登录 Cookie 发往任意图片域）：
+        //- 应用拦截器：请求发出前按目标域过滤——B 站域带完整请求头，外站图片（动态外链、图片查看器）只留 UA
+        //- 网络拦截器：每个连接跳兜底一次——okhttp 3.x 跨主机重定向会保留自定义 Cookie 头，
+        //  这里对非 B 站跳强制剥离，对 B 站跳重设为当前全局请求头，堵住重定向把 Cookie 带出域的路径
         builder.addInterceptor(chain -> {
-            ArrayList<String> headers = NetWorkUtil.webHeaders;
-            Request.Builder requestBuilder = chain.request().newBuilder();
-            for (int i = 0; i < headers.size(); i += 2)
-                requestBuilder.addHeader(headers.get(i), headers.get(i + 1));
-
-            return chain.proceed(requestBuilder.build());
+            Request request = chain.request();
+            return chain.proceed(applyGlideHeaders(request).build());
+        });
+        builder.addNetworkInterceptor(chain -> {
+            Request request = chain.request();
+            return chain.proceed(applyGlideHeaders(request).build());
         });
 
         registry.replace(GlideUrl.class, InputStream.class, new OkHttpUrlLoader.Factory(builder
@@ -38,5 +42,22 @@ public class CustomGlideModule extends AppGlideModule {
                 .pingInterval(8, TimeUnit.SECONDS)
                 .connectTimeout(8, TimeUnit.SECONDS)
                 .readTimeout(16, TimeUnit.SECONDS).build()));
+    }
+
+    @NonNull
+    private static Request.Builder applyGlideHeaders(@NonNull Request request) {
+        Request.Builder requestBuilder = request.newBuilder();
+        if (NetWorkUtil.isBilibiliHost(request.url().host())) {
+            ArrayList<String> headers = NetWorkUtil.webHeaders;
+            for (int i = 0; i < headers.size(); i += 2) {
+                String key = headers.get(i);
+                //set 覆盖而非 add：跨跳重定向残留的旧 Cookie 头会被当前全局值整体替换
+                requestBuilder.header(key, headers.get(i + 1));
+            }
+        } else {
+            //外站域名绝不携带 B 站 Cookie 与来源信息，只保留 UA（部分站点拒绝无 UA 的请求）
+            requestBuilder.header("User-Agent", NetWorkUtil.USER_AGENT_WEB);
+        }
+        return requestBuilder;
     }
 }

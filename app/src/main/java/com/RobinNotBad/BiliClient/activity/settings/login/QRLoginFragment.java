@@ -44,7 +44,8 @@ public class QRLoginFragment extends Fragment {
     private TextView scanStat;
     Bitmap QRImage;
     Timer timer;
-    boolean need_refresh = false;
+    //UI 线程点击监听与轮询线程都会读写，volatile 保证置位对点击监听立即可见
+    volatile boolean need_refresh = false;
     boolean from_setup = false;
     int qrScale = 0;
 
@@ -140,9 +141,11 @@ public class QRLoginFragment extends Fragment {
                 //CookiesApi.activeCookieInfo();
 
                 CenterThreadPool.runOnUiThread(() -> {
-                    Log.e("debug-image", QRImage.getWidth() + "," + QRImage.getHeight());
+                    Logu.d("debug-image", QRImage.getWidth() + "," + QRImage.getHeight());
                     qrImageView.setImageBitmap(QRImage);
                     startLoginDetect();
+                    //新二维码已就位：恢复点击为"缩放"语义；失败路径保持 true 以便重试
+                    need_refresh = false;
                 });
             } catch (IOException e) {
                 CenterThreadPool.runOnUiThread(() -> {
@@ -190,9 +193,10 @@ public class QRLoginFragment extends Fragment {
 
                     String str = response.body().string();
                     JSONObject loginJson = new JSONObject(str);
-                    Logu.v("login_state", str);
 
                     int code = loginJson.getJSONObject("data").getInt("code");
+                    //只打印状态码不打印响应体：成功响应含 refresh_token（长期凭证），不能进日志
+                    Logu.v("login_state", "code=" + code);
                     switch (code) {
                         case 86090:
                             CenterThreadPool.runOnUiThread(() -> scanStat.setText("已扫描，请在手机上点击登录"));
@@ -203,6 +207,9 @@ public class QRLoginFragment extends Fragment {
                         case 86038:
                             CenterThreadPool.runOnUiThread(() -> {
                                 scanStat.setText("二维码已失效，点击上方重新获取");
+                                //必须置位：点击监听靠这个标记区分"重新获取二维码"和"缩放"，
+                                //此前从未置 true，二维码过期后永远无法在当前页刷新
+                                need_refresh = true;
                                 qrImageView.setEnabled(true);
                             });
                             this.cancel();

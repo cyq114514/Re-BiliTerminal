@@ -204,7 +204,11 @@ public class DownloadActivity extends BaseActivity {
         try {
             byte[] buf = new byte[2048];
             while (!decompresser.finished()) {
+                //数据截断/损坏时 inflate 恒返回 0 且 finished() 恒 false，不 break 会 100% CPU 死循环
+                //（与 DownloadService.decompress 的既有防护对齐，此前只修了服务那条路径）
+                if (decompresser.needsInput() || decompresser.needsDictionary()) break;
                 int i = decompresser.inflate(buf);
+                if (i == 0) break;
                 o.write(buf, 0, i);
             }
             output = o.toByteArray();

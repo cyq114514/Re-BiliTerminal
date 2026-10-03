@@ -29,6 +29,9 @@ public class SearchFragment extends Fragment {
     public String keyword;
     public boolean bottom = false;
     public int page = 1;
+    //列表代际：换关键词/刷新时自增，在途的旧请求凭代际整体作废，
+    //避免旧关键词的迟到响应 addAll 进新列表（此前仅 ReplyFragment 有此守卫）
+    public volatile int loadGeneration = 0;
     public long lastLoadTimestamp;
     public boolean refreshable = false;
 
@@ -161,6 +164,7 @@ public class SearchFragment extends Fragment {
     }
 
     public void update(String keyword) {
+        loadGeneration++;   //关键词变了，旧关键词的在途请求全部作废
         this.page = 1;
         this.keyword = keyword;
         this.refreshable = true;

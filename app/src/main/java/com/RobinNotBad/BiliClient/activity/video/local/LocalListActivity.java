@@ -58,7 +58,10 @@ public class LocalListActivity extends InstanceActivity {
 
         CenterThreadPool.run(() -> {
             runOnUiThread(() -> swipeRefreshLayout.setRefreshing(true));
-            scan(FileUtil.getVideoDownloadPath());
+            //先构建到临时列表再并入 videoList：此时 adapter 尚未挂到 UI，主线程不可能并发读
+            ArrayList<LocalVideo> initialList = new ArrayList<>(10);
+            scan(initialList, FileUtil.getVideoDownloadPath());
+            videoList.addAll(initialList);
             adapter = new LocalVideoAdapter(this, videoList);
 
             adapter.setOnLongClickListener(position -> {
@@ -87,7 +90,7 @@ public class LocalListActivity extends InstanceActivity {
         });
     }
 
-    private void scan(File folder) {
+    private void scan(ArrayList<LocalVideo> into, File folder) {
         File[] files = folder.listFiles();
         if (files == null)
             return;
@@ -121,7 +124,7 @@ public class LocalListActivity extends InstanceActivity {
                     localVideo.danmakuFileList.add(danmakuFile.toString()); // 单集视频
 
                     localVideo.calcTotalSize();
-                    videoList.add(localVideo);
+                    into.add(localVideo);
                 } else {
                     File[] pages = video.listFiles(); // 分页视频
                     if (pages != null) {
@@ -149,12 +152,11 @@ public class LocalListActivity extends InstanceActivity {
                         }
                         localVideo.calcTotalSize();
                         if (localVideo.videoFileList.size() > 0)
-                            videoList.add(localVideo);
+                            into.add(localVideo);
                     }
                 }
             }
         }
-        checkEmpty();
     }
 
     private void checkEmpty() {
@@ -173,12 +175,16 @@ public class LocalListActivity extends InstanceActivity {
         if (started)
             CenterThreadPool.run(() -> {
                 runOnUiThread(() -> swipeRefreshLayout.setRefreshing(true));
-                int oldSize = videoList.size();
-                videoList.clear();
-                scan(FileUtil.getVideoDownloadPath());
+                //后台线程直改 videoList 会与 UI 线程的 onBindViewHolder 并发读写同一 ArrayList（可崩溃），
+                //且 notifyItemRangeChanged 表达不了增删——改为后台构建新列表、主线程整体替换后全量刷新
+                ArrayList<LocalVideo> newList = new ArrayList<>(10);
+                scan(newList, FileUtil.getVideoDownloadPath());
                 runOnUiThread(() -> {
-                    adapter.notifyItemRangeChanged(1, oldSize);
+                    videoList.clear();
+                    videoList.addAll(newList);
+                    if (adapter != null) adapter.notifyDataSetChanged();
                     swipeRefreshLayout.setRefreshing(false);
+                    checkEmpty();
                 });
             });
     }

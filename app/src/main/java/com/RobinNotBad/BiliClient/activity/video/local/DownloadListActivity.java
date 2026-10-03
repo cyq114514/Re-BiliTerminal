@@ -180,9 +180,13 @@ public class DownloadListActivity extends RefreshListActivity {
                                         }
                                     }
 
-                                    File folder = delete.getPath();
-                                    if (folder != null && folder.exists()) {
-                                        FileUtil.deleteFolder(folder);
+                                    //type 脏数据（非 video_*）时 getPath 会回退到相册目录，
+                                    //不加类型校验会递归删光整个"哔哩终端"图片目录
+                                    if (delete.type != null && delete.type.contains("video")) {
+                                        File folder = delete.getPath();
+                                        if (folder != null && folder.exists()) {
+                                            FileUtil.deleteFolder(folder);
+                                        }
                                     }
 
                                     DownloadService.deleteSection(delete.id);

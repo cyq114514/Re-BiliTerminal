@@ -90,11 +90,7 @@ public class PrivateMsgApi {
                 list.add(msgObject);
 
             }
-            Log.e("", "返回msgList");
-            for (PrivateMessage i : list) {
-                Log.e("msg",
-                        i.name + "." + i.uid + "." + i.msgId + "." + i.timestamp + "." + i.content + "." + i.type);
-            }
+            //不打印私信列表：昵称、uid、私信全文属敏感隐私，且原生 Log 不受日志开关控制
         }
         return list;
     }
@@ -228,7 +224,7 @@ public class PrivateMsgApi {
         String per =
                 "msg[dev_id]=" + getDevId()
                         + "&msg[msg_type]=" + msgType
-                        + "&msg[content]=" + content
+                        + "&msg[content]=" + NetWorkUtil.urlEncode(content)
                         + "&msg[receiver_type]=1&csrf=" + SharedPreferencesUtil.getString("csrf", "")
                         + "&msg[sender_uid]=" + senderUid
                         + "&msg[receiver_id]=" + receiverUid
@@ -236,8 +232,7 @@ public class PrivateMsgApi {
 
         JSONObject result = new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body()).string());
 
-        Log.e("debug-发送私信", result.toString());
-        //不打印请求头（含完整 Cookie）
+        //不打印请求头（含完整 Cookie）与响应（含会话信息）
         return result;
     }
 

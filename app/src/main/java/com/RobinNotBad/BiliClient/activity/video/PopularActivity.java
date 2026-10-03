@@ -37,6 +37,10 @@ public class PopularActivity extends InstanceActivity {
 
     private int page = 1;
 
+    //代际守卫：下拉刷新自增，在途的"加载更多"请求凭代际作废，
+    //避免旧页内容 addAll 进刷新后的新列表（此前 page++ 也在后台线程非同步自增）
+    private volatile int loadGeneration = 0;
+
     @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,6 +63,7 @@ public class PopularActivity extends InstanceActivity {
     @SuppressLint("NotifyDataSetChanged")
     private void loadPopular() {
         Log.e("debug", "刷新");
+        loadGeneration++;
         page = 1;
         if (firstRefresh) {
             recyclerView.setLayoutManager(new CustomLinearManager(this));
@@ -75,15 +80,19 @@ public class PopularActivity extends InstanceActivity {
     }
 
     private void addPopular() {
+        final int myGeneration = loadGeneration;
         Log.e("debug", "加载下一页");
         runOnUiThread(() -> swipeRefreshLayout.setRefreshing(true));
         try {
             List<VideoCard> list = new ArrayList<>();
             boolean success = RecommendApi.getPopular(list, page);
+            //刷新后本请求可能已过期：结果整体丢弃，也不许再动 refreshing/page 状态
+            if (myGeneration != loadGeneration) return;
             if (success) {
-                page++;
                 runOnUiThread(() -> {
+                    if (myGeneration != loadGeneration) return;
                     videoCardList.addAll(list);
+                    page++;
                     swipeRefreshLayout.setRefreshing(false);
                     refreshing = false;
                     if (firstRefresh) {
