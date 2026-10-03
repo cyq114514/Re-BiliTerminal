@@ -834,6 +834,17 @@
                         android:text="查看历史更新日志 >"
                         android:textColor="#FB7299"
                         android:layout_gravity="center" />
+
+                    <TextView
+                        android:id="@+id/check_update_entry"
+                        android:layout_height="wrap_content"
+                        android:layout_width="match_parent"
+                        android:gravity="center"
+                        android:padding="4dp"
+                        android:textSize="12sp"
+                        android:text="检查更新 >"
+                        android:textColor="#FB7299"
+                        android:layout_gravity="center" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

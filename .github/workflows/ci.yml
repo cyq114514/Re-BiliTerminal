@@ -89,3 +89,17 @@ jobs:
             gh release create "$TAG" "/tmp/$NAME" -R "$GITHUB_REPOSITORY" \
               --title "Re：哔哩终端 ${TAG}" --generate-notes
           fi
+
+          #生成应用内更新元数据（客户端 UpdateManager 主通道的数据源）：
+          #客户端经 releases/latest/download/update.json 获取 versionCode/sha256/更新说明，
+          #该直链在 github.com 域下，可被用户设置的镜像前缀整体代理
+          VERSION_CODE=$(grep -E 'versionCode[[:space:]]+[0-9]+' app/build.gradle | grep -oE '[0-9]+' | head -1)
+          SHA256=$(sha256sum "/tmp/$NAME" | awk '{print $1}')
+          BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.body' 2>/dev/null || echo "")
+          jq -n --arg versionCode "$VERSION_CODE" --arg versionName "${TAG#v}" \
+                --arg sha256 "$SHA256" --arg fileName "$NAME" \
+                --arg notes "$BODY" \
+                --arg htmlUrl "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" \
+                '{versionCode: ($versionCode | tonumber), versionName: $versionName, sha256: $sha256, fileName: $fileName, notes: $notes, htmlUrl: $htmlUrl}' \
+            > update.json
+          gh release upload "$TAG" update.json --clobber -R "$GITHUB_REPOSITORY"

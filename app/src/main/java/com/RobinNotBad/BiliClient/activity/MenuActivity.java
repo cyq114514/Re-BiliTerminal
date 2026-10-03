@@ -35,6 +35,7 @@ import com.RobinNotBad.BiliClient.activity.video.TimelineActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.UpdateManager;
 import com.RobinNotBad.BiliClient.util.UpdateLog;
 import com.bumptech.glide.Glide;
 import com.google.android.material.button.MaterialButton;
@@ -204,6 +205,10 @@ public class MenuActivity extends BaseActivity {
                 startActivity(logIntent);
             }
         }
+
+        //应用内自动检查更新：静默执行（进程内一次），发现新版本且未被忽略时弹一次性提示；
+        //网络不通/接口异常时完全静默，不打扰使用
+        UpdateManager.autoCheck(this);
 
         Log.e("debug", "MenuActivity onCreate in: " + (System.currentTimeMillis() - time));
     }

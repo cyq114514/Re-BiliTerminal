@@ -26,4 +26,12 @@
     <cache-path
         name="cache"
         path="terminal" />
+    <!--应用内更新包：UpdateManager 下载到 cache/update/（externalCacheDir 不可用时退化到内部 cacheDir），
+        需要以 content:// 交给系统安装器-->
+    <cache-path
+        name="update_apk"
+        path="update/" />
+    <external-cache-path
+        name="ext_cache_update"
+        path="update/" />
 </paths>

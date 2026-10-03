@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--应用内更新：下载完成的新版本 APK 需要请求系统安装器安装（Android 8+ 由用户授予"安装未知应用"）-->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!--
         READ_PHONE_STATE 由某个依赖库的 manifest 合并进来的（合并归因报告里无来源标记，无法定位到具体库），
         代码中没有任何 TelephonyManager 用法，这里强制从合并结果里移除。
@@ -414,6 +416,11 @@
             android:name=".activity.settings.UpdateLogActivity"
             android:exported="false"
             android:label="历史更新日志"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.settings.UpdateActivity"
+            android:exported="false"
+            android:label="检查更新"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.SettingMainActivity"
