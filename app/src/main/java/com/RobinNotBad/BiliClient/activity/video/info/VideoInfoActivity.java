@@ -36,6 +36,12 @@ public class VideoInfoActivity extends BaseActivity {
     private long aid;
     private String bvid;
 
+    //页面内容完全由 intent 参数决定，冷启动可恢复
+    @Override
+    public boolean isRestorablePage() {
+        return true;
+    }
+
     private List<Fragment> fragmentList;
     public ReplyFragment replyFragment;
     public Fragment contentFragment;

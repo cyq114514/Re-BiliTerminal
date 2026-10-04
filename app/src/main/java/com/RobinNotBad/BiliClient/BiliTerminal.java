@@ -1,14 +1,17 @@
 package com.RobinNotBad.BiliClient;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Build;
+import android.os.Bundle;
 import android.util.DisplayMetrics;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.multidex.MultiDex;
 
@@ -18,6 +21,7 @@ import com.RobinNotBad.BiliClient.api.DynamicApi;
 import com.RobinNotBad.BiliClient.api.MessageApi;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
+import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 
@@ -49,6 +53,44 @@ public class BiliTerminal extends Application {
             context = getFitDisplayContext(this);
             ErrorCatch errorCatch = ErrorCatch.getInstance();
             errorCatch.init(context);
+
+            //冷启动恢复记录的生命周期：所有 Activity 都销毁 = 用户正常退出任务，清除记录；
+            //后台被系统杀进程不会走任何回调，记录保留，下次冷启动由 Splash 恢复页面。
+            //配置变更重建时新页 onCreate 先于旧页 onDestroy，计数不会跌到 0，不会误清
+            registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+                private int liveActivityCount = 0;
+
+                @Override
+                public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
+                    liveActivityCount++;
+                }
+
+                @Override
+                public void onActivityDestroyed(@NonNull Activity activity) {
+                    liveActivityCount--;
+                    if (liveActivityCount <= 0) ResumePageUtil.clear();
+                }
+
+                @Override
+                public void onActivityStarted(@NonNull Activity activity) {
+                }
+
+                @Override
+                public void onActivityResumed(@NonNull Activity activity) {
+                }
+
+                @Override
+                public void onActivityPaused(@NonNull Activity activity) {
+                }
+
+                @Override
+                public void onActivityStopped(@NonNull Activity activity) {
+                }
+
+                @Override
+                public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {
+                }
+            });
 
             boolean debugBuild = isDebugBuild();
             Logu.LOGV_ENABLED = SharedPreferencesUtil.getBoolean("dev_logv", debugBuild);

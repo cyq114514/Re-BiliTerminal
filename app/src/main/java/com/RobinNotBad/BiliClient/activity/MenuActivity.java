@@ -34,6 +34,7 @@ import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
 import com.RobinNotBad.BiliClient.activity.video.TimelineActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.UpdateManager;
 import com.RobinNotBad.BiliClient.util.UpdateLog;
@@ -257,6 +258,9 @@ public class MenuActivity extends BaseActivity {
                 case "exit": //退出按钮
                     InstanceActivity instance = BiliTerminal.getInstanceActivityOnTop();
                     if (instance != null && !instance.isDestroyed()) instance.finish();
+                    //主动退出属于正常退出任务，onDestroy 来不及执行（进程被杀），
+                    //这里必须先清掉冷启动恢复记录，否则下次打开会回到退出前的页面
+                    ResumePageUtil.clear();
                     Process.killProcess(Process.myPid());
                     break;
                 case "login": //登录按钮

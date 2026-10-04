@@ -7,6 +7,7 @@ import android.content.Intent;
 import androidx.annotation.NonNull;
 
 import com.RobinNotBad.BiliClient.activity.CatchActivity;
+import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -29,6 +30,13 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
 
     @Override
     public void uncaughtException(@NonNull Thread thread, @NonNull Throwable throwable) {
+        //崩溃即现场已不可信：清掉冷启动恢复记录，
+        //否则用户在崩溃页点"重启"后又会回到刚才崩溃的页面，形成崩溃循环
+        try {
+            ResumePageUtil.clear();
+        } catch (Exception ignored) {
+        }
+
         Writer writer = new StringWriter();
         PrintWriter printWriter = new PrintWriter(writer);
         throwable.printStackTrace(printWriter);

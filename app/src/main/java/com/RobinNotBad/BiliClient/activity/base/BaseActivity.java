@@ -35,6 +35,7 @@ import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import org.greenrobot.eventbus.EventBus;
@@ -186,11 +187,18 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (isRestorablePage()) ResumePageUtil.save(this);
         if (eventBusEnabled()) {
             SnackEvent snackEvent;
             if ((snackEvent = EventBus.getDefault().getStickyEvent(SnackEvent.class)) != null)
                 onEvent(snackEvent);
         }
+    }
+
+    //冷启动时本页面能否被 Splash 恢复；默认否，可恢复的页面其全部状态必须能仅凭 intent 重建，
+    //播放器/发帖编辑器/崩溃页这类有运行时状态或临时的页面不要打开这个开关
+    public boolean isRestorablePage() {
+        return false;
     }
 
     @Override

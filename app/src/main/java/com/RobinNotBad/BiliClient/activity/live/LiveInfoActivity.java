@@ -50,6 +50,12 @@ public class LiveInfoActivity extends BaseActivity {
     private LiveRoom room;
     private boolean desc_expand = false, tags_expand = false;
 
+    //页面内容完全由 intent 的 room_id 决定，冷启动可恢复
+    @Override
+    public boolean isRestorablePage() {
+        return true;
+    }
+
     private RecyclerView host_list;
     private int selectedHost = 0;
     private MediaEpisodeAdapter hostAdapter;

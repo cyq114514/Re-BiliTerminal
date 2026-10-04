@@ -25,6 +25,12 @@ public class UserInfoActivity extends BaseActivity {
 
     UserDynamicFragment udFragment;
 
+    //页面内容完全由 intent 的 mid 决定，冷启动可恢复
+    @Override
+    public boolean isRestorablePage() {
+        return true;
+    }
+
     @SuppressLint({"MissingInflatedId", "InflateParams"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {

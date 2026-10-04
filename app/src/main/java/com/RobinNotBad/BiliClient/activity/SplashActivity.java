@@ -23,6 +23,7 @@ import com.RobinNotBad.BiliClient.util.AccountManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import org.json.JSONException;
@@ -70,10 +71,19 @@ public class SplashActivity extends Activity {
             }
         }, 100, 100);
 
+        //只有从桌面图标正常冷启动才做页面恢复；
+        //崩溃兜底重启（CatchActivity 用显式 intent、无 ACTION_MAIN）不走恢复，避免回到崩溃现场
+        final boolean fromLauncher = getIntent() != null && Intent.ACTION_MAIN.equals(getIntent().getAction());
+
         CenterThreadPool.run(() -> {
 
             //FileUtil.clearCache(this);  //先清个缓存（为了防止占用过大）
             //不需要了，我把大部分图片的硬盘缓存都关闭了，只有表情包保留，这样既可以缩减缓存占用又能在一定程度上减少流量消耗
+
+            //应用切后台后进程/任务被系统回收时，再次打开就是全新冷启动；
+            //先一次性取出"上次停留页面"的恢复点（取出即清除，恢复页若崩溃不会成循环），
+            //后续无论走正常流程还是错误兜底流程，都优先回到用户上次停留的页面
+            Intent resumeIntent = fromLauncher ? ResumePageUtil.takeRestoreIntent() : null;
 
             NetWorkUtil.refreshHeaders();
 
@@ -85,6 +95,23 @@ public class SplashActivity extends Activity {
                     }
 
                     CookiesApi.checkCookies();
+
+                    if (resumeIntent != null) {
+                        interruptSplash();
+
+                        splashTextView.postDelayed(() -> {
+                            try {
+                                startActivity(resumeIntent);
+                            } catch (Exception e) {
+                                //极端情况下目标页仍可能起不来（如被禁用），兜底进本地库，绝不能闪退在启动页
+                                e.printStackTrace();
+                                startActivity(new Intent(SplashActivity.this, LocalListActivity.class));
+                            }
+                            CenterThreadPool.run(() -> AppInfoApi.check(SplashActivity.this));
+                            finish();
+                        }, 100);
+                        return;
+                    }
 
                     String firstActivity = null;
                     String sortConf = SharedPreferencesUtil.getString(SharedPreferencesUtil.MENU_SORT, "");
@@ -129,8 +156,8 @@ public class SplashActivity extends Activity {
                         splashTextView.setText("网络错误");
                         if (SharedPreferencesUtil.getBoolean("setup", false)) {
                             splashTextView.postDelayed(() -> {
-                                Intent intent = new Intent();
-                                intent.setClass(SplashActivity.this, LocalListActivity.class);
+                                //断网时优先回到上次停留的页面（缓存等本地功能仍可用），没有记录才进缓存页兜底
+                                Intent intent = resumeIntent != null ? resumeIntent : new Intent(SplashActivity.this, LocalListActivity.class);
                                 startActivity(intent);
                                 finish();
                             }, 300);
@@ -139,8 +166,7 @@ public class SplashActivity extends Activity {
                 } catch (JSONException e) {
                     runOnUiThread(() -> {
                         MsgUtil.err(e);
-                        Intent intent = new Intent();
-                        intent.setClass(SplashActivity.this, LocalListActivity.class);
+                        Intent intent = resumeIntent != null ? resumeIntent : new Intent(SplashActivity.this, LocalListActivity.class);
                         startActivity(intent);
                         interruptSplash();
                         finish();
@@ -151,8 +177,7 @@ public class SplashActivity extends Activity {
                     e.printStackTrace();
                     runOnUiThread(() -> {
                         MsgUtil.err(e);
-                        Intent intent = new Intent();
-                        intent.setClass(SplashActivity.this, LocalListActivity.class);
+                        Intent intent = resumeIntent != null ? resumeIntent : new Intent(SplashActivity.this, LocalListActivity.class);
                         startActivity(intent);
                         interruptSplash();
                         finish();

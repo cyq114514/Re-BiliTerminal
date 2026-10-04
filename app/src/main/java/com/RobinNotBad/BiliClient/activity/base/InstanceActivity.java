@@ -15,6 +15,12 @@ public class InstanceActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
     }
 
+    //浏览类页面（菜单入口的各个列表页）统一可恢复
+    @Override
+    public boolean isRestorablePage() {
+        return true;
+    }
+
     public void setMenuClick() {
         findViewById(R.id.top).setOnClickListener(view -> menuClick.run());
     }

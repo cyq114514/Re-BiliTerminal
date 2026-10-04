@@ -33,6 +33,12 @@ public class DynamicInfoActivity extends BaseActivity {
     ReplyFragment rFragment;
     private long seek_reply;
 
+    //页面内容完全由 intent 的 id 决定，冷启动可恢复
+    @Override
+    public boolean isRestorablePage() {
+        return true;
+    }
+
     @SuppressLint({"MissingInflatedId", "InflateParams"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {

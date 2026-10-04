@@ -35,6 +35,12 @@ public class OpusInfoActivity extends BaseActivity {
     private ReplyFragment replyFragment;
     private long seek_reply;
 
+    //页面内容完全由 intent 的 id 决定，冷启动可恢复
+    @Override
+    public boolean isRestorablePage() {
+        return true;
+    }
+
     private ImageView loadingView;
 
     @SuppressLint("MissingInflatedId")
