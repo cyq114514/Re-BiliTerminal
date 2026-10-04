@@ -59,14 +59,14 @@
                 android:layout_marginBottom="4dp"
                 android:text="昵称每次修改花费6硬币"
                 android:textSize="12sp"
-                android:textColor="#999999" />
+                android:textColor="@color/text_gray" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="昵称"
                 android:textSize="12sp"
-                android:textColor="#AAAAAA" />
+                android:textColor="@color/text_gray" />
 
             <EditText
                 android:id="@+id/et_username"
@@ -85,7 +85,7 @@
                 android:layout_height="wrap_content"
                 android:text="生日（YYYY-MM-DD）"
                 android:textSize="12sp"
-                android:textColor="#AAAAAA" />
+                android:textColor="@color/text_gray" />
 
             <EditText
                 android:id="@+id/et_birthday"
@@ -104,7 +104,7 @@
                 android:layout_height="wrap_content"
                 android:text="性别"
                 android:textSize="12sp"
-                android:textColor="#AAAAAA" />
+                android:textColor="@color/text_gray" />
 
             <RadioGroup
                 android:id="@+id/rg_sex"

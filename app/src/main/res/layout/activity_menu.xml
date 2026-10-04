@@ -38,7 +38,17 @@
 
     </RelativeLayout>
 
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+        android:id="@+id/menu_grid"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top"
+        android:paddingHorizontal="@dimen/activity_padding_horizontal"
+        android:clipToPadding="false"
+        android:visibility="gone" />
+
     <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:id="@+id/menu_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_below="@id/top">

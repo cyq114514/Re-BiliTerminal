@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 渐变描边卡片（Re-WearBili 语言：#363636→透明 0.4dp 描边 + #262626@30% 底） -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/card_round_new" />
+            <gradient
+                android:angle="315"
+                android:endColor="#00000000"
+                android:startColor="@color/card_border_new"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item
+        android:bottom="0.5dp"
+        android:left="0.5dp"
+        android:right="0.5dp"
+        android:top="0.5dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/card_round_new" />
+            <solid android:color="@color/card_bg_new" />
+        </shape>
+    </item>
+</layer-list>

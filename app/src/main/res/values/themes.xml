@@ -19,10 +19,17 @@
         <item name="recyclerViewStyle">@style/ListStyle</item>
 
         <item name="colorSwitchThumbNormal">@color/textwhite</item>
-        <item name="colorControlActivated">@color/textwhite</item>
+        <item name="colorControlActivated">@color/bili_pink</item>
         <item name="colorControlNormal">@color/color_ripple</item>
         <item name="android:textColor">@color/textwhite</item>
         <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- 关闭新版美学时的回退：恢复旧版卡片/按钮/激活色，其余保持基础主题 -->
+    <style name="ThemeOverlay.BiliClient.Classic" parent="">
+        <item name="materialCardViewStyle">@style/CardStyleClassic</item>
+        <item name="materialButtonStyle">@style/ButtonStyleClassic</item>
+        <item name="colorControlActivated">@color/textwhite</item>
     </style>
 
     <style name="Theme.BiliClient.Splash" parent="Theme.BiliClient">

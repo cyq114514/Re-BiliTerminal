@@ -87,7 +87,7 @@
         android:textSize="12sp"
         android:visibility="gone"
         android:text="在浏览器查看完整发布页 >"
-        android:textColor="#FB7299" />
+        android:textColor="@color/bili_pink" />
 
     <TextView
         android:id="@+id/update_mirror"

@@ -18,15 +18,17 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <ImageView
+            <com.RobinNotBad.BiliClient.ui.widget.RatioImageView
                 android:id="@+id/img_cover"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:adjustViewBounds="true"
+                android:scaleType="fitCenter"
                 android:focusable="true"
                 android:clickable="true"
-                android:src="@mipmap/placeholder" />
+                android:src="@mipmap/placeholder"
+                app:coverRatio="1.6" />
 
             <TextView
                 android:id="@+id/durationText"
@@ -128,7 +130,7 @@
                 android:drawableStart="@drawable/icon_play_16"
                 android:drawablePadding="1dp"
                 android:text="114514"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="12sp" />
 
             <TextView
@@ -222,7 +224,7 @@
                         android:id="@+id/btn_like"
                         android:layout_width="30dp"
                         android:layout_height="30dp"
-                        android:background="#0000"
+                        android:background="@android:color/transparent"
                         android:src="@drawable/icon_like_0" />
 
                     <TextView
@@ -245,7 +247,7 @@
                         android:id="@+id/btn_coin"
                         android:layout_width="30dp"
                         android:layout_height="30dp"
-                        android:background="#0000"
+                        android:background="@android:color/transparent"
                         android:src="@drawable/icon_coin_0" />
 
                     <TextView
@@ -269,7 +271,7 @@
                         android:id="@+id/btn_fav"
                         android:layout_width="30dp"
                         android:layout_height="30dp"
-                        android:background="#0000"
+                        android:background="@android:color/transparent"
                         android:src="@drawable/icon_fav_0" />
 
                     <TextView

@@ -34,7 +34,7 @@
         app:layout_constraintTop_toBottomOf="@id/name"
         tools:ignore="TouchTargetSizeCheck" />
 
-    <ImageView
+    <com.RobinNotBad.BiliClient.ui.widget.RatioImageView
         android:id="@+id/img_cover"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -42,7 +42,9 @@
         android:adjustViewBounds="true"
         android:clickable="true"
         android:focusable="true"
+        android:scaleType="fitCenter"
         android:src="@mipmap/placeholder"
+        app:coverRatio="1.6"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/desc"
@@ -80,7 +82,7 @@
         android:layout_height="1dp"
         android:layout_marginHorizontal="10dp"
         android:layout_marginVertical="4dp"
-        android:background="#318C8C8C"
+        android:background="@color/overlay_gray"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/playTimes" />

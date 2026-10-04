@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -47,7 +48,15 @@ public class RefreshListFragment extends BaseFragment {
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
         swipeRefreshLayout.setEnabled(false);
         swipeRefreshLayout.setRefreshing(true);
+        //新版美学：刷新指示器与氛围背景同色（与 RefreshListActivity 一致）
+        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)) {
+            swipeRefreshLayout.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.bili_pink));
+        }
+        //初始加载期间联动宿主页面的氛围呼吸
+        if (getActivity() instanceof BaseActivity) ((BaseActivity) getActivity()).setAmbientBreathing(true);
         recyclerView = view.findViewById(R.id.recyclerView);
+        //列表是滚动加载内容，默认 item 动画（进场淡入/变更交叉淡入）在低配手表上开销明显，关闭
+        recyclerView.setItemAnimator(null);
         recyclerView.setLayoutManager(getLayoutManager());
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
@@ -85,7 +94,11 @@ public class RefreshListFragment extends BaseFragment {
     }
 
     public void setRefreshing(boolean bool) {
-        runOnUiThread(() -> swipeRefreshLayout.setRefreshing(bool));
+        runOnUiThread(() -> {
+            swipeRefreshLayout.setRefreshing(bool);
+            //Fragment 宿主若是 BaseActivity，把列表加载态联动到氛围呼吸
+            if (getActivity() instanceof BaseActivity) ((BaseActivity) getActivity()).setAmbientBreathing(bool);
+        });
     }
 
     public void setOnLoadMoreListener(OnLoadMoreListener loadMore) {

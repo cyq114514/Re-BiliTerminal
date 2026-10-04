@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 粉色小徽章底（角标/计数），对应 Re-WearBili 的 badge -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/badge_round" />
+    <solid android:color="@color/bili_pink" />
+</shape>

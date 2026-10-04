@@ -123,14 +123,14 @@
                 android:id="@+id/switch_wbi"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="#00000000"
+                android:background="@android:color/transparent"
                 android:text="启用WBI签名" />
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switch_post"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="#00000000"
+                android:background="@android:color/transparent"
                 android:text="使用POST方式" />
 
             <com.google.android.material.card.MaterialCardView

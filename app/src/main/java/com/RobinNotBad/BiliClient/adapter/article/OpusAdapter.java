@@ -55,12 +55,7 @@ public class OpusAdapter extends RecyclerView.Adapter<OpusAdapter.OpusHolder> {
         String coverUrl = GlideUtil.url(opus.cover);
         if (!coverUrl.equals(holder.lastCoverUrl)) {
             holder.lastCoverUrl = coverUrl;
-            Glide.with(BiliTerminal.context).load(coverUrl)
-                    .transition(GlideUtil.getTransitionOptions())
-                    .placeholder(R.mipmap.placeholder)
-                    .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(5))))
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                    .into(holder.coverView);
+            GlideUtil.requestCover(holder.coverView, opus.cover, R.mipmap.placeholder);
         }
 
         if (opus.content != null && opus.content.equals("内容失效")) {

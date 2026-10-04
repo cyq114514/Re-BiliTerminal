@@ -20,7 +20,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <ImageView
+            <com.RobinNotBad.BiliClient.ui.widget.RatioImageView
                 android:id="@+id/img_cover"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -30,7 +30,7 @@
                 android:adjustViewBounds="true"
                 android:scaleType="fitCenter"
                 android:src="@mipmap/placeholder"
-                app:layout_constraintDimensionRatio="16:9" />
+                app:coverRatio="1.6" />
 
             <TextView
                 android:id="@+id/text_title"
@@ -42,7 +42,7 @@
                 android:ellipsize="end"
                 android:maxLines="3"
                 android:text="标题标题标题标题标题标题标题标题标题标题标题标题标题标题标题标题"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
         </LinearLayout>
 
@@ -56,11 +56,11 @@
                 android:id="@+id/text_viewcount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:alpha="0.5"
+                android:alpha="0.7"
                 android:drawableStart="@drawable/icon_play_12"
                 android:singleLine="true"
                 android:text="11.4万"
-                android:textSize="11sp"
+                android:textSize="10sp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toEndOf="@+id/imageView3"
                 app:layout_constraintTop_toBottomOf="@+id/img_cover" />
@@ -71,11 +71,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:alpha="0.5"
+                android:alpha="0.7"
                 android:drawableStart="@drawable/icon_person"
                 android:singleLine="true"
                 android:text="蔡徐坤"
-                android:textSize="11sp" />
+                android:textSize="10sp" />
 
         </LinearLayout>
 

@@ -15,7 +15,7 @@
         android:gravity="center"
         android:textSize="16sp"
         android:textStyle="bold"
-        android:textColor="#FB7299" />
+        android:textColor="@color/bili_pink" />
 
     <ImageView
         android:id="@+id/iconView"

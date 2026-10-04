@@ -66,11 +66,7 @@ import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
-import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
-import com.bumptech.glide.request.RequestOptions;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
@@ -246,21 +242,25 @@ public class VideoInfoFragment extends BaseFragment {
             Context context = rootview.getContext();
             if (context == null) return;
             CenterThreadPool.run(() -> {
-                TerminalContext.getInstance()
-                        .enterVideoDetailPage(context, BangumiApi.getMdidFromEpid(videoInfo.epid), null, "media");
-                Activity activity = getActivity();
-                if (activity == null) return;
-                activity.finish();
+                //跳转与 finish 都涉及 Activity 栈操作，必须回主线程：
+                //后台线程 startActivity/finish 会造成 CalledFromWrongThreadException 或页面栈错乱
+                try {
+                    final long mdid = BangumiApi.getMdidFromEpid(videoInfo.epid);
+                    Activity activity = getActivity();
+                    if (activity == null || activity.isFinishing()) return;
+                    activity.runOnUiThread(() -> {
+                        TerminalContext.getInstance().enterVideoDetailPage(activity, mdid, null, "media");
+                        activity.finish();
+                    });
+                } catch (Exception e) {
+                    MsgUtil.err(e);
+                }
             });
             return;
         }
 
-        //显示封面
-        Glide.with(getAppContext()).asDrawable().load(GlideUtil.url(videoInfo.cover)).placeholder(R.mipmap.placeholder)
-                .transition(GlideUtil.getTransitionOptions())
-                .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(4))).sizeMultiplier(0.85f).skipMemoryCache(true).dontAnimate())
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .into(cover);
+        //显示封面（新版美学：16:10 CenterCrop + 6dp 圆角；旧版 fitCenter，requestCover 内按开关切换）
+        GlideUtil.requestCover(cover, videoInfo.cover, R.mipmap.placeholder);
 
         if (SharedPreferencesUtil.getBoolean("tags_enable", true)) {
             CenterThreadPool.run(() -> {
@@ -309,7 +309,10 @@ public class VideoInfoFragment extends BaseFragment {
             } catch (Exception e) {
                 MsgUtil.err(e);
             }
-            onFinishLoad();
+            //crossFade 操作 View，必须回主线程（onFinishLoad 内部只查 getActivity，不做线程切换）
+            Activity activity = getActivity();
+            if (activity == null || activity.isDestroyed()) return;
+            activity.runOnUiThread(this::onFinishLoad);
         });
 
         //封面

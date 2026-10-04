@@ -45,13 +45,13 @@
 
         <TextView android:id="@+id/tab0" android:layout_width="0dp" android:layout_height="match_parent"
             android:layout_weight="1" android:gravity="center" android:text="新番"
-            android:textSize="14sp" android:textColor="#FB7299" />
+            android:textSize="14sp" android:textColor="@color/bili_pink" />
         <TextView android:id="@+id/tab1" android:layout_width="0dp" android:layout_height="match_parent"
             android:layout_weight="1" android:gravity="center" android:text="追番"
-            android:textSize="14sp" android:textColor="#999999" />
+            android:textSize="14sp" android:textColor="@color/text_gray" />
         <TextView android:id="@+id/tab2" android:layout_width="0dp" android:layout_height="match_parent"
             android:layout_weight="1" android:gravity="center" android:text="索引"
-            android:textSize="14sp" android:textColor="#999999" />
+            android:textSize="14sp" android:textColor="@color/text_gray" />
     </LinearLayout>
 
     <View
@@ -59,7 +59,7 @@
         android:layout_width="48dp"
         android:layout_height="2dp"
         android:layout_below="@id/tabBar"
-        android:background="#FB7299" />
+        android:background="@color/bili_pink" />
 
     <!-- 索引筛选栏（双层：主筛选 + 风格标签） -->
     <LinearLayout
@@ -85,67 +85,67 @@
 
             <!-- 类型 -->
             <TextView android:text="类型" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="#999999" android:paddingHorizontal="4dp" />
+                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
             <TextView android:id="@+id/ftTypeAnim" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="动画" android:textSize="13sp" android:textColor="#FFFFFF"
+                android:text="动画" android:textSize="13sp" android:textColor="@color/textwhite"
                 android:background="@drawable/sel_filter_chip"  />
             <TextView android:id="@+id/ftTypeChina" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="国产" android:textSize="13sp" android:textColor="#666666"
+                android:text="国产" android:textSize="13sp" android:textColor="@color/text_dim"
                 android:background="@drawable/sel_filter_chip" />
 
             <View android:layout_width="1dp" android:layout_height="18dp"
-                android:layout_marginHorizontal="6dp" android:background="#DDDDDD" />
+                android:layout_marginHorizontal="6dp" android:background="@color/divider_gray" />
 
             <!-- 状态 -->
             <TextView android:text="状态" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="#999999" android:paddingHorizontal="4dp" />
+                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
             <TextView android:id="@+id/ftStatusAll" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="全部" android:textSize="13sp" android:textColor="#FFFFFF"
+                android:text="全部" android:textSize="13sp" android:textColor="@color/textwhite"
                 android:background="@drawable/sel_filter_chip"  />
             <TextView android:id="@+id/ftStatusOngoing" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="连载" android:textSize="13sp" android:textColor="#666666"
+                android:text="连载" android:textSize="13sp" android:textColor="@color/text_dim"
                 android:background="@drawable/sel_filter_chip" />
             <TextView android:id="@+id/ftStatusDone" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="完结" android:textSize="13sp" android:textColor="#666666"
+                android:text="完结" android:textSize="13sp" android:textColor="@color/text_dim"
                 android:background="@drawable/sel_filter_chip" />
 
             <View android:layout_width="1dp" android:layout_height="18dp"
-                android:layout_marginHorizontal="6dp" android:background="#DDDDDD" />
+                android:layout_marginHorizontal="6dp" android:background="@color/divider_gray" />
 
             <!-- 地区 -->
             <TextView android:text="地区" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="#999999" android:paddingHorizontal="4dp" />
+                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
             <TextView android:id="@+id/ftAreaAll" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="全部" android:textSize="13sp" android:textColor="#FFFFFF"
+                android:text="全部" android:textSize="13sp" android:textColor="@color/textwhite"
                 android:background="@drawable/sel_filter_chip"  />
             <TextView android:id="@+id/ftAreaJapan" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="日本" android:textSize="13sp" android:textColor="#666666"
+                android:text="日本" android:textSize="13sp" android:textColor="@color/text_dim"
                 android:background="@drawable/sel_filter_chip" />
             <TextView android:id="@+id/ftAreaChina" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="中国" android:textSize="13sp" android:textColor="#666666"
+                android:text="中国" android:textSize="13sp" android:textColor="@color/text_dim"
                 android:background="@drawable/sel_filter_chip" />
 
             <View android:layout_width="1dp" android:layout_height="18dp"
-                android:layout_marginHorizontal="6dp" android:background="#DDDDDD" />
+                android:layout_marginHorizontal="6dp" android:background="@color/divider_gray" />
 
             <!-- 排序 -->
             <TextView android:text="排序" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="#999999" android:paddingHorizontal="4dp" />
+                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
             <TextView android:id="@+id/ftSortMixed" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="综合" android:textSize="13sp" android:textColor="#666666"
+                android:text="综合" android:textSize="13sp" android:textColor="@color/text_dim"
                 android:background="@drawable/sel_filter_chip" />
             <TextView android:id="@+id/ftSortHot" android:layout_width="wrap_content"
                 android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="热度" android:textSize="13sp" android:textColor="#FFFFFF"
+                android:text="热度" android:textSize="13sp" android:textColor="@color/textwhite"
                 android:background="@drawable/sel_filter_chip"  />
             </LinearLayout>
         </HorizontalScrollView>

@@ -58,7 +58,7 @@
                     android:id="@+id/menu_popular"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#00000000"
+                    android:background="@android:color/transparent"
                     android:text="显示“热门”" />
 
             </com.google.android.material.card.MaterialCardView>
@@ -72,7 +72,7 @@
                     android:id="@+id/menu_hotsearch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#00000000"
+                    android:background="@android:color/transparent"
                     android:text="显示“热搜”" />
 
             </com.google.android.material.card.MaterialCardView>
@@ -86,7 +86,7 @@
                     android:id="@+id/menu_live"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#00000000"
+                    android:background="@android:color/transparent"
                     android:text="显示“直播”" />
 
             </com.google.android.material.card.MaterialCardView>
@@ -100,7 +100,7 @@
                     android:id="@+id/menu_precious"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#00000000"
+                    android:background="@android:color/transparent"
                     android:text="显示“入站必刷”" />
 
             </com.google.android.material.card.MaterialCardView>
@@ -113,7 +113,7 @@
                     android:id="@+id/menu_ranking"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#00000000"
+                    android:background="@android:color/transparent"
                     android:text="显示“全站排行榜”" />
 
             </com.google.android.material.card.MaterialCardView>
@@ -126,7 +126,7 @@
                     android:id="@+id/menu_timeline"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#00000000"
+                    android:background="@android:color/transparent"
                     android:text="显示“时间线”" />
 
             </com.google.android.material.card.MaterialCardView>

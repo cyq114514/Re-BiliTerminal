@@ -124,7 +124,7 @@
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center"
                     android:text="删除收藏夹"
-                    android:textColor="#FF5722"
+                    android:textColor="@color/color_danger"
                     android:textSize="13sp"
                     android:visibility="visible" />
             </com.google.android.material.card.MaterialCardView>

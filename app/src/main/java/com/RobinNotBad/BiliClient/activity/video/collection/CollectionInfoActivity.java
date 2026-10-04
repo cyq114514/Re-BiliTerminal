@@ -25,12 +25,7 @@ import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
-import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
-import com.bumptech.glide.request.RequestOptions;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -122,13 +117,7 @@ public class CollectionInfoActivity extends RefreshListActivity {
                 collectionInfoHolder.name.setText(collection.title);
                 collectionInfoHolder.desc.setText(TextUtils.isEmpty(collection.intro) ? "这里没有简介哦" : collection.intro);
                 collectionInfoHolder.playTimes.setText("共" + collection.view);
-                Glide.with(context).asDrawable().load(GlideUtil.url(collection.cover))
-                        .transition(GlideUtil.getTransitionOptions())
-                        .placeholder(R.mipmap.placeholder)
-                        .format(DecodeFormat.PREFER_RGB_565)
-                        .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(5))).sizeMultiplier(0.85f).dontAnimate())
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .into(collectionInfoHolder.cover);
+                GlideUtil.requestCover(collectionInfoHolder.cover, collection.cover, R.mipmap.placeholder);
                 collectionInfoHolder.cover.setOnClickListener(view -> context.startActivity(new Intent(context, ImageViewerActivity.class).putExtra("imageList", new ArrayList<>(Collections.singletonList(collection.cover)))));
                 StringUtil.setCopy(collectionInfoHolder.name, collectionInfoHolder.desc);
                 StringUtil.setLink(collectionInfoHolder.desc);
@@ -241,13 +230,7 @@ public class CollectionInfoActivity extends RefreshListActivity {
                 collectionInfoHolder.name.setText(collection.title);
                 collectionInfoHolder.desc.setText(TextUtils.isEmpty(collection.intro) ? "这里没有简介哦" : collection.intro);
                 collectionInfoHolder.playTimes.setText("共" + collection.view);
-                Glide.with(context).asDrawable().load(GlideUtil.url(collection.cover))
-                        .transition(GlideUtil.getTransitionOptions())
-                        .placeholder(R.mipmap.placeholder)
-                        .format(DecodeFormat.PREFER_RGB_565)
-                        .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(5))).sizeMultiplier(0.85f).dontAnimate())
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .into(collectionInfoHolder.cover);
+                GlideUtil.requestCover(collectionInfoHolder.cover, collection.cover, R.mipmap.placeholder);
                 collectionInfoHolder.cover.setOnClickListener(view -> context.startActivity(new Intent(context, ImageViewerActivity.class).putExtra("imageList", new ArrayList<>(Collections.singletonList(collection.cover)))));
             }
         }

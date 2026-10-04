@@ -2,7 +2,36 @@
 
 <resources xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 新版卡片：10dp 圆角、#262626@30% 底、#363636 发丝描边，按压缩放替代 ripple（移植自 Re-WearBili） -->
     <style name="CardStyle" parent="Widget.MaterialComponents.CardView">
+        <item name="cardBackgroundColor">@color/card_bg_new</item>
+        <item name="cardCornerRadius">@dimen/card_round_new</item>
+        <item name="strokeColor">@color/card_border_new</item>
+        <item name="strokeWidth">@dimen/card_stroke_new</item>
+        <item name="rippleColor" tools:ignore="PrivateResource">@android:color/transparent</item>
+        <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- 新版按钮：与卡片同语言 -->
+    <style name="ButtonStyle" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/card_bg_new</item>
+        <item name="cornerRadius">@dimen/card_round_new</item>
+        <item name="strokeColor">@color/card_border_new</item>
+        <item name="strokeWidth">@dimen/card_stroke_new</item>
+        <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
+        <item name="android:textColor">@color/textwhite</item>
+        <item name="android:insetTop">2dp</item>
+        <item name="android:insetBottom">2dp</item>
+        <item name="android:paddingLeft">2dp</item>
+        <item name="android:paddingRight">2dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- 旧版卡片/按钮：关闭"新版美学设计"时由 ThemeOverlay.BiliClient.Classic 挂回 -->
+    <style name="CardStyleClassic" parent="Widget.MaterialComponents.CardView">
         <item name="rippleColor" tools:ignore="PrivateResource">@color/mtrl_btn_ripple_color</item>
         <item name="android:foreground">?android:attr/selectableItemBackground</item>
         <item name="cardBackgroundColor">#cc262626</item>
@@ -11,7 +40,7 @@
         <item name="android:focusable">true</item>
     </style>
 
-    <style name="ButtonStyle" parent="Widget.MaterialComponents.Button">
+    <style name="ButtonStyleClassic" parent="Widget.MaterialComponents.Button">
         <item name="backgroundTint">#cc262626</item>
         <item name="cornerRadius">@dimen/card_round</item>
         <item name="android:textColor">@color/textwhite</item>

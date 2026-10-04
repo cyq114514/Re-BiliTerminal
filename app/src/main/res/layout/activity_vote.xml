@@ -75,7 +75,7 @@
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center"
                     android:text="投出这一票"
-                    android:textColor="#66ccff"
+                    android:textColor="@color/link"
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </com.google.android.material.card.MaterialCardView>

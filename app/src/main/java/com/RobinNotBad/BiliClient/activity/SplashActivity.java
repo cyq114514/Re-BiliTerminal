@@ -30,6 +30,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Timer;
@@ -81,9 +82,10 @@ public class SplashActivity extends Activity {
             //不需要了，我把大部分图片的硬盘缓存都关闭了，只有表情包保留，这样既可以缩减缓存占用又能在一定程度上减少流量消耗
 
             //应用切后台后进程/任务被系统回收时，再次打开就是全新冷启动；
-            //先一次性取出"上次停留页面"的恢复点（取出即清除，恢复页若崩溃不会成循环），
-            //后续无论走正常流程还是错误兜底流程，都优先回到用户上次停留的页面
-            Intent resumeIntent = fromLauncher ? ResumePageUtil.takeRestoreIntent() : null;
+            //先一次性取出"上次停留页面链"的恢复点（取出即清除，恢复页若崩溃不会成循环），
+            //后续无论走正常流程还是错误兜底流程，都优先回到用户上次停留的页面。
+            //恢复的是完整返回链（栈底→栈顶），只恢复栈顶单个页面会导致恢复页下没有上级，点返回直接退出应用
+            List<Intent> resumeIntents = fromLauncher ? ResumePageUtil.takeRestoreIntents() : null;
 
             NetWorkUtil.refreshHeaders();
 
@@ -96,20 +98,8 @@ public class SplashActivity extends Activity {
 
                     CookiesApi.checkCookies();
 
-                    if (resumeIntent != null) {
-                        interruptSplash();
-
-                        splashTextView.postDelayed(() -> {
-                            try {
-                                startActivity(resumeIntent);
-                            } catch (Exception e) {
-                                //极端情况下目标页仍可能起不来（如被禁用），兜底进本地库，绝不能闪退在启动页
-                                e.printStackTrace();
-                                startActivity(new Intent(SplashActivity.this, LocalListActivity.class));
-                            }
-                            CenterThreadPool.run(() -> AppInfoApi.check(SplashActivity.this));
-                            finish();
-                        }, 100);
+                    if (resumeIntents != null && !resumeIntents.isEmpty()) {
+                        startRestoreChain(resumeIntents);
                         return;
                     }
 
@@ -150,38 +140,30 @@ public class SplashActivity extends Activity {
                     }, 100);
 
                 } catch (IOException e) {
+                    //断网时同样整链恢复（缓存等本地功能仍可用）。恢复点在联网检查前已被消费清空，
+                    //这里若只回栈顶单页，用户点返回就直接退出应用——离线冷启动恰是目标设备
+                    //（手表/弱网）的高频路径，功能立项要解决的就是这个形态
                     runOnUiThread(() -> {
                         MsgUtil.err(e);
                         interruptSplash();
                         splashTextView.setText("网络错误");
-                        if (SharedPreferencesUtil.getBoolean("setup", false)) {
-                            splashTextView.postDelayed(() -> {
-                                //断网时优先回到上次停留的页面（缓存等本地功能仍可用），没有记录才进缓存页兜底
-                                Intent intent = resumeIntent != null ? resumeIntent : new Intent(SplashActivity.this, LocalListActivity.class);
-                                startActivity(intent);
-                                finish();
-                            }, 300);
-                        }
                     });
+                    startRestoreChain(resumeIntents);
                 } catch (JSONException e) {
                     runOnUiThread(() -> {
                         MsgUtil.err(e);
-                        Intent intent = resumeIntent != null ? resumeIntent : new Intent(SplashActivity.this, LocalListActivity.class);
-                        startActivity(intent);
                         interruptSplash();
-                        finish();
                     });
+                    startRestoreChain(resumeIntents);
                 } catch (Exception e) {
                     //原来只捕 IOException/JSONException，其余异常会被线程池吞掉，启动页会永远停在打字动画上；
-                    //兜底进入本地库，保证任何情况下都能离开启动页
+                    //兜底恢复页面链，保证任何情况下都能离开启动页
                     e.printStackTrace();
                     runOnUiThread(() -> {
                         MsgUtil.err(e);
-                        Intent intent = resumeIntent != null ? resumeIntent : new Intent(SplashActivity.this, LocalListActivity.class);
-                        startActivity(intent);
                         interruptSplash();
-                        finish();
                     });
+                    startRestoreChain(resumeIntents);
                 }
             } else {
                 Intent intent = new Intent();
@@ -192,6 +174,37 @@ public class SplashActivity extends Activity {
             }
 
         });
+    }
+
+    /**
+     * 按栈底→栈顶顺序整链重建返回链（正常恢复与断网/异常兜底共用这一条路径）。
+     * 逐条 try：第 N 条起不来（如组件被禁用）时前 N-1 条已经入栈，若此时整体转进
+     * 本地库会留下"半截原链+缓存页"的混合栈；全部失败才兜底进本地库，绝不能闪退在启动页。
+     */
+    private void startRestoreChain(List<Intent> resumeIntents) {
+        interruptSplash();
+        splashTextView.postDelayed(() -> {
+            boolean startedAny = false;
+            if (resumeIntents != null) {
+                for (Intent resume : resumeIntents) {
+                    try {
+                        startActivity(resume);
+                        startedAny = true;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            if (!startedAny) {
+                try {
+                    startActivity(new Intent(SplashActivity.this, LocalListActivity.class));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            CenterThreadPool.run(() -> AppInfoApi.check(SplashActivity.this));
+            finish();
+        }, 100);
     }
 
     private void checkCookieRefresh() throws IOException {

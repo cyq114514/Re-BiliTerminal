@@ -42,7 +42,7 @@
                 android:ellipsize="marquee"
                 android:singleLine="true"
                 android:text="UP主名字"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="13sp"
                 app:autoSizeTextType="uniform"
                 app:layout_constraintBottom_toBottomOf="@+id/upInfo_Icon"
@@ -78,7 +78,7 @@
             android:layout_gravity="end|bottom"
             android:layout_marginEnd="3dp"
             android:layout_marginBottom="3dp"
-            android:background="#64555555"
+            android:background="@color/overlay_dark"
             android:text="共1张图片"
             android:textSize="12sp"
             android:visibility="gone" />

@@ -126,7 +126,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_below="@id/top"
-        android:background="#6000"
+        android:background="@color/scrim_black"
         android:clickable="false"
         android:gravity="center"
         android:text="@string/tutorial_pager"

@@ -8,6 +8,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
@@ -33,6 +34,9 @@ import com.RobinNotBad.BiliClient.activity.video.RankingActivity;
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
 import com.RobinNotBad.BiliClient.activity.video.TimelineActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
+import com.RobinNotBad.BiliClient.adapter.MenuGridAdapter;
+import com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView;
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -55,6 +59,7 @@ public class MenuActivity extends BaseActivity {
     private String from;
     private MaterialButton dynamicButton;
     private MaterialButton messageButton;
+    private MenuGridAdapter menuGridAdapter;
 
     /**
      * 在排序设置和Splash中使用到的，
@@ -142,57 +147,82 @@ public class MenuActivity extends BaseActivity {
         LinearLayout layout = findViewById(R.id.menu_layout);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
 
-        for (String btn : btnList) {
-            MaterialButton materialButton = new MaterialButton(this);
-            switch (btn) {
-                case "exit":
-                    materialButton.setText("退出");
-                    break;
-                case "login":
-                    materialButton.setText("登录");
-                    break;
-                case "dynamic":
-                    String btnText = Objects.requireNonNull(btnNames.get(btn)).first;
-                    if (btn.equals("dynamic")) {
+        boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
+        int dynamicUpdateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
+        int messageUpdateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
+
+        if (newUi) {
+            //新版美学：圆形描边按钮网格（图标 + 标签 + 更新数粉色徽章）
+            RotaryRecyclerView menuGrid = findViewById(R.id.menu_grid);
+            menuGrid.setVisibility(View.VISIBLE);
+            findViewById(R.id.menu_scroll).setVisibility(View.GONE);
+            menuGrid.setLayoutManager(new CustomGridManager(this,
+                    SharedPreferencesUtil.getBoolean("ui_landscape", false) ? 3 : 2));
+            //菜单是静态内容：关掉默认 item 动画避免 notifyDataSetChanged 时整格交叉淡入，
+            //setHasFixedSize 减少不必要的整表布局请求，低配手表上更顺
+            menuGrid.setItemAnimator(null);
+            menuGrid.setHasFixedSize(true);
+            menuGridAdapter = new MenuGridAdapter(new MenuGridAdapter.OnMenuClickListener() {
+                @Override
+                public void onMenuClick(String key) {
+                    killAndJump(key);
+                }
+
+                @Override
+                public boolean onMenuLongClick(String key) {
+                    return handleMenuLongClick(key);
+                }
+            });
+            menuGrid.setAdapter(menuGridAdapter);
+
+            List<MenuGridAdapter.MenuEntry> entries = new ArrayList<>();
+            for (String btn : btnList) {
+                int badge = 0;
+                if (btn.equals("dynamic") && dynamicUpdateNum > 0) badge = dynamicUpdateNum;
+                else if (btn.equals("message") && messageUpdateNum > 0) badge = messageUpdateNum;
+                String label = btn.equals("exit") ? "退出"
+                        : btn.equals("login") ? "登录"
+                        : Objects.requireNonNull(btnNames.get(btn)).first;
+                entries.add(new MenuGridAdapter.MenuEntry(btn, label, menuIconRes(btn), badge));
+            }
+            menuGridAdapter.setEntries(entries);
+        } else {
+            for (String btn : btnList) {
+                MaterialButton materialButton = new MaterialButton(this);
+                switch (btn) {
+                    case "exit":
+                        materialButton.setText("退出");
+                        break;
+                    case "login":
+                        materialButton.setText("登录");
+                        break;
+                    case "dynamic":
+                        String btnText = Objects.requireNonNull(btnNames.get(btn)).first;
                         dynamicButton = materialButton;
-                        int updateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
-                        if (updateNum > 0) {
-                            btnText = btnText + " (" + updateNum + ")";
+                        if (dynamicUpdateNum > 0) {
+                            btnText = btnText + " (" + dynamicUpdateNum + ")";
                         }
-                    }
-                    materialButton.setText(btnText);
-                    break;
-                case "message":
-                    String messageBtnText = Objects.requireNonNull(btnNames.get(btn)).first;
-                    messageButton = materialButton;
-                    int messageUpdateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
-                    if (messageUpdateNum > 0) {
-                        messageBtnText = messageBtnText + " (" + messageUpdateNum + ")";
-                    }
-                    materialButton.setText(messageBtnText);
-                    break;
-                default:
-                    materialButton.setText(Objects.requireNonNull(btnNames.get(btn)).first);
-                    break;
-            }
-            materialButton.setOnClickListener(view -> killAndJump(btn));
-            // 长按"推荐"刷新视频
-            if (btn.equals("recommend")) {
-                materialButton.setOnLongClickListener(view -> {
-                    if (btn.equals(from)) {
-                        // 当前已在推荐页，发送刷新广播
-                        //顶部不一定是推荐页（可能是搜索/动态等其他 InstanceActivity），盲转 ClassCastException；认准实例再刷新
-                        if (BiliTerminal.getInstanceActivityOnTop() instanceof RecommendActivity) {
-                            ((RecommendActivity) BiliTerminal.getInstanceActivityOnTop()).refreshRecommend();
+                        materialButton.setText(btnText);
+                        break;
+                    case "message":
+                        String messageBtnText = Objects.requireNonNull(btnNames.get(btn)).first;
+                        messageButton = materialButton;
+                        if (messageUpdateNum > 0) {
+                            messageBtnText = messageBtnText + " (" + messageUpdateNum + ")";
                         }
-                        finish();
-                    } else {
-                        killAndJump(btn);
-                    }
-                    return true;
-                });
+                        materialButton.setText(messageBtnText);
+                        break;
+                    default:
+                        materialButton.setText(Objects.requireNonNull(btnNames.get(btn)).first);
+                        break;
+                }
+                materialButton.setOnClickListener(view -> killAndJump(btn));
+                // 长按"推荐"刷新视频
+                if (btn.equals("recommend")) {
+                    materialButton.setOnLongClickListener(view -> handleMenuLongClick(btn));
+                }
+                layout.addView(materialButton, params);
             }
-            layout.addView(materialButton, params);
         }
 
         //首次安装/升级到新版本后，首次进入主菜单时自动打开当前版本的更新日志
@@ -224,6 +254,11 @@ public class MenuActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         Log.e("debug", "MenuActivity onResume in: " + (System.currentTimeMillis() - time));
+        if (menuGridAdapter != null) {
+            //新版菜单：更新数以徽章形式刷新
+            menuGridAdapter.updateBadge("dynamic", SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0));
+            menuGridAdapter.updateBadge("message", SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0));
+        }
         if (dynamicButton != null) {
             String btnText = Objects.requireNonNull(btnNames.get("dynamic")).first;
             int updateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
@@ -239,6 +274,59 @@ public class MenuActivity extends BaseActivity {
                 messageBtnText = messageBtnText + " (" + messageUpdateNum + ")";
             }
             messageButton.setText(messageBtnText);
+        }
+    }
+
+    //长按"推荐"刷新视频（新旧两版菜单共用）
+    private boolean handleMenuLongClick(String key) {
+        if (!"recommend".equals(key)) return false;
+        if (key.equals(from)) {
+            //当前已在推荐页，发送刷新广播
+            //顶部不一定是推荐页（可能是搜索/动态等其他 InstanceActivity），盲转 ClassCastException；认准实例再刷新
+            if (BiliTerminal.getInstanceActivityOnTop() instanceof RecommendActivity) {
+                ((RecommendActivity) BiliTerminal.getInstanceActivityOnTop()).refreshRecommend();
+            }
+            finish();
+        } else {
+            killAndJump(key);
+        }
+        return true;
+    }
+
+    //新版菜单图标映射：优先复用项目现有矢量图标，缺失的（火焰/趋势/直播）为本次新增
+    private int menuIconRes(String key) {
+        switch (key) {
+            case "recommend":
+                return R.drawable.icon_home;
+            case "popular":
+                return R.drawable.icon_fire;
+            case "hotsearch":
+                return R.drawable.icon_trending;
+            case "precious":
+                return R.drawable.icon_bv;
+            case "ranking":
+                return R.drawable.icon_star;
+            case "live":
+                return R.drawable.icon_live;
+            case "timeline":
+                return R.drawable.icon_time;
+            case "search":
+                return R.drawable.icon_search;
+            case "dynamic":
+                return R.drawable.icon_followings;
+            case "myspace":
+            case "login":
+                return R.drawable.icon_person;
+            case "message":
+                return R.drawable.icon_reply;
+            case "local":
+                return R.drawable.icon_download;
+            case "settings":
+                return R.drawable.icon_setting;
+            case "exit":
+                return R.drawable.icon_logout;
+            default:
+                return R.drawable.icon_menu;
         }
     }
 

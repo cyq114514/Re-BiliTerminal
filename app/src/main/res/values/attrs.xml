@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 宽高比（宽/高），0 表示不启用，按内容自适应 -->
+    <declare-styleable name="RatioImageView">
+        <attr name="coverRatio" format="float" />
+    </declare-styleable>
+</resources>

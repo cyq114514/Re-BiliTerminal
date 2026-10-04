@@ -832,7 +832,7 @@
                         android:padding="4dp"
                         android:textSize="12sp"
                         android:text="查看历史更新日志 >"
-                        android:textColor="#FB7299"
+                        android:textColor="@color/bili_pink"
                         android:layout_gravity="center" />
 
                     <TextView
@@ -843,7 +843,7 @@
                         android:padding="4dp"
                         android:textSize="12sp"
                         android:text="检查更新 >"
-                        android:textColor="#FB7299"
+                        android:textColor="@color/bili_pink"
                         android:layout_gravity="center" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

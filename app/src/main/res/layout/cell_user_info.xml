@@ -78,7 +78,7 @@
         android:layout_width="1dp"
         android:layout_height="0dp"
         android:layout_marginStart="5dp"
-        android:background="#818C8C8C"
+        android:background="@color/overlay_gray_strong"
         app:layout_constraintBottom_toBottomOf="@id/userFollowers"
         app:layout_constraintStart_toEndOf="@id/userMedal"
         app:layout_constraintTop_toTopOf="@id/userFollowers" />
@@ -144,7 +144,7 @@
             android:layout_marginTop="4dp"
             android:layout_marginBottom="6dp"
             android:gravity="center_vertical"
-            android:textColor="#FB7299"
+            android:textColor="@color/bili_pink"
             android:text="直播中：xxxx"
             android:textAlignment="textStart"
             android:textSize="13sp"
@@ -212,7 +212,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginHorizontal="4dp"
-                android:background="#318C8C8C"
+                android:background="@color/overlay_gray"
                 android:visibility="gone" />
 
             <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
@@ -324,7 +324,7 @@
         android:layout_height="1dp"
         android:layout_marginHorizontal="10dp"
         android:layout_marginVertical="4dp"
-        android:background="#318C8C8C"
+        android:background="@color/overlay_gray"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/followBtn" />

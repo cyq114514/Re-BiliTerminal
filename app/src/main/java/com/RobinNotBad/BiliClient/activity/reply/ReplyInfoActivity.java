@@ -50,9 +50,12 @@ public class ReplyInfoActivity extends BaseActivity {
     private SwipeRefreshLayout refreshLayout;
     private ArrayList<Reply> replyList;
     private ReplyAdapter replyAdapter;
-    private boolean bottom = false;
-    private int page = 1;
-    private boolean refreshing = false;
+    private volatile boolean bottom = false;
+    private volatile int page = 1;
+    private volatile boolean refreshing = false;
+    //代际守卫：refresh()/排序切换自增，在途的"加载更多"结果凭代际作废——
+    //否则旧页的子评论会在 refresh 清空列表后被 addAll 进新列表
+    private volatile int loadGeneration = 0;
     //已加载子评论的 rpid 集合，作为分页兜底去重，避免重复评论
     private final Set<Long> loadedRpids = new HashSet<>();
 
@@ -144,11 +147,18 @@ public class ReplyInfoActivity extends BaseActivity {
 
     private void continueLoading() {
         if (bottom) return;   //到底拦截，避免无效请求
+        final int myGeneration = loadGeneration;
         runOnUiThread(() -> refreshLayout.setRefreshing(true));
         page++;
         try {
             List<Reply> list = new ArrayList<>();
             int result = ReplyApi.getReplies(oid, rpid, page, type, sort, list);
+            if (myGeneration != loadGeneration) {
+                //在途期间发生了 refresh/排序切换：结果整体过期，丢弃且不回滚 page（已被 refresh 重置）
+                refreshing = false;
+                runOnUiThread(() -> refreshLayout.setRefreshing(false));
+                return;
+            }
             if (result != -1) {
                 Log.e("debug", "下一页");
                 //兜底去重，避免分页边界返回重复子评论
@@ -173,6 +183,7 @@ public class ReplyInfoActivity extends BaseActivity {
             refreshing = false;
         } catch (Exception e) {
             page--;
+            refreshing = false;
             runOnUiThread(() -> {
                 MsgUtil.err(e);
                 refreshLayout.setRefreshing(false);
@@ -182,6 +193,7 @@ public class ReplyInfoActivity extends BaseActivity {
 
     @SuppressLint("NotifyDataSetChanged")
     private void refresh() {
+        loadGeneration++;   //作废在途的"加载更多"，其结果不得写入清空后的新列表
         page = 1;
         bottom = false;
         loadedRpids.clear();

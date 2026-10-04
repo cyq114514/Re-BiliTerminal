@@ -117,7 +117,7 @@
             android:id="@+id/top"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#348A8A8A"
+            android:background="@color/overlay_gray"
             android:paddingHorizontal="8dp"
             android:layout_alignParentTop="true">
 
@@ -162,7 +162,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            android:background="#348A8A8A"
+            android:background="@color/overlay_gray"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:orientation="vertical">
@@ -400,7 +400,7 @@
             android:shadowDy="0.0"
             android:shadowRadius="3.0"
             android:text="x 1.0"
-            android:textColor="#fff"
+            android:textColor="@color/textwhite"
             android:textSize="14sp"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -436,7 +436,7 @@
                 android:shadowRadius="3.0"
                 android:text="加载中"
                 android:textAlignment="center"
-                android:textColor="#DDDDDD"
+                android:textColor="@color/divider_gray"
                 android:textSize="10sp" />
 
             <TextView
@@ -450,7 +450,7 @@
                 android:shadowRadius="3.0"
                 android:text="OwO"
                 android:textAlignment="center"
-                android:textColor="#DDDDDD"
+                android:textColor="@color/divider_gray"
                 android:textSize="10sp" />
 
         </LinearLayout>
@@ -477,7 +477,7 @@
                 android:shadowRadius="3.0"
                 android:text="倍速调节"
                 android:textAlignment="center"
-                android:textColor="#DDDDDD"
+                android:textColor="@color/divider_gray"
                 android:textSize="14sp"
                 app:layout_constraintBottom_toTopOf="@+id/seekbar_speed" />
 
@@ -505,7 +505,7 @@
                 android:shadowRadius="3.0"
                 android:text="1.0x"
                 android:textAlignment="center"
-                android:textColor="#DDDDDD"
+                android:textColor="@color/divider_gray"
                 android:textSize="14sp"
                 app:layout_constraintTop_toBottomOf="@id/seekbar_speed" />
 
@@ -525,7 +525,7 @@
         android:shadowDy="0.0"
         android:shadowRadius="3.0"
         android:text="音量：100%"
-        android:textColor="#fff"
+        android:textColor="@color/textwhite"
         android:textSize="13sp"
         android:visibility="gone" />
 

@@ -54,6 +54,89 @@
             <include layout="@layout/cell_article_list" />
 
             <include layout="@layout/cell_reply_list" />
+
+            <com.RobinNotBad.BiliClient.ui.widget.BiliCardView
+                android:id="@+id/preview_highlight_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+                android:layout_marginTop="6dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/icon_star" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="高亮卡片（BiliCardView）"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:alpha="0.7"
+                            android:text="描边与底色以动画过渡到主题粉，用于选中态"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.RobinNotBad.BiliClient.ui.widget.BiliCardView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/background_menu_button"
+                        android:padding="11dp"
+                        android:src="@drawable/icon_home" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|top"
+                        android:background="@drawable/background_badge"
+                        android:minWidth="14dp"
+                        android:paddingHorizontal="@dimen/badge_padding_horizontal"
+                        android:paddingVertical="@dimen/badge_padding_vertical"
+                        android:text="9"
+                        android:textAlignment="center"
+                        android:textColor="@color/textwhite"
+                        android:textSize="9sp" />
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/menu_button_label_spacing"
+                    android:alpha="0.9"
+                    android:text="主菜单按钮示例"
+                    android:textSize="11sp" />
+            </LinearLayout>
         </LinearLayout>
     </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
 

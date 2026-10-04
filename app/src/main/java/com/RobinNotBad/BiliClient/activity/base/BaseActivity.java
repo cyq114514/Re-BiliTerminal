@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.event.SnackEvent;
+import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
@@ -59,11 +60,24 @@ public class BaseActivity extends AppCompatActivity {
     //调整页面边距，参考了hankmi的方式
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
+        //关闭"新版美学设计"时，向当前主题追加 Classic 覆盖层恢复旧版卡片/按钮/激活色；
+        //必须在 setContentView 之前，applyStyle 不会替换主题（Splash 等窗口背景得以保留）。
+        //NoSwipe 全屏页（播放器/看图）不追加：与 ambientEnabled() 同一口径，
+        //Classic 的 colorControlActivated 等属性会污染播放器自有视觉体系
+        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true) && !isNoSwipeThemedPage()) {
+            getTheme().applyStyle(R.style.ThemeOverlay_BiliClient_Classic, true);
+        }
+
         setRequestedOrientation(SharedPreferencesUtil.getBoolean("ui_landscape", false)
                 ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         super.onCreate(savedInstanceState);
+
+        //冷启动页面栈恢复：可恢复页面在创建时入栈，销毁时出栈（见 ResumePageUtil），
+        //进程被杀后由 Splash 按栈重建整个返回链，返回键才能逐级回退而不是直接退出。
+        //token 是本实例的出栈凭证：同类页叠放时按凭证精确出栈，防止删错条目留幽灵页
+        if (isRestorablePage()) resumeToken = ResumePageUtil.push(this);
 
         int paddingH_percent = SharedPreferencesUtil.getInt("paddingH_percent", 0);
         int paddingV_percent = SharedPreferencesUtil.getInt("paddingV_percent", 0);
@@ -97,6 +111,60 @@ public class BaseActivity extends AppCompatActivity {
         if ((density = SharedPreferencesUtil.getInt("density", -1)) >= 72) {
             setDensity(density);
         }
+
+        installAmbient();
+    }
+
+    //氛围背景：新版美学下在每个页面内容层之下铺一层装饰（黑底上的粉色氛围），
+    //加到 DecorView 上而不是 content 上——setContentView 会清空 content 的子 View 但不会动 DecorView
+    private AmbientBackground ambientBackground;
+
+    //默认跟随"新版美学设计"总开关；播放器/图片查看器等 NoSwipe 全屏页通过主题判断排除，子类也可覆写关闭
+    protected boolean ambientEnabled() {
+        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)) return false;
+        try {
+            ActivityInfo info = getPackageManager().getActivityInfo(getComponentName(), 0);
+            return info.theme != R.style.Theme_NoSwipe && info.theme != R.style.Theme_NoSwipe_AppCompat;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /**
+     * 当前页面是否挂 NoSwipe 系主题（播放器/看图等全屏页）。
+     * 查询失败返回 false：Classic 覆盖层与氛围背景的排除口径都以"明确命中"为准，
+     * 失败时维持各自原本的保守行为（覆盖层照加 / 氛围背景不装）。
+     */
+    private boolean isNoSwipeThemedPage() {
+        try {
+            ActivityInfo info = getPackageManager().getActivityInfo(getComponentName(), 0);
+            return info.theme == R.style.Theme_NoSwipe || info.theme == R.style.Theme_NoSwipe_AppCompat;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    private void installAmbient() {
+        if (!ambientEnabled()) return;
+        ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        if (decor.getChildAt(0) instanceof AmbientBackground) return;
+        ambientBackground = new AmbientBackground(this);
+        ambientBackground.setMode(SharedPreferencesUtil.getBoolean("player_ui_round", false)
+                ? AmbientBackground.MODE_ROUND
+                : AmbientBackground.MODE_RADIAL);
+        decor.addView(ambientBackground, 0,
+                new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    protected void setAmbientBreathing(boolean breathing) {
+        if (ambientBackground != null) ambientBackground.setBreathing(breathing);
+    }
+
+    @Override
+    protected void onPause() {
+        //离开页面/切后台时停掉呼吸动画，不留空转的 ValueAnimator
+        setAmbientBreathing(false);
+        super.onPause();
     }
 
     @Override
@@ -172,6 +240,8 @@ public class BaseActivity extends AppCompatActivity {
     }
 
     private boolean eventBusInit = false;
+    //本页面在恢复栈里的出栈凭证（push 时由 ResumePageUtil 发放）
+    private long resumeToken = 0;
 
     @Override
     protected void onStart() {
@@ -187,7 +257,6 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (isRestorablePage()) ResumePageUtil.save(this);
         if (eventBusEnabled()) {
             SnackEvent snackEvent;
             if ((snackEvent = EventBus.getDefault().getStickyEvent(SnackEvent.class)) != null)
@@ -203,6 +272,7 @@ public class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (isRestorablePage()) ResumePageUtil.pop(this, resumeToken);
         super.onDestroy();
         if (eventBusInit) {
             EventBus.getDefault().unregister(this);
@@ -234,6 +304,7 @@ public class BaseActivity extends AppCompatActivity {
 
     protected void asyncInflate(int id, InflateCallBack callBack) {
         setContentView(R.layout.activity_loading);
+        setAmbientBreathing(true); //加载期间氛围背景呼吸，内容就绪后停止
         new AsyncLayoutInflaterX(this).inflate(id, null, (view, layoutId, parent) -> {
             //低配设备 inflate 期间页面可能已被销毁，对已销毁窗口 setContentView 会崩
             if (isDestroyed()) return;
@@ -262,6 +333,7 @@ public class BaseActivity extends AppCompatActivity {
                         android.view.Choreographer.getInstance().postFrameCallback(this);
                     } else {
                         fadeInView.setAlpha(1f);
+                        setAmbientBreathing(false);
                     }
                 }
             });

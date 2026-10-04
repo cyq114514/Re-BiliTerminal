@@ -28,7 +28,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="巧克力"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="12sp" />
 
             <com.google.android.material.radiobutton.MaterialRadioButton
@@ -36,7 +36,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="香草"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="12sp" />
         </RadioGroup>
 

@@ -340,7 +340,7 @@
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
                 android:text="追番"
-                android:textColor="#FB7299"
+                android:textColor="@color/bili_pink"
                 app:strokeColor="#FB7299" />
 
         </LinearLayout>

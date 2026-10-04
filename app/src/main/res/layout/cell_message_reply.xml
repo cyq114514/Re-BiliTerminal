@@ -29,7 +29,7 @@
             android:layout_height="1dp"
             android:layout_width="match_parent"
             android:layout_marginHorizontal="8dp"
-            android:background="#318C8C8C"
+            android:background="@color/overlay_gray"
             android:layout_marginTop="5dp" />
 
         <TextView

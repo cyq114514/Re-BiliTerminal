@@ -6,6 +6,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -13,6 +14,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 
 /*
@@ -39,8 +41,15 @@ public class RefreshListActivity extends BaseActivity {
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
         swipeRefreshLayout.setEnabled(false);
         swipeRefreshLayout.setRefreshing(true);
+        //新版美学：刷新指示器与氛围背景同色；初始加载期间氛围呼吸
+        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)) {
+            swipeRefreshLayout.setColorSchemeColors(ContextCompat.getColor(this, R.color.bili_pink));
+            setAmbientBreathing(true);
+        }
         recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setHasFixedSize(true);
+        //列表是滚动加载内容，默认 item 动画在低配手表上开销明显，关闭
+        recyclerView.setItemAnimator(null);
         recyclerView.setLayoutManager(getLayoutManager());
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
@@ -95,7 +104,11 @@ public class RefreshListActivity extends BaseActivity {
     }
 
     public void setRefreshing(boolean bool) {
-        runOnUiThread(() -> swipeRefreshLayout.setRefreshing(bool));
+        runOnUiThread(() -> {
+            swipeRefreshLayout.setRefreshing(bool);
+            //加载态与氛围呼吸联动：数据到位即停，与 WearBili 的加载呼吸一致
+            setAmbientBreathing(bool);
+        });
     }
 
     public void setOnLoadMoreListener(OnLoadMoreListener loadMore) {

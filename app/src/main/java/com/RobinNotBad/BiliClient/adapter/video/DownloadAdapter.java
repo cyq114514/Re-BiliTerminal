@@ -11,19 +11,13 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener;
 import com.RobinNotBad.BiliClient.model.DownloadSection;
 import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
-import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
-import com.bumptech.glide.request.RequestOptions;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -136,13 +130,8 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
             }
 
             if (!section.url_cover.isEmpty())
-                //封面走 GlideUtil.url() 的服务端降采样（@25q_512w），避免直载原始大图
-                Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(section.url_cover))
-                        .transition(GlideUtil.getTransitionOptions())
-                        .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(5))))
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .format(DecodeFormat.PREFER_RGB_565)
-                        .into(cover);
+                //封面走 GlideUtil.url() 的服务端降采样（@25q_512w），避免直载原始大图（requestCover 内部已走 url()）
+                GlideUtil.requestCover(cover, section.url_cover, R.mipmap.placeholder);
         }
 
         @SuppressLint({"SetTextI18n"})

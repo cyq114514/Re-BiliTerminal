@@ -51,7 +51,7 @@
             android:paddingHorizontal="@dimen/activity_padding_horizontal"
             android:paddingBottom="4dp">
 
-            <ImageView
+            <com.RobinNotBad.BiliClient.ui.widget.RatioImageView
                 android:id="@+id/img_cover"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -59,7 +59,9 @@
                 android:adjustViewBounds="true"
                 android:clickable="true"
                 android:focusable="true"
+                android:scaleType="fitCenter"
                 android:src="@mipmap/placeholder"
+                app:coverRatio="1.6"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
@@ -198,7 +200,7 @@
                 android:layout_marginTop="4dp"
                 android:alpha="0.5"
                 android:text="114人在线"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="12sp"
                 app:layout_constraintStart_toEndOf="@+id/viewIcon"
                 app:layout_constraintTop_toBottomOf="@+id/play" />
@@ -224,7 +226,7 @@
                 android:alpha="0.5"
                 android:lines="1"
                 android:text="已直播 00:00:00"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="12sp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHorizontal_bias="0.0"
@@ -251,7 +253,7 @@
                 android:alpha="0.5"
                 android:lines="1"
                 android:text="直播间ID"
-                android:textColor="#fff"
+                android:textColor="@color/textwhite"
                 android:textSize="12sp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHorizontal_bias="0.0"

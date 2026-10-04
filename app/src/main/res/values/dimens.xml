@@ -7,4 +7,13 @@
     <dimen name="card_round">6dp</dimen>
     <dimen name="card_stroke">0dp</dimen>
     <dimen name="round_small">4dp</dimen>
+
+    <!-- 新版美学（移植自 Re-WearBili 设计语言，可在设置中关闭） -->
+    <dimen name="card_round_new">10dp</dimen>
+    <dimen name="card_stroke_new">0.5dp</dimen>
+    <dimen name="badge_round">3dp</dimen>
+    <dimen name="badge_padding_horizontal">4dp</dimen>
+    <dimen name="badge_padding_vertical">1dp</dimen>
+    <dimen name="menu_button_label_spacing">6dp</dimen>
+    <dimen name="topbar_padding_horizontal">12dp</dimen>
 </resources>

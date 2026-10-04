@@ -9,4 +9,22 @@
     <color name="low_pink">#99FB8799</color>
     <color name="light_green">#bfb</color>
     <color name="link">#66ccff</color>
+
+    <!-- 新版美学（移植自 Re-WearBili 设计语言，可在设置中关闭） -->
+    <color name="bili_pink">#FE679A</color>
+    <color name="bili_blue">#00A1D6</color>
+    <color name="card_bg_new">#4D262626</color>
+    <color name="card_border_new">#363636</color>
+    <color name="card_bg_highlight">#1AE75688</color>
+    <color name="meta_text">#B3FFFFFF</color>
+
+    <!-- 硬编码颜色收口：次要文字/遮罩层语义色（值取自原散落的 hex，视觉等价） -->
+    <color name="text_gray">#999999</color>
+    <color name="text_dim">#666666</color>
+    <color name="overlay_gray">#318C8C8C</color>
+    <color name="overlay_gray_strong">#818C8C8C</color>
+    <color name="overlay_dark">#64555555</color>
+    <color name="divider_gray">#DDDDDD</color>
+    <color name="color_danger">#FF5722</color>
+    <color name="scrim_black">#66000000</color>
 </resources>

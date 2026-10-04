@@ -11,16 +11,11 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.model.Timeline;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
-import com.bumptech.glide.request.RequestOptions;
 import com.google.android.material.card.MaterialCardView;
 
 import java.text.SimpleDateFormat;
@@ -79,13 +74,7 @@ public class TimelineAdapter extends RecyclerView.Adapter<TimelineAdapter.DayVie
                 }
                 
                 String coverUrl = GlideUtil.url(episode.cover);
-                Glide.with(BiliTerminal.context).asDrawable().load(coverUrl)
-                        .placeholder(R.mipmap.placeholder)
-                        .format(DecodeFormat.PREFER_RGB_565)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .apply(RequestOptions.bitmapTransform(new RoundedCorners(8))
-                                .sizeMultiplier(0.85f))
-                        .into(cover);
+                GlideUtil.requestCover(cover, episode.cover, R.mipmap.placeholder);
                 
                 holder.episodesLayout.addView(episodeView);
             }

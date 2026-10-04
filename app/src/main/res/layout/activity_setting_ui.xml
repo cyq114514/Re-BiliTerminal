@@ -78,10 +78,41 @@
                     android:paddingVertical="3dp">
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_new_ui"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:text="新版美学设计" />
+
+                    <TextView
+                        android:id="@+id/switch_new_ui_desc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="6dp"
+                        android:layout_marginTop="1dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.9"
+                        android:text="@string/desc_setting_ui_new_ui"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="3dp">
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switch_round"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="#00000000"
+                        android:background="@android:color/transparent"
                         android:text="圆屏适配" />
 
                     <TextView
@@ -240,7 +271,7 @@
                             android:ems="10"
                             android:inputType="number"
                             android:minHeight="40dp"
-                            android:textColor="#fff"
+                            android:textColor="@color/textwhite"
                             android:textColorHint="#80ffffff"
                             android:textCursorDrawable="@drawable/cursor_drawable"
                             android:textSize="13sp"

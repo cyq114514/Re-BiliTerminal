@@ -10,7 +10,7 @@
     android:background="@drawable/background_interaction_choice"
     android:gravity="center"
     android:layout_gravity="center_horizontal"
-    android:textColor="#FFFFFFFF"
+    android:textColor="@color/textwhite"
     android:textSize="17sp"
     android:textStyle="bold"
     android:elevation="4dp" />

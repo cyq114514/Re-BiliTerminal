@@ -123,10 +123,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="35sp"
                     app:drawableEndCompat="@drawable/arrow_forward"
+                    app:drawableTint="@color/bili_pink"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="@string/btn_send"
                     android:textAlignment="textEnd"
+                    android:textColor="@color/bili_pink"
+                    android:textStyle="bold"
                     android:textSize="13sp"
                     android:visibility="visible"
                     tools:ignore="RtlCompat" />

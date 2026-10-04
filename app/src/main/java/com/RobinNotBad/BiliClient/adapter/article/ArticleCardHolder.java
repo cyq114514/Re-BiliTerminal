@@ -9,17 +9,11 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.model.ArticleCard;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
-import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
-import com.bumptech.glide.request.RequestOptions;
 
 public class ArticleCardHolder extends RecyclerView.ViewHolder {
     TextView title, upName, readTimes;
@@ -48,12 +42,10 @@ public class ArticleCardHolder extends RecyclerView.ViewHolder {
             readTimes.setVisibility(View.GONE);
         } else readTimes.setText(articleCard.view);
 
-        Glide.with(BiliTerminal.context).asDrawable().load(!TextUtils.isEmpty(articleCard.cover) ? GlideUtil.url(articleCard.cover) : R.mipmap.article_placeholder)
-                .placeholder(R.mipmap.placeholder)
-                .transition(GlideUtil.getTransitionOptions())
-                .format(DecodeFormat.PREFER_RGB_565)
-                .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(5))))
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .into(cover);
+        if (TextUtils.isEmpty(articleCard.cover)) {
+            cover.setImageResource(R.mipmap.article_placeholder);
+        } else {
+            GlideUtil.requestCover(cover, articleCard.cover, R.mipmap.placeholder);
+        }
     }
 }

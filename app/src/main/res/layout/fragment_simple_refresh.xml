@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -22,5 +23,11 @@
         android:gravity="center"
         android:text="啥都木有~"
         android:textAlignment="center"
+        android:textColor="@color/text_gray"
+        android:textSize="13sp"
+        app:drawableTopCompat="@drawable/icon_empty"
+        app:drawableTint="@color/text_dim"
+        app:drawableTintMode="src_in"
+        android:drawablePadding="8dp"
         android:visibility="gone" />
 </FrameLayout>

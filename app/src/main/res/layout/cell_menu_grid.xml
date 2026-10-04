@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 新版美学主菜单：圆形描边按钮网格 item（移植自 Re-WearBili 的 OutlinedRoundButton） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingHorizontal="6dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="4dp"
+    android:stateListAnimator="@animator/press_scale">
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <ImageView
+            android:id="@+id/menu_icon"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/background_menu_button"
+            android:padding="11dp" />
+
+        <TextView
+            android:id="@+id/menu_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|top"
+            android:layout_marginEnd="2dp"
+            android:background="@drawable/background_badge"
+            android:minWidth="14dp"
+            android:paddingHorizontal="@dimen/badge_padding_horizontal"
+            android:paddingVertical="@dimen/badge_padding_vertical"
+            android:textAlignment="center"
+            android:textColor="@color/textwhite"
+            android:textSize="9sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/menu_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/menu_button_label_spacing"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:singleLine="true"
+        android:textSize="11sp" />
+</LinearLayout>

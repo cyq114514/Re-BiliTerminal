@@ -92,7 +92,7 @@
         android:gravity="center_vertical"
         android:text="删除"
         android:textSize="13sp"
-        android:textColor="#fff"
+        android:textColor="@color/textwhite"
         app:drawableStartCompat="@drawable/icon_delete"
         app:layout_constraintStart_toEndOf="@+id/dislikeBtn"
         app:layout_constraintTop_toTopOf="@+id/likes" />
@@ -119,7 +119,7 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="2dp"
         android:layout_marginBottom="2dp"
-        android:background="#64555555"
+        android:background="@color/overlay_dark"
         android:text="共1张图片"
         android:textSize="12sp"
         app:layout_constraintBottom_toBottomOf="@+id/imageCard"
@@ -169,10 +169,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="共114条回复"
-            android:textColor="#FE679A"
+            android:textColor="@color/bili_pink"
             android:textSize="13sp"
             app:drawableEndCompat="@drawable/arrow_forward_pink"
-            app:drawableTint="#FE679A" />
+            app:drawableTint="@color/bili_pink" />
     </LinearLayout>
 
     <TextView
@@ -197,7 +197,7 @@
         android:layout_marginTop="8dp"
         android:layout_marginEnd="9dp"
         android:layout_marginBottom="2dp"
-        android:background="#318C8C8C"
+        android:background="@color/overlay_gray"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

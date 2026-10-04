@@ -82,7 +82,7 @@
                         android:id="@+id/switch_round"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="#00000000"
+                        android:background="@android:color/transparent"
                         android:text="@string/section_ui_round" />
 
                     <TextView
@@ -122,7 +122,7 @@
                     android:minHeight="40dp"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
-                    android:textColor="#fff"
+                    android:textColor="@color/textwhite"
                     android:textColorHint="#80ffffff"
                     android:textCursorDrawable="@drawable/cursor_drawable"
                     android:textSize="13sp" />
@@ -174,7 +174,7 @@
                         android:layout_height="wrap_content"
                         android:ems="10"
                         android:inputType="number"
-                        android:textColor="#fff"
+                        android:textColor="@color/textwhite"
                         android:textColorHint="#80ffffff"
                         android:textCursorDrawable="@drawable/cursor_drawable"
                         android:textSize="13sp"
@@ -219,7 +219,7 @@
                         android:layout_height="wrap_content"
                         android:ems="10"
                         android:inputType="number"
-                        android:textColor="#fff"
+                        android:textColor="@color/textwhite"
                         android:textColorHint="#80ffffff"
                         android:textCursorDrawable="@drawable/cursor_drawable"
                         android:textSize="13sp"

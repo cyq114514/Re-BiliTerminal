@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 圆形描边按钮底（Re-WearBili 主菜单 OutlinedRoundButton） -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:angle="315"
+                android:endColor="#00000000"
+                android:startColor="@color/card_border_new"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item
+        android:bottom="0.5dp"
+        android:left="0.5dp"
+        android:right="0.5dp"
+        android:top="0.5dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/card_bg_new" />
+        </shape>
+    </item>
+</layer-list>

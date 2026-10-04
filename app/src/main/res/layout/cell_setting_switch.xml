@@ -15,7 +15,7 @@
             android:id="@+id/setting_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#00000000"
+            android:background="@android:color/transparent"
             android:text="开关类设置项" />
 
         <TextView
