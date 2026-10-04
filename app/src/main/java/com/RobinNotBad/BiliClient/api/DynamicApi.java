@@ -245,6 +245,9 @@ public class DynamicApi {
             indexes.addAll(mIndex);
         }
         ArrayList<Pair<Integer, Integer>> indexesList = new ArrayList<>(indexes);
+        //indexes 是 HashSet 无序：命中多个@时必须按出现位置排序，
+        //乱序不仅拼接乱，还会 substring(pos, index.first) 越界崩溃
+        indexesList.sort((a, b) -> Integer.compare(a.first, b.first));
         int pos = 0;
         for (Pair<Integer, Integer> index : indexesList) {
             String sub = content.substring(pos, index.first);
@@ -254,7 +257,9 @@ public class DynamicApi {
         }
         String sub = content.substring(pos);
         if (!sub.isEmpty()) contentJSONArray.put(Content.create(sub, 1, null));
-        if (indexesList.isEmpty()) contentJSONArray.put(Content.create(content, 1, null));
+        //没有@时上面的 sub 已是全文，这里不能再追加——重复兜底会把整段文字发两遍；
+        //纯空内容（如无评论的纯转发）保留旧版行为：放一个空文本节点，避免空 contents 被接口拒绝
+        if (contentJSONArray.length() == 0) contentJSONArray.put(Content.create("", 1, null));
         return contentJSONArray;
     }
 

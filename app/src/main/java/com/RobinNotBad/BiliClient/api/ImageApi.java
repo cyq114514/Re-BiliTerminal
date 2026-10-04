@@ -64,10 +64,10 @@ public class ImageApi {
                     .put("img_size", sizeKB);
         }
 
-        /**发布图片评论时 content.pictures 数组元素的格式*/
+        /**发布图片评论时 pictures 数组元素的格式（web 端用 img_src，不是 img_url）*/
         public JSONObject toReplyPicJson() throws JSONException {
             return new JSONObject()
-                    .put("img_url", url)
+                    .put("img_src", url)
                     .put("img_width", width)
                     .put("img_height", height)
                     .put("img_size", sizeKB);
@@ -140,24 +140,29 @@ public class ImageApi {
             requestBuilder.addHeader(NetWorkUtil.webHeaders.get(i), NetWorkUtil.webHeaders.get(i + 1));
         //okhttp会依据MultipartBody自动覆盖Content-Type，这里手动塞进去的通用头里没有该项，无需处理
 
-        Response resp = NetWorkUtil.getOkHttpInstance().newCall(requestBuilder.build()).execute();
-        ResponseBody body = resp.body();
-        if (body == null) throw new IOException("上传响应为空");
-        String json = body.string();
-        Logu.v("upload_bfs resp=" + json);
+        //try-with-resources：此前上传响应从不关闭
+        UploadedImage image;
+        try (Response resp = NetWorkUtil.getOkHttpInstance().newCall(requestBuilder.build()).execute()) {
+            ResponseBody body = resp.body();
+            if (body == null) throw new IOException("上传响应为空");
+            String json = body.string();
+            //只记录长度不打响应体：登录态下响应可能含用户内容
+            Logu.v("upload_bfs respLen=" + json.length());
 
-        JSONObject result = new JSONObject(json);
-        int code = result.optInt("code", -1);
-        if (code != 0) throw new IOException("图片上传失败：" + result.optString("message", String.valueOf(code)));
-        JSONObject data = result.optJSONObject("data");
-        if (data == null) throw new IOException("图片上传失败：data为空");
+            JSONObject result = new JSONObject(json);
+            int code = result.optInt("code", -1);
+            if (code != 0) throw new IOException("图片上传失败：" + result.optString("message", String.valueOf(code)));
+            JSONObject data = result.optJSONObject("data");
+            if (data == null) throw new IOException("图片上传失败：data为空");
 
-        UploadedImage image = new UploadedImage();
-        image.url = data.optString("image_url", "");
+            image = new UploadedImage();
+            image.url = data.optString("image_url", "");
+            image.width = data.optInt("image_width", 0);
+            image.height = data.optInt("image_height", 0);
+            image.sizeKB = data.optDouble("img_size", Math.round(imageData.length / 1024.0 * 10) / 10.0);
+        }
+
         if (image.url.startsWith("http://")) image.url = "https://" + image.url.substring(7);
-        image.width = data.optInt("image_width", 0);
-        image.height = data.optInt("image_height", 0);
-        image.sizeKB = data.optDouble("img_size", Math.round(imageData.length / 1024.0 * 10) / 10.0);
         if (image.url.isEmpty()) throw new IOException("图片上传失败：未返回图片链接");
         return image;
     }

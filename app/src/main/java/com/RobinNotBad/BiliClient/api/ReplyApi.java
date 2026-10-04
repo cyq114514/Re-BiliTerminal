@@ -1,7 +1,6 @@
 package com.RobinNotBad.BiliClient.api;
 
 import android.text.TextUtils;
-import android.util.Log;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
@@ -25,6 +24,8 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+
+import okhttp3.ResponseBody;
 
 public class ReplyApi {
 
@@ -294,7 +295,7 @@ public class ReplyApi {
                 JSONObject reply = replies.optJSONObject(i);
                 if (reply != null) replyArrayList.add(new Reply(isRoot, reply));
             } catch (Exception e) {
-                Log.w("ReplyApi", "Failed to parse reply at index " + i + ": " + e.getMessage());
+                Logu.w("ReplyApi", "Failed to parse reply at index " + i + ": " + e.getMessage());
             }
         }
     }
@@ -305,9 +306,18 @@ public class ReplyApi {
                 JSONObject reply = new JSONObject(replies.get(i).toString());
                 replyArrayList.add(new Reply(isRoot, reply));
             } catch (Exception e) {
-                Log.w("ReplyApi", "Failed to parse reply at index " + i + ": " + e.getMessage());
+                Logu.w("ReplyApi", "Failed to parse reply at index " + i + ": " + e.getMessage());
             }
         }
+    }
+
+    //POST 响应解析统一入口：弱网/被劫持时服务可能返回 HTML 页（以 "<" 开头），
+    //直接进 JSONObject 会抛 "Value <!DOCTYPE" 的费解崩溃栈，这里转成可读的 IOException
+    private static JSONObject parsePostJson(ResponseBody body) throws IOException, JSONException {
+        if (body == null) throw new IOException("响应为空");
+        String json = body.string();
+        if (json.trim().startsWith("<")) throw new IOException("服务返回了异常页面（网络劫持或接口变更），请稍后重试");
+        return new JSONObject(json);
     }
 
     public static Pair<Integer, Reply> sendReply(long oid, long root, long parent, String text, int type) throws IOException, JSONException {
@@ -315,7 +325,7 @@ public class ReplyApi {
         String arg = "oid=" + oid + "&type=" + type + (root == 0 ? "" : ("&root=" + root + "&parent=" + parent))
                 //参数值必须编码：评论含 &/+/% 时裸拼接会截断或改写参数
                 + "&message=" + NetWorkUtil.urlEncode(text) + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
-        JSONObject result = new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string());
+        JSONObject result = parsePostJson(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body());
         int code = result.optInt("code", -1);
         JSONObject data = result.optJSONObject("data");
         JSONObject replyJson = data != null ? data.optJSONObject("reply") : null;
@@ -325,21 +335,21 @@ public class ReplyApi {
     }
 
     /**
-     * 带图评论走新版 /x/v2/reply/create（JSON body，content.pictures 携带图片），
-     * 图片需先经 ImageApi.uploadImage 上传图床；旧版 /x/v2/reply/add 不支持图片。
+     * 带图评论同样走 /x/v2/reply/add 表单接口，pictures 以 JSON 数组字符串随表单提交
+     * （元素为 img_src/img_width/img_height/img_size，与 web 端一致），图片需先经
+     * ImageApi.uploadImage 上传图床。
+     * 注意：不存在 /x/v2/reply/create 这个 POST 路由——访问它会拿到 B 站 HTML 错误页
+     * （"出错啦!"），JSON 解析即抛 "Value <!DOCTYPE" 异常。
      */
     public static Pair<Integer, Reply> sendReply(long oid, long root, long parent, String text, int type, JSONArray pictures) throws IOException, JSONException {
         if (pictures == null || pictures.length() == 0) return sendReply(oid, root, parent, text, type);
-        String url = "https://api.bilibili.com/x/v2/reply/create";
-        JSONObject content = new JSONObject().put("message", text == null ? "" : text).put("pictures", pictures);
-        JSONObject body = new JSONObject()
-                .put("oid", oid)
-                .put("type", type)
-                .put("content", content)
-                .put("csrf", SharedPreferencesUtil.getString("csrf", ""));
-        if (root != 0) body.put("root", root).put("parent", parent);
-        Logu.v("sendReply(create) body=" + body);
-        JSONObject result = new JSONObject(Objects.requireNonNull(NetWorkUtil.postJson(url, body.toString()).body()).string());
+        String url = "https://api.bilibili.com/x/v2/reply/add";
+        String arg = "oid=" + oid + "&type=" + type + (root == 0 ? "" : ("&root=" + root + "&parent=" + parent))
+                //参数值必须编码：评论含 &/+/% 时裸拼接会截断或改写参数
+                + "&message=" + NetWorkUtil.urlEncode(text == null ? "" : text)
+                + "&pictures=" + NetWorkUtil.urlEncode(pictures.toString())
+                + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        JSONObject result = parsePostJson(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body());
         int code = result.optInt("code", -1);
         JSONObject data = result.optJSONObject("data");
         JSONObject replyJson = data != null ? data.optJSONObject("reply") : null;
