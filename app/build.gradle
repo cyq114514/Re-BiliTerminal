@@ -30,7 +30,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdk 26
         versionCode 20261005
-        versionName "1.1.6"
+        versionName "1.1.6-fix"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

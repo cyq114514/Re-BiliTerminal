@@ -46,6 +46,8 @@ public class PrivateMsgActivity extends BaseActivity {
     long uid;
     boolean isLoadingMore = false;
     Timer refreshTimer, animTimer;
+    //refreshTimer 在后台线程创建，onDestroy 可能早于它：靠该标志闭合"销毁后 Timer 才被创建"的竞态
+    volatile boolean destroyed;
 
     boolean animVisible = true;
 
@@ -128,8 +130,16 @@ public class PrivateMsgActivity extends BaseActivity {
                         }
                     });
 
-                    refreshTimer = new Timer();
-                    refreshTimer.schedule(new TimerTask() {
+                    Timer newRefreshTimer = new Timer();
+                    refreshTimer = newRefreshTimer;
+                    //赋值后复核销毁位：页面在后台加载完成前被关掉时，onDestroy 只 cancel 到 null，
+                    //不在这里自取消就会留下一个 15s 周期、强持有 Activity 的孤儿 Timer 线程
+                    if (destroyed) {
+                        newRefreshTimer.cancel();
+                        refreshTimer = null;
+                        return;
+                    }
+                    newRefreshTimer.schedule(new TimerTask() {
                         @Override
                         public void run() {
                             refresh();
@@ -202,6 +212,7 @@ public class PrivateMsgActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         if (refreshTimer != null) refreshTimer.cancel();
         refreshTimer = null;
         //animTimer 由聊天动画创建，不取消的话会在页面销毁后继续持有 Activity

@@ -31,6 +31,9 @@ public class DownloadListActivity extends RefreshListActivity {
     boolean emptyTipShown;
     boolean firstRefresh = true;
     boolean created;
+    //Timer 在后台线程创建：若页面在创建前就被销毁，onDestroy 里 cancel 到的是 null，
+    //随后才 new 出来的 Timer 会永久 500ms 空转并强引用已销毁的 Activity（View 树一起泄漏）
+    volatile boolean destroyed;
     ArrayList<DownloadSection> sections;
     private float lastPercent = -1;
     private String lastState = null;
@@ -45,15 +48,26 @@ public class DownloadListActivity extends RefreshListActivity {
         weakRef = new WeakReference<>(this);
 
         CenterThreadPool.run(() -> {
+            if (destroyed) return;
             created = true;
             refreshList(false);
+            if (destroyed) return;
 
-            timer = new Timer();
-            timer.schedule(new TimerTask() {
+            Timer newTimer = new Timer();
+            timer = newTimer;
+            //赋值后复核销毁位，闭合"onDestroy 早于本次创建"的竞态：此时 onDestroy 已经 cancel 过 null，
+            //只有这里主动取消，Timer 才不会变成无人认领的孤儿线程
+            if (destroyed) {
+                newTimer.cancel();
+                return;
+            }
+            newTimer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    if (adapter == null || !created || isDestroyed())
+                    if (adapter == null || !created || isDestroyed() || destroyed) {
+                        this.cancel();
                         return;
+                    }
                     if (DownloadService.section != null) {
                         boolean needUpdate = false;
                         if (lastDownloadingId != DownloadService.section.id) {
@@ -224,6 +238,7 @@ public class DownloadListActivity extends RefreshListActivity {
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         if (timer != null)
             timer.cancel();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

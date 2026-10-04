@@ -138,6 +138,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private SurfaceView surfaceView;
     private TextureView textureView;
     private SurfaceTexture mSurfaceTexture;
+    //TextureView 模式下包给 IjkMediaPlayer 的 Surface 必须显式释放：
+    //每次换源/切P/清晰度都会 new 一个，只依赖 finalizer 回收会累积 BufferQueue（native 显存 + fd），
+    //长时间切换后进程地址空间被吃光，新线程的 4MB 栈 mmap 失败即 OOM: pthread_create failed
+    private Surface ijkSurface;
 
     private SubtitleLink[] subtitleLinks = null;
     private Subtitle[] subtitles = null;
@@ -855,7 +859,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (surfaceTimer != null) surfaceTimer.cancel();
         if (SharedPreferencesUtil.getBoolean("player_display", Build.VERSION.SDK_INT < 26)) { // Texture
             Logu.v("使用texture模式");
-            surfaceTimer = new Timer();
+            surfaceTimer = newTimerOrNull("surface检测");
+            if (surfaceTimer == null) return;   //线程耗尽时不崩播放页，宁可本次无画面
             surfaceTimer.schedule(new TimerTask() {
                 @Override
                 public void run() {
@@ -870,7 +875,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         if (mSurfaceTexture != null) {
                             this.cancel();
                             Surface surface = new Surface(mSurfaceTexture);
+                            Surface oldSurface = ijkSurface;
+                            ijkSurface = surface;          //先换新再放旧：播放器不会短暂持有已释放的 Surface
                             ijkPlayer.setSurface(surface);
+                            if (oldSurface != null) oldSurface.release();
                             MPPrepare(video_url);
                             Logu.v("设置surfaceTexture成功！");
                         }
@@ -884,7 +892,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             Logu.v("使用surface模式");
             SurfaceHolder surfaceHolder = surfaceView.getHolder(); // Surface
             Logu.v("获取surfaceHolder成功！");
-            surfaceTimer = new Timer();
+            surfaceTimer = newTimerOrNull("surface检测");
+            if (surfaceTimer == null) return;   //同 Texture 分支：不因线程耗尽崩播放页
             surfaceTimer.schedule(new TimerTask() {
                 @Override
                 public void run() {
@@ -1207,7 +1216,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             loadingTimer.cancel();
             loadingTimer = null;
         }
-        loadingTimer = new Timer();
+        loadingTimer = newTimerOrNull("缓冲速度");
+        if (loadingTimer == null) return;
         loadingTimer.schedule(new TimerTask() {
             @Override
             public void run() {
@@ -1275,7 +1285,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             progressTimer.cancel();
             progressTimer = null;
         }
-        progressTimer = new Timer();
+        progressTimer = newTimerOrNull("进度定时器");
+        if (progressTimer == null) return;   //线程耗尽的最后一道防线：目标线程本就不该崩（详见 newTimerOrNull 注释）
         TimerTask task = new TimerTask() {
             @SuppressLint("SetTextI18n")
             @Override
@@ -1417,7 +1428,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             onlineTimer.cancel();   //onPrepared 在切P/切清晰度/重试时会反复触发，不取消旧实例会叠出多个轮询线程
             onlineTimer = null;
         }
-        onlineTimer = new Timer();
+        onlineTimer = newTimerOrNull("在线人数");
+        if (onlineTimer == null) return;
         TimerTask task = new TimerTask() {
             @SuppressLint("SetTextI18n")
             @Override
@@ -2185,6 +2197,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (!isFinishing() && ijkPlayer == null && progressTimer == null && loadingTimer == null) {
             //早退分支也要完成"零播放器路径"仍必需的收尾：EventBus 反注册、后台服务停掉、
             //destroyed 置位（后台回调据此判断页面已死），否则非 finish 销毁路径全部跳过
+            //同时把可能已建立的 surface/online/speed 定时器一并取消：setDisplay 在 postDelayed 后
+            //才创建 surfaceTimer，页面在这之前被销毁时主路径的 cancelAllTimers 不会执行，
+            //遗留的 200ms/500ms 轮询 Timer 会永久持有 Activity 与 View 树
+            cancelAllTimers();
             if (eventBusInit) {
                 EventBus.getDefault().unregister(this);
                 eventBusInit = false;
@@ -2223,6 +2239,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             ijkPlayer.release();
             ijkPlayer = null;
         }
+        if (ijkSurface != null) {
+            ijkSurface.release();
+            ijkSurface = null;
+        }
 
         if (isOnlineVideo && danmakuFile != null && danmakuFile.exists())
             danmakuFile.delete();
@@ -2246,6 +2266,22 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         super.onDestroy();
+    }
+
+    /**
+     * 创建 Timer 时兜住线程耗尽异常。
+     * 进程线程/栈地址空间被吃满时 new Timer()（内部 Thread.start → pthread_create）会抛
+     * OutOfMemoryError: pthread_create (4112KB stack) failed，直接崩掉正在播放的页面。
+     * 定时器只是进度/在线人数/缓冲速度这类辅助刷新，缺了只影响对应 UI 更新，
+     * 不该让整段播放陪葬：返回 null 让调用方跳过本次调度即可。
+     */
+    private static Timer newTimerOrNull(String tag) {
+        try {
+            return new Timer();
+        } catch (Throwable t) {
+            Logu.e(tag, "Timer 创建失败（进程线程耗尽），本次跳过刷新：" + t);
+            return null;
+        }
     }
 
     private void cancelAllTimers() {
@@ -2272,9 +2308,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
         }
-        layout_control.removeCallbacks(hidecon);
-        text_volume.removeCallbacks(hideVolume);
-        seekbar_progress.removeCallbacks(progressbarEnable);
+        //视图在"启动阶段即被销毁"的早退分支里可能还没 inflate，判空后再摘回调
+        if (layout_control != null) layout_control.removeCallbacks(hidecon);
+        if (text_volume != null) text_volume.removeCallbacks(hideVolume);
+        if (seekbar_progress != null) seekbar_progress.removeCallbacks(progressbarEnable);
     }
 
     OkHttpClient okHttpClient;
@@ -2282,6 +2319,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void danmuSocketConnect() {
         CenterThreadPool.run(() -> {
             try {
+                //重载/重试会再次进来：先关掉上一条连接并停掉其心跳 Timer，
+                //否则旧 WS 的 reader 线程与 32s 心跳线程永久留存，每重连一次泄漏一对
+                if (liveWebSocket != null) {
+                    liveWebSocket.close(1000, "");
+                    liveWebSocket = null;
+                }
+                if (liveDanmuListener != null) {
+                    liveDanmuListener.destroy();
+                    liveDanmuListener = null;
+                }
+
                 String url = "https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo?type=0&id=" + aid;
                 ArrayList<String> mHeaders = new ArrayList<>() {
                     {
@@ -2517,8 +2565,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surfaceTexture, int i, int i1) {
                     Logu.v("surfacetexture", "available");
                     mSurfaceTexture = surfaceTexture;
-                    if (isPrepared && ijkPlayer != null)
-                        ijkPlayer.setSurface(new Surface(surfaceTexture));
+                    if (isPrepared && ijkPlayer != null) {
+                        Surface surface = new Surface(surfaceTexture);
+                        Surface oldSurface = ijkSurface;
+                        ijkSurface = surface;
+                        ijkPlayer.setSurface(surface);
+                        if (oldSurface != null) oldSurface.release();
+                    }
                 }
 
                 @Override
@@ -2532,6 +2585,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     mSurfaceTexture = null;
                     if (ijkPlayer != null)
                         ijkPlayer.setSurface(null);
+                    if (ijkSurface != null) {
+                        ijkSurface.release();
+                        ijkSurface = null;
+                    }
                     return true;
                 }
 
@@ -2662,7 +2719,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                speedTimer = new Timer();
+                speedTimer = newTimerOrNull("倍速提示");
+                if (speedTimer == null) {
+                    layout_speed.setVisibility(View.GONE);
+                    return;
+                }
                 TimerTask timerTask = new TimerTask() {
                     @Override
                     public void run() {

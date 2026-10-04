@@ -29,6 +29,7 @@ import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerFragmentAdapter;
 import com.RobinNotBad.BiliClient.api.SearchApi;
 import com.RobinNotBad.BiliClient.helper.TutorialHelper;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
+import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.JsonUtil;
 import com.RobinNotBad.BiliClient.util.LinkUrlUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -89,7 +90,7 @@ public class SearchActivity extends InstanceActivity {
             defaultSearchContentEnabled = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.SEARCH_DEFAULT_CONTENT_ENABLE, false);
             
             if (defaultSearchContentEnabled) {
-                new Thread(() -> {
+                CenterThreadPool.run(() -> {
                     try {
                         defaultSearchContent = SearchApi.getDefaultSearchContent();
                         if (defaultSearchContent != null && !defaultSearchContent.isEmpty()) {
@@ -101,7 +102,7 @@ public class SearchActivity extends InstanceActivity {
                     } catch (Exception e) {
                         Log.e("SearchActivity", "获取默认搜索内容失败", e);
                     }
-                }).start();
+                });
             }
 
             viewPager = findViewById(R.id.viewPager);
@@ -257,7 +258,7 @@ public class SearchActivity extends InstanceActivity {
                         } else {
                             suggestionGeneration++;
                             final int gen = suggestionGeneration;
-                            suggestionRunnable = () -> new Thread(() -> {
+                            suggestionRunnable = () -> CenterThreadPool.run(() -> {
                                 try {
                                     ArrayList<String> suggestions = SearchApi.getSearchSuggestions(keyword);
                                     runOnUiThread(() -> {
@@ -282,7 +283,7 @@ public class SearchActivity extends InstanceActivity {
                                 } catch (Exception e) {
                                     Log.e("SearchActivity", "获取搜索建议失败", e);
                                 }
-                            }).start();
+                            });
                             handler.postDelayed(suggestionRunnable, 300);
                         }
                     }
