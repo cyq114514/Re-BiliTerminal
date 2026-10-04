@@ -23,6 +23,11 @@ public class HistoryActivity extends RefreshListActivity {
     private ArrayList<VideoCard> videoList;
     private VideoCardAdapter videoCardAdapter;
 
+    //代际守卫：滚动触发的"加载更多"可能在上一次在途时再次被触发（setRefreshing 是
+    //post 到主线程的，isRefreshing 挡不住连续回调），共享的 lastResult 游标被并发
+    //getHistory 交叉读写会导致重复/漏条目
+    private volatile boolean loading = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -33,6 +38,7 @@ public class HistoryActivity extends RefreshListActivity {
 
         videoList = new ArrayList<>();
 
+        loading = true;
         CenterThreadPool.run(() -> {
             try {
                 lastResult = HistoryApi.getHistory(lastResult, videoList);
@@ -49,27 +55,34 @@ public class HistoryActivity extends RefreshListActivity {
 
             } catch (Exception e) {
                 loadFail(e);
+            } finally {
+                loading = false;
             }
         });
     }
 
     private void continueLoading(int page) {
+        if (loading) return;
+        loading = true;
         CenterThreadPool.run(() -> {
             try {
                 List<VideoCard> list = new ArrayList<>();
-                lastResult = HistoryApi.getHistory(lastResult, list);
-                if (lastResult.code == 0) {
+                ApiResult result = HistoryApi.getHistory(lastResult, list);
+                if (result.code == 0) {
+                    lastResult = result;
                     runOnUiThread(() -> {
                         videoList.addAll(list);
                         videoCardAdapter.notifyItemRangeInserted(videoList.size() - list.size(), list.size());
                     });
-                    if (lastResult.isBottom) {
+                    if (result.isBottom) {
                         setBottom(true);
                     }
                 }
                 setRefreshing(false);
             } catch (Exception e) {
                 loadFail(e);
+            } finally {
+                loading = false;
             }
         });
     }

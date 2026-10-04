@@ -107,7 +107,7 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             }
 
             View.OnLongClickListener onDeleteLongClick = DynamicHolder.getDeleteListener((Activity) context,
-                    dynamicList, realPosition, this);
+                    dynamicList, dynamic, this);
             dynamicHolder.item_dynamic_delete.setOnLongClickListener(onDeleteLongClick);
             if (dynamic.canDelete)
                 dynamicHolder.item_dynamic_delete.setVisibility(View.VISIBLE);

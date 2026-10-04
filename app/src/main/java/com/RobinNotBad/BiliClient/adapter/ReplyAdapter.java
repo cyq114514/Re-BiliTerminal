@@ -153,10 +153,12 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             UserInfo sender = reply.sender;
             SpannableStringBuilder name_str = new SpannableStringBuilder();
 
-            // 大会员红字
+            // 大会员红字（无红名或关闭开关时要恢复默认色，否则复用后普通用户名残留粉色）
             if (!TextUtils.isEmpty(sender.vip_nickname_color)
                     && !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NO_VIP_COLOR, false))
                 replyHolder.userName.setTextColor(Color.parseColor(sender.vip_nickname_color));
+            else
+                replyHolder.userName.setTextColor(replyHolder.defaultNameColor);
 
             // up主标识
             if (sender.mid == up_mid) {
@@ -260,6 +262,12 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                     }
 
                     for (int i = childCount; i < existingViewCount; i++) {
+                        replyHolder.childReplies.getChildAt(i).setVisibility(View.GONE);
+                    }
+                } else if (replyHolder.childReplies != null) {
+                    //childMsgList 为 null（未预取楼中楼）时不能留着上一次 bind 的子视图，
+                    //否则会显示别人的楼中楼内容
+                    for (int i = 0; i < replyHolder.childReplies.getChildCount(); i++) {
                         replyHolder.childReplies.getChildAt(i).setVisibility(View.GONE);
                     }
                 }
@@ -492,6 +500,8 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         final ImageView imageCard;
         String lastAvatarUrl;
         String lastImageUrl;
+        /**布局的默认用户名颜色（构造时捕获）：大会员红名恢复分支要用，跨主题/布局都正确*/
+        final int defaultNameColor;
 
         public ReplyHolder(@NonNull View itemView) {
             super(itemView);
@@ -510,6 +520,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             imageCount = itemView.findViewById(R.id.imageCount);
             imageCard = itemView.findViewById(R.id.imageCard);
             item_reply_delete = itemView.findViewById(R.id.item_reply_delete);
+            defaultNameColor = userName.getTextColors().getDefaultColor();
         }
     }
 

@@ -246,6 +246,9 @@ public class FollowGroupAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     } catch (IllegalArgumentException e) {
                         userHolder.name.setTextColor(Color.WHITE);
                     }
+                } else {
+                    //无红名时恢复默认：复用上一个大会员 holder 后普通用户名会残留粉色
+                    userHolder.name.setTextColor(Color.WHITE);
                 }
                 userHolder.desc.setText(user.sign);
 
@@ -270,6 +273,9 @@ public class FollowGroupAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                                 .putExtra("mid", user.mid);
                         context.startActivity(intent);
                     });
+                } else {
+                    //重置点击监听：复用上一个可跳转 holder 后，会跳到上一个用户的个人空间
+                    userHolder.itemView.setOnClickListener(null);
                 }
             }
         }

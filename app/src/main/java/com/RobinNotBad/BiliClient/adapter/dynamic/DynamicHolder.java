@@ -207,71 +207,81 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
     }
 
     public static View.OnLongClickListener getDeleteListener(Activity dynamicActivity, List<Dynamic> dynamicList,
-                                                             int finalPosition, RecyclerView.Adapter<RecyclerView.ViewHolder> adapter) {
-        return getDeleteListener(dynamicActivity, dynamicList, finalPosition, adapter, false);
+                                                             Dynamic dynamic, RecyclerView.Adapter<RecyclerView.ViewHolder> adapter) {
+        return getDeleteListener(dynamicActivity, dynamicList, dynamic, adapter, false);
     }
 
     public static View.OnLongClickListener getDeleteListener(Activity dynamicActivity, List<Dynamic> dynamicList,
-                                                             int finalPosition, RecyclerView.Adapter<RecyclerView.ViewHolder> adapter, boolean showRecentUp) {
+                                                             Dynamic dynamic, RecyclerView.Adapter<RecyclerView.ViewHolder> adapter, boolean showRecentUp) {
         return new View.OnLongClickListener() {
-            private int longClickPosition = -1;
+            private long longClickId = -1;
             private long longClickTime = -1;
 
             @Override
             public boolean onLongClick(View view) {
-                if (dynamicList.get(finalPosition).canDelete) {
-                    long currentTime = System.currentTimeMillis();
-                    if (longClickPosition == finalPosition && currentTime - longClickTime < 10000) {
-                        final long deletingId = dynamicList.get(finalPosition).dynamicId;
-                        CenterThreadPool.run(() -> {
-                            try {
-                                int result = DynamicApi.deleteDynamic(deletingId);
-                                if (result == 0) {
-                                    //删除成功后回到主线程按 dynamicId 反查当前位置：
-                                    //长按期间列表可能已刷新，bind 时的快照下标会删错条目；
-                                    //列表本身的 remove 也必须与 UI 线程的读取互斥
-                                    dynamicActivity.runOnUiThread(() -> {
-                                        int realIndex = -1;
-                                        for (int i = 0; i < dynamicList.size(); i++) {
-                                            if (dynamicList.get(i).dynamicId == deletingId) {
-                                                realIndex = i;
-                                                break;
-                                            }
-                                        }
-                                        longClickPosition = -1;
-                                        if (realIndex < 0) {
-                                            MsgUtil.showMsg("删除成功~");
-                                            return;
-                                        }
-                                        dynamicList.remove(realIndex);
-                                        int offset = showRecentUp ? 2 : 1;
-                                        adapter.notifyItemRemoved(realIndex + offset);
-                                        adapter.notifyItemRangeChanged(realIndex + offset,
-                                                dynamicList.size() - realIndex);
-                                        MsgUtil.showMsg("删除成功~");
-                                    });
-                                } else {
-                                    String msg = "操作失败：" + result;
-                                    switch (result) {
-                                        case 500404:
-                                            msg = "已经删除过了哦~";
-                                            break;
-                                        case 500406:
-                                            msg = "不是自己的动态！";
-                                            break;
-                                    }
-                                    String finalMsg = msg;
-                                    dynamicActivity.runOnUiThread(() -> MsgUtil.showMsg(finalMsg));
-                                }
-                            } catch (IOException e) {
-                                dynamicActivity.runOnUiThread(() -> MsgUtil.err(e));
-                            }
-                        });
-                    } else {
-                        longClickPosition = finalPosition;
-                        longClickTime = currentTime;
-                        MsgUtil.showMsg("再次长按删除");
+                //canDelete 与删除目标都按 dynamicId 实时反查：bind 时的快照下标在分页/刷新
+                //后可能指向别的条目（读错条目的 canDelete 或删错动态），删除分支此前已按 id
+                //反查，读取分支此前漏了
+                int currentIndex = -1;
+                for (int i = 0; i < dynamicList.size(); i++) {
+                    if (dynamicList.get(i).dynamicId == dynamic.dynamicId) {
+                        currentIndex = i;
+                        break;
                     }
+                }
+                if (currentIndex == -1 || !dynamicList.get(currentIndex).canDelete) return true;
+
+                long currentTime = System.currentTimeMillis();
+                if (longClickId == dynamic.dynamicId && currentTime - longClickTime < 10000) {
+                    final long deletingId = dynamic.dynamicId;
+                    CenterThreadPool.run(() -> {
+                        try {
+                            int result = DynamicApi.deleteDynamic(deletingId);
+                            if (result == 0) {
+                                //删除成功后回到主线程按 dynamicId 反查当前位置：
+                                //长按期间列表可能已刷新，bind 时的快照下标会删错条目；
+                                //列表本身的 remove 也必须与 UI 线程的读取互斥
+                                dynamicActivity.runOnUiThread(() -> {
+                                    int realIndex = -1;
+                                    for (int i = 0; i < dynamicList.size(); i++) {
+                                        if (dynamicList.get(i).dynamicId == deletingId) {
+                                            realIndex = i;
+                                            break;
+                                        }
+                                    }
+                                    longClickId = -1;
+                                    if (realIndex < 0) {
+                                        MsgUtil.showMsg("删除成功~");
+                                        return;
+                                    }
+                                    dynamicList.remove(realIndex);
+                                    int offset = showRecentUp ? 2 : 1;
+                                    adapter.notifyItemRemoved(realIndex + offset);
+                                    adapter.notifyItemRangeChanged(realIndex + offset,
+                                            dynamicList.size() - realIndex);
+                                    MsgUtil.showMsg("删除成功~");
+                                });
+                            } else {
+                                String msg = "操作失败：" + result;
+                                switch (result) {
+                                    case 500404:
+                                        msg = "已经删除过了哦~";
+                                        break;
+                                    case 500406:
+                                        msg = "不是自己的动态！";
+                                        break;
+                                }
+                                String finalMsg = msg;
+                                dynamicActivity.runOnUiThread(() -> MsgUtil.showMsg(finalMsg));
+                            }
+                        } catch (IOException e) {
+                            dynamicActivity.runOnUiThread(() -> MsgUtil.err(e));
+                        }
+                    });
+                } else {
+                    longClickId = dynamic.dynamicId;
+                    longClickTime = currentTime;
+                    MsgUtil.showMsg("再次长按删除");
                 }
                 return true;
             }
@@ -577,6 +587,9 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
 
         if (likeCount != null) {
             if (dynamic.stats != null) {
+                //visibility 也要有恢复分支：复用上一个 stats==null 被 GONE 的 holder 后，
+                //点赞区会整块消失（作者注释说的"一定要加 else"，这里补的就是漏掉的 visibility）
+                likeCount.setVisibility(View.VISIBLE);
                 if (dynamic.stats.liked) { // 这里，还有下面，一定要加else！否则会导致错乱
                     likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
                     likeCount.setCompoundDrawablesWithIntrinsicBounds(

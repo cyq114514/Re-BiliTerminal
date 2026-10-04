@@ -13,7 +13,8 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.video.series.UserSeriesActivity;
-import com.RobinNotBad.BiliClient.adapter.dynamic.DynamicHolder;
+import com.bumptech.glide.Glide;
+import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 
@@ -75,8 +76,13 @@ public class UserVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHold
 
     @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
-        if (holder instanceof DynamicHolder)
-            ((DynamicHolder) holder).extraCard.removeAllViews();
+        //复制粘贴残留：本 Adapter 从不创建 DynamicHolder，旧判断恒为 false；
+        //真正需要回收的是 VideoCardHolder 的封面（清掉 Glide 请求并复位去重标记）
+        if (holder instanceof VideoCardHolder) {
+            VideoCardHolder videoCardHolder = (VideoCardHolder) holder;
+            videoCardHolder.lastCoverUrl = null;
+            Glide.with(BiliTerminal.context).clear(videoCardHolder.cover);
+        }
         super.onViewRecycled(holder);
     }
 

@@ -161,7 +161,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private Timer progressTimer, speedTimer, loadingTimer, onlineTimer, surfaceTimer;
     private Handler mainHandler;
-    private Runnable danmakuSyncRunnable;
     private String video_url, danmaku_url;
     private MediaSession mediaSession;
 
@@ -851,6 +850,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         Logu.v("准备设置显示");
+        //setDisplay 会被切P/切清晰度/错误重试多次触发：新建前必须取消旧实例，
+        //否则每次都遗留一个 200ms 轮询 Timer 线程（cancelAllTimers 只能取消最后一次赋值的那个）
+        if (surfaceTimer != null) surfaceTimer.cancel();
         if (SharedPreferencesUtil.getBoolean("player_display", Build.VERSION.SDK_INT < 26)) { // Texture
             Logu.v("使用texture模式");
             surfaceTimer = new Timer();
@@ -1446,16 +1448,19 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (subtitle_url == null || subtitle_url.isEmpty())
             return;
         try {
-            if (isOnlineVideo)
-                subtitles = PlayerApi.getSubtitle(subtitle_url);
-            else
-                subtitles = PlayerApi.getSubtitle(new File(subtitle_url));
+            //先解析到局部变量、下标准备好后最后整体替换引用：
+            //showSubtitle 在 progressTimer 线程读 subtitles/subtitle_curr_index，
+            //直接三步赋值会让它读到"新数组+旧下标"的中间态
+            Subtitle[] loaded = isOnlineVideo
+                    ? PlayerApi.getSubtitle(subtitle_url)
+                    : PlayerApi.getSubtitle(new File(subtitle_url));
 
-            if (subtitles == null)
+            if (loaded == null)
                 return;
 
-            subtitle_count = subtitles.length;
+            subtitle_count = loaded.length;
             subtitle_curr_index = 0;
+            subtitles = loaded;
             runOnUiThread(() -> btn_subtitle.setImageResource(R.mipmap.subtitle_on));
         } catch (Exception e) {
             MsgUtil.err(e);
@@ -1463,12 +1468,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     private void showSubtitle(float curr_sec) {
-        if (subtitles == null || subtitle_count == 0) {
+        //本地快照：subtitles 会在 UI 线程被切P/互动跳转整体置 null 或换新数组，
+        //showSubtitle 由 progressTimer 线程调用，三步赋值读到中间态就是主线程 NPE/数组越界
+        final Subtitle[] snapshot = subtitles;
+        if (snapshot == null || snapshot.length == 0) {
             runOnUiThread(() -> text_subtitle.setVisibility(View.GONE));
             return;
         }
-        
-        Subtitle subtitle_curr = subtitles[subtitle_curr_index];
+        if (subtitle_curr_index < 0 || subtitle_curr_index >= snapshot.length)
+            subtitle_curr_index = 0;
+
+        Subtitle subtitle_curr = snapshot[subtitle_curr_index];
 
         boolean need_adjust = true;
         boolean need_show = true;
@@ -1477,7 +1487,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             if (curr_sec < subtitle_curr.from) { // 进度在当前字幕的起始位置之前
                 // 如果不是第一条字幕，且进度在上一条字幕的结束位置之前，那么字幕前移一位
                 // 否则字幕不显示且退出校准（当前进度在两条字幕之间）
-                if (subtitle_curr_index != 0 && curr_sec < subtitles[subtitle_curr_index - 1].to) {
+                if (subtitle_curr_index != 0 && curr_sec < snapshot[subtitle_curr_index - 1].to) {
                     subtitle_curr_index--;
                 } else {
                     need_adjust = false;
@@ -1486,7 +1496,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             } else if (curr_sec > subtitle_curr.to) { // 在当前字幕的结束位置之后
                 // 如果不是最后一条字幕，且进度在下一条字幕的开始位置之后，那么字幕后移一位
                 // 否则字幕不显示且退出校准（当前进度在两条字幕之间）
-                if (subtitle_curr_index + 1 < subtitle_count && curr_sec > subtitles[subtitle_curr_index + 1].from) {
+                if (subtitle_curr_index + 1 < snapshot.length && curr_sec > snapshot[subtitle_curr_index + 1].from) {
                     subtitle_curr_index++;
                 } else {
                     need_adjust = false;
@@ -1496,12 +1506,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 need_adjust = false; // 在当前字幕的时间段内，则退出校准
         }
 
-        if (need_show)
+        if (need_show) {
+            //UI Runnable 里再次取快照并校验下标：期间字幕数组可能已被整体替换
+            final int showIndex = subtitle_curr_index;
             runOnUiThread(() -> {
-                text_subtitle.setText(subtitles[subtitle_curr_index].content);
-                text_subtitle.setVisibility(View.VISIBLE);
+                Subtitle[] current = subtitles;
+                if (current != null && showIndex < current.length) {
+                    text_subtitle.setText(current[showIndex].content);
+                    text_subtitle.setVisibility(View.VISIBLE);
+                } else text_subtitle.setVisibility(View.GONE);
             });
-        else
+        } else
             runOnUiThread(() -> text_subtitle.setVisibility(View.GONE));
     }
 
@@ -1859,7 +1874,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         try {
             byte[] buf = new byte[2048];
             while (!decompresser.finished()) {
+                //截断/损坏的 zlib 流会让 inflate() 恒返回 0 且 finished() 恒为 false：
+                //不设这两个退出条件，循环既不退出也不抛异常 → 100% CPU 空转 + OOM
+                //（与 NetWorkUtil.uncompress / DownloadService 的解压防护同一套守卫）
+                if (decompresser.needsInput() || decompresser.needsDictionary()) break;
                 int i = decompresser.inflate(buf);
+                if (i == 0) break;
                 o.write(buf, 0, i);
             }
             output = o.toByteArray();
@@ -2149,6 +2169,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     //后台线程赋值、主线程 onDestroy 读取，volatile 保证关闭竞态判断的可见性
     volatile WebSocket liveWebSocket = null;
+    //直播弹幕监听器：onDestroy 时显式 destroy 停掉心跳 Timer（close 不保证触发 onClosed）
+    private PlayerDanmuClientListener liveDanmuListener;
 
     //换源竞态守卫：连续切 P/切清晰度时，先发出的请求可能后返回；
     //回调凭 token 判断自己是否仍是"最新一次切换"，过期请求整体放弃，避免旧响应覆盖新界面
@@ -2161,6 +2183,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //但若已经初始化过（系统回收内存、"不保留活动"等非 finish 销毁路径），
         //跳过清理会让 native 播放器与 5 个 Timer 全部泄漏，EventBus 也未反注册
         if (!isFinishing() && ijkPlayer == null && progressTimer == null && loadingTimer == null) {
+            //早退分支也要完成"零播放器路径"仍必需的收尾：EventBus 反注册、后台服务停掉、
+            //destroyed 置位（后台回调据此判断页面已死），否则非 finish 销毁路径全部跳过
+            if (eventBusInit) {
+                EventBus.getDefault().unregister(this);
+                eventBusInit = false;
+            }
+            PlaybackService.stop(this);
+            destroyed = true;
             super.onDestroy();
             return;
         }
@@ -2197,6 +2227,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (isOnlineVideo && danmakuFile != null && danmakuFile.exists())
             danmakuFile.delete();
 
+        if (liveDanmuListener != null) {
+            liveDanmuListener.destroy();
+            liveDanmuListener = null;
+        }
         if (liveWebSocket != null) {
             liveWebSocket.close(1000, "");
             liveWebSocket = null;
@@ -2266,7 +2300,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         .getJSONObject("data");
                 JSONObject host = data.getJSONArray("host_list").getJSONObject(0);
 
-                url = "wss://" + host.getString("host") + ":" + host.getInt("wss_port") + "/sub";
+                //host 来自服务端且即将携带 Cookie 连接：必须过 B 站域名白名单，
+                //被劫持的响应把连接指到任意主机时直接放弃，不把 Cookie 交出去
+                String wsHost = host.getString("host");
+                if (!NetWorkUtil.isBilibiliHost(wsHost))
+                    throw new IOException("直播弹幕服务器域名异常：" + wsHost);
+
+                url = "wss://" + wsHost + ":" + host.getInt("wss_port") + "/sub";
                 Logu.v("连接WebSocket", url);
 
                 //复用全局客户端：裸 OkHttpClient 没有全局的 TLS 兼容配置（API≤22 默认不启用 TLS1.2，wss 握手会失败）、
@@ -2283,7 +2323,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 listener.mid = mid;
                 listener.roomid = aid;
                 listener.key = data.getString("token");
-                listener.playerActivity = this;
+                listener.setPlayerActivity(this);
+                //留一份强引用在 Activity 侧：onDestroy 时显式 destroy()（停心跳、清引用），
+                //不依赖 ws.close 是否触发 onClosed
+                liveDanmuListener = listener;
 
                 //销毁竞态：进直播间立刻退出时，onDestroy 执行时连接往往还没建立（liveWebSocket 仍为 null，
                 //无人关闭），连接随后才成功——赋值后必须立刻复核 destroyed，否则心跳线程与整个 Activity
@@ -2713,7 +2756,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         if (isPrepared && ijkPlayer != null) {
             final long currentPosition = video_now;
-            final boolean wasPlaying = isPlaying;
 
             MsgUtil.showMsg(isAudioOnlyMode ? "正在切换到听视频模式..." : "正在切换到普通模式...");
 
@@ -3117,7 +3159,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         return;
 
                     final long currentPosition = video_now;
-                    final boolean wasPlaying = isPlaying;
 
                     //先摘掉播放状态再释放，避免进度定时器在 release 期间读到已释放实例
                     isPrepared = false;

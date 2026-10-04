@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.player.PlayerActivity;
 
+import java.lang.ref.WeakReference;
 import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -41,16 +42,21 @@ public class PlaybackService extends Service {
     private static final int NOTIFICATION_ID = 1028;    //下载服务占了 1027
 
     //与 BiliTerminal.context 同一套约定：本服务只在 Activity 主动交接时持有引用，
-    //Activity 的 onResume/onDestroy 都会调 stop() 清引用，不会出现悬空的 Activity
-    private static PlayerActivity sPlayerActivity;
+    //Activity 的 onResume/onDestroy 都会调 stop() 清引用。用弱引用兜底：服务被系统
+    //杀掉而没走到 stop() 时，静态强引用会把整个 Activity 连同 View 树钉在内存里
+    private static WeakReference<PlayerActivity> sPlayerActivityRef;
 
-    private NotificationCompat.Builder builder;
+    private static PlayerActivity getPlayerActivity() {
+        WeakReference<PlayerActivity> ref = sPlayerActivityRef;
+        return ref != null ? ref.get() : null;
+    }
+
     private NotificationManager notifyManager;
     private Timer updateTimer;
 
     /**Activity 退后台时调用；重复调用无害，只是多走一次 onStartCommand 刷新通知。*/
     public static void start(Context context, PlayerActivity activity) {
-        sPlayerActivity = activity;
+        sPlayerActivityRef = new WeakReference<>(activity);
         Intent intent = new Intent(context, PlaybackService.class);
         if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent);
         else context.startService(intent);
@@ -58,7 +64,7 @@ public class PlaybackService extends Service {
 
     /**Activity 回前台或销毁时调用；服务没在跑也无害。*/
     public static void stop(Context context) {
-        sPlayerActivity = null;
+        sPlayerActivityRef = null;
         context.stopService(new Intent(context, PlaybackService.class));
     }
 
@@ -72,11 +78,6 @@ public class PlaybackService extends Service {
             channel.setShowBadge(false);
             notifyManager.createNotificationChannel(channel);
         }
-        builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.icon)
-                .setOnlyAlertOnce(true)
-                .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW);
     }
 
     @SuppressLint("UnspecifiedImmutableFlag")
@@ -86,10 +87,10 @@ public class PlaybackService extends Service {
         startForeground(NOTIFICATION_ID, refresh());
 
         if (intent != null && ACTION_TOGGLE.equals(intent.getAction())) {
-            PlayerActivity activity = sPlayerActivity;
+            PlayerActivity activity = getPlayerActivity();
             if (activity != null) activity.serviceTogglePlay();
         } else if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            PlayerActivity activity = sPlayerActivity;
+            PlayerActivity activity = getPlayerActivity();
             if (activity != null) {
                 //走 Activity 的 finish()：最终进度上报、定时器/播放器清理都由 onDestroy 统一做，
                 //服务由 onDestroy 里的 stop() 撤掉，这里不能直接 stopSelf 抢在清理前面
@@ -111,7 +112,7 @@ public class PlaybackService extends Service {
         updateTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-                PlayerActivity activity = sPlayerActivity;
+                PlayerActivity activity = getPlayerActivity();
                 if (activity == null || activity.isFinishing() || activity.serviceGone()) {
                     stopSelf();
                     this.cancel();
@@ -124,7 +125,15 @@ public class PlaybackService extends Service {
 
     @SuppressLint("UnspecifiedImmutableFlag")
     private android.app.Notification refresh() {
-        PlayerActivity activity = sPlayerActivity;
+        //每次新建 Builder：本方法会被主线程（onStartCommand）与 Timer 线程并发调用，
+        //复用成员 Builder 时两线程交错 setContentTitle/clearActions/addAction 会产出内容撕裂的通知
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.icon)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW);
+
+        PlayerActivity activity = getPlayerActivity();
         boolean playing = activity != null && activity.serviceIsPlaying();
         String title = activity != null ? activity.serviceTitle() : "";
 
@@ -169,7 +178,7 @@ public class PlaybackService extends Service {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         //从最近任务划掉时页面即将销毁，onDestroy 会做最终上报并停服务；这里兜底补一次上报
-        PlayerActivity activity = sPlayerActivity;
+        PlayerActivity activity = getPlayerActivity();
         if (activity != null) activity.serviceReportNow();
         super.onTaskRemoved(rootIntent);
     }
@@ -180,7 +189,7 @@ public class PlaybackService extends Service {
             updateTimer.cancel();
             updateTimer = null;
         }
-        sPlayerActivity = null;
+        sPlayerActivityRef = null;
         super.onDestroy();
     }
 

@@ -191,6 +191,8 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                     holder.picMsg.setVisibility(View.GONE);
                     holder.textContentCard.setVisibility(View.GONE);
                     holder.tipTv.setVisibility(View.GONE);
+                    //封面默认可见：复用上一个无 thumb 被 GONE 的 holder 后封面会永久消失
+                    holder.videoCover.setVisibility(View.VISIBLE);
                     long aid = msg.content.getLong("id");
 
                     Glide.with(BiliTerminal.context)
@@ -214,7 +216,11 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                     holder.picMsg.setVisibility(View.GONE);
                     holder.videoCard.setVisibility(View.GONE);
                     holder.textContentCard.setVisibility(View.GONE);
-                    holder.tipTv.setText(((JSONObject) msg.content_array.get(0)).getString("text"));
+                    //content_array 可能为 null 或空：直接 get(0) 会 NPE/越界，崩掉整个私信列表
+                    if (msg.content_array != null && msg.content_array.length() > 0
+                            && msg.content_array.optJSONObject(0) != null) {
+                        holder.tipTv.setText(msg.content_array.optJSONObject(0).optString("text", "系统消息"));
+                    } else holder.tipTv.setText("系统消息");
                     break;
                 default:
                     holder.textContentCard.setVisibility(View.VISIBLE);

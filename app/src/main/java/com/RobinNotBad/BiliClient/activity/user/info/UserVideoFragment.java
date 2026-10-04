@@ -78,7 +78,9 @@ public class UserVideoFragment extends RefreshListFragment {
                     Log.e("debug", "下一页");
                     runOnUiThread(() -> {
                         videoList.addAll(list);
-                        adapter.notifyItemRangeInserted(videoList.size() - list.size(), list.size());
+                        //UserVideoAdapter 带 header（position-1 才是数据下标）：
+                        //通知范围必须 +1 偏移，否则插入范围错位一格，出现重复/缺失 item
+                        adapter.notifyItemRangeInserted(videoList.size() - list.size() + 1, list.size());
                     });
                     if (result == 1) {
                         Log.e("debug", "到底了");

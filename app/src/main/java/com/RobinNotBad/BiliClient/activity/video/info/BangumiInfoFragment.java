@@ -88,6 +88,21 @@ public class BangumiInfoFragment extends Fragment {
     }
 
     @Override
+    public void onDestroyView() {
+        //视图销毁时清引用：Fragment 回退栈里残留的 rootView 会钉住整棵 View 树；
+        //选集弹窗未 dismiss 会触发 WindowLeaked
+        if (dialog != null) {
+            try {
+                if (dialog.isShowing()) dialog.dismiss();
+            } catch (Exception ignored) {
+            }
+            dialog = null;
+        }
+        rootView = null;
+        super.onDestroyView();
+    }
+
+    @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         view.setVisibility(View.GONE);
         episodeRecyclerView = rootView.findViewById(R.id.rv_episode_list);
@@ -715,7 +730,10 @@ public class BangumiInfoFragment extends Fragment {
     private void refreshReplies() {
         Activity activity = getActivity();
         if (activity instanceof VideoInfoActivity) {
-            ((VideoInfoActivity) activity).setCurrentAid(bangumi.sectionList.get(selectedSection).episodeList.get(selectedEpisode).aid);
+            //级联 get 无任何越界保护：分区/剧集列表为空或下标越界（切季懒加载未回填时）
+            //直接 IndexOutOfBounds，改用带完整判空与越界检查的 getCurrentEpisode()
+            Bangumi.Episode episode = getCurrentEpisode();
+            if (episode != null) ((VideoInfoActivity) activity).setCurrentAid(episode.aid);
         }
     }
 
