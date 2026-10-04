@@ -101,6 +101,10 @@
 - 网络边界：非 B 站域请求剥离凭据；CDN 域不再能写入登录会话；直播弹幕服务器域名校验；
   重定向跟随修复跳数保护与连接泄漏。
 
+| 主菜单 | 推荐 | 我的 |
+| --- | --- | --- |
+| <img src="screenshots/v1.1.6-menu.jpg" width="270" alt="主菜单"/> | <img src="screenshots/v1.1.6-recommend.jpg" width="270" alt="推荐页"/> | <img src="screenshots/v1.1.6-myspace.jpg" width="270" alt="我的"/> |
+
 **修复**
 
 - 发动态文字重复发送；带图评论发送崩溃。
