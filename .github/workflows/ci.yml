@@ -94,12 +94,26 @@ jobs:
           #客户端经 releases/latest/download/update.json 获取 versionCode/sha256/更新说明，
           #该直链在 github.com 域下，可被用户设置的镜像前缀整体代理
           VERSION_CODE=$(grep -E 'versionCode[[:space:]]+[0-9]+' app/build.gradle | grep -oE '[0-9]+' | head -1)
+          VERSION_CODE=${VERSION_CODE:-0}
           SHA256=$(sha256sum "/tmp/$NAME" | awk '{print $1}')
+          SIZE=$(stat -c%s "/tmp/$NAME")
           BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.body' 2>/dev/null || echo "")
+          #客户端 API 兜底通道从 release 说明里的元数据注释解析 versionCode/sha256：
+          #剥离旧注释后追加最新值（幂等，重复发布同一 tag 不会叠加多份）
+          CLEAN_BODY=$(printf '%s' "$BODY" | sed -e 's/<!--ReBiliTerminal-update[^>]*-->//g')
+          META_COMMENT="<!--ReBiliTerminal-update versionCode=${VERSION_CODE} sha256=${SHA256}-->"
+          if [ -n "$CLEAN_BODY" ]; then
+            NEW_BODY="${CLEAN_BODY}
+          ${META_COMMENT}"
+          else
+            NEW_BODY="$META_COMMENT"
+          fi
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes "$NEW_BODY"
+          #versionCode 缺失时（tag 非常规/构建文件被改）取 0 而不是让 tonumber 失败断掉整个发布链
           jq -n --arg versionCode "$VERSION_CODE" --arg versionName "${TAG#v}" \
-                --arg sha256 "$SHA256" --arg fileName "$NAME" \
-                --arg notes "$BODY" \
+                --arg sha256 "$SHA256" --arg fileName "$NAME" --argjson size "$SIZE" \
+                --arg notes "$CLEAN_BODY" \
                 --arg htmlUrl "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" \
-                '{versionCode: ($versionCode | tonumber), versionName: $versionName, sha256: $sha256, fileName: $fileName, notes: $notes, htmlUrl: $htmlUrl}' \
+                '{versionCode: (($versionCode | tonumber)? // 0), versionName: $versionName, sha256: $sha256, size: $size, fileName: $fileName, notes: $notes, htmlUrl: $htmlUrl}' \
             > update.json
           gh release upload "$TAG" update.json --clobber -R "$GITHUB_REPOSITORY"

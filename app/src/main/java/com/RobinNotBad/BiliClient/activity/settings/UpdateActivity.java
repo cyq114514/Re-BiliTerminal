@@ -115,7 +115,11 @@ public class UpdateActivity extends BaseActivity {
                 .setView(container)
                 .setPositiveButton("确定", (dialog, which) -> {
                     String value = input.getText().toString().trim();
-                    if (!value.isEmpty() && !value.endsWith("/")) value += "/";
+                    if (!value.isEmpty() && !value.startsWith("https://")) {
+                        //http 明文前缀会把更新流量暴露给中间人，无 scheme 会直接拼出非法 URL
+                        MsgUtil.showMsg("镜像前缀必须是 https:// 开头");
+                        return;
+                    }
                     UpdateManager.setMirrorPrefix(value);
                     onMirrorChanged();
                 })
@@ -193,12 +197,29 @@ public class UpdateActivity extends BaseActivity {
 
         displayNotes(updateInfo);
 
-        //安装过一次的残留包先清掉，避免"完成态"误显示
-        File oldApk = UpdateManager.getApkFile(this);
-        if (oldApk.exists() && oldApk.length() > 0) {
-            //已存在下载完成的包：直接进入安装态（网络差时的重进场景）
-            downloadedApk = oldApk;
-            showInstallState();
+        //本版本的安装包若已存在（下载完成后退出页面、网络差时重进等场景），不能只凭
+        //exists() 就当"下载完成"——那可能是损坏分片甚至旧版本残留包。先在后台做
+        //完整性 + 签名校验，通过才进入安装态；不通过则删包走重新下载。
+        File apk = UpdateManager.getApkFile(this, updateInfo);
+        if (apk.exists() && apk.length() > 0) {
+            statusView.setText(statusView.getText() + "\n\n正在校验已下载的安装包……");
+            CenterThreadPool.run(() -> {
+                try {
+                    UpdateManager.verifyApkIntegrity(this, updateInfo, apk);
+                    runOnUiThread(() -> {
+                        if (isDestroyed() || isFinishing()) return;
+                        downloadedApk = apk;
+                        showInstallState();
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        if (isDestroyed() || isFinishing()) return;
+                        MsgUtil.err(e);
+                        downloadButton.setVisibility(View.VISIBLE);
+                        downloadButton.setText("重新下载");
+                    });
+                }
+            });
         } else {
             downloadButton.setVisibility(View.VISIBLE);
             downloadButton.setText("下载更新包");

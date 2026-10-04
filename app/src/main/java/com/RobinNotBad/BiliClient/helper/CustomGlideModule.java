@@ -55,8 +55,13 @@ public class CustomGlideModule extends AppGlideModule {
                 requestBuilder.header(key, headers.get(i + 1));
             }
         } else {
-            //外站域名绝不携带 B 站 Cookie 与来源信息，只保留 UA（部分站点拒绝无 UA 的请求）
+            //外站域名绝不携带 B 站 Cookie 与来源信息，只保留 UA（部分站点拒绝无 UA 的请求）。
+            //仅设置 UA 不够：跨主机重定向会把原请求里已有的 Cookie/Referer/Origin 原样带走，
+            //必须显式移除（此前注释声称"已剥离"但实际缺少移除动作）
             requestBuilder.header("User-Agent", NetWorkUtil.USER_AGENT_WEB);
+            requestBuilder.removeHeader("Cookie");
+            requestBuilder.removeHeader("Referer");
+            requestBuilder.removeHeader("Origin");
         }
         return requestBuilder;
     }

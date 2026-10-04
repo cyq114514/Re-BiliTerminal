@@ -13,6 +13,21 @@ import java.io.IOException;
 public class ProtobufParser {
 
     /**
+     * 单个字段的长度上限（1MB）：输入来自弹幕接口与本地磁盘缓存，伪造/损坏的数据
+     * 把 length 写成接近 2^31-1 时，无上界的 new byte[length] 会直接 OOM（外层只
+     * catch Exception，捕不到 OutOfMemoryError）。
+     */
+    private static final int MAX_FIELD_LENGTH = 1024 * 1024;
+
+    /**读取长度前缀并校验：负值（varint 截断后符号位为 1）或超过剩余字节数都按数据损坏处理。*/
+    private static int readLength(ByteArrayInputStream input) throws IOException {
+        int length = readVarint(input);
+        if (length < 0 || length > MAX_FIELD_LENGTH || length > input.available())
+            throw new IOException("Invalid field length: " + length);
+        return length;
+    }
+
+    /**
      * 解析弹幕分段响应
      *
      * @param data protobuf 格式的字节数据
@@ -28,7 +43,7 @@ public class ProtobufParser {
             int wireType = tag & 0x07;
 
             if (fieldNumber == 1 && wireType == 2) { // elems 字段
-                int length = readVarint(input);
+                int length = readLength(input);
                 byte[] elemData = new byte[length];
                 input.read(elemData);
                 DanmakuElem elem = parseDanmakuElem(elemData);
@@ -172,7 +187,7 @@ public class ProtobufParser {
      * 读取字符串
      */
     private static String readString(ByteArrayInputStream input) throws IOException {
-        int length = readVarint(input);
+        int length = readLength(input);
         byte[] bytes = new byte[length];
         int bytesRead = input.read(bytes);
         if (bytesRead != length) {
@@ -193,7 +208,7 @@ public class ProtobufParser {
                 input.skip(8);
                 break;
             case 2: // Length-delimited
-                int length = readVarint(input);
+                int length = readLength(input);
                 input.skip(length);
                 break;
             case 5: // 32-bit

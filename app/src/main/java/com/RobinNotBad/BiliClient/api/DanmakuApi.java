@@ -102,8 +102,6 @@ public class DanmakuApi {
         // 使用 WBI 签名
         url = ConfInfoApi.signWBI(url);
 
-        Logu.d("新版弹幕API", "URL: " + url);
-
         // 发送请求获取 protobuf 数据
         Response response = NetWorkUtil.get(url, NetWorkUtil.webHeaders);
         return Objects.requireNonNull(response.body()).bytes();

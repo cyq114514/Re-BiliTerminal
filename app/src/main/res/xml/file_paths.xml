@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   FileProvider 路径配置。外部播放器打开本地下载视频时会用到。
-  默认下载目录是 /sdcard/Android/media/<包名>/，用户还可以在实验室设置里改成任意路径，
-  所以 external-path 用 "." 覆盖整个外部存储根；provider 本身 exported=false + 按意图授权，暴露面可控。
+  默认下载目录是 /sdcard/Android/media/<包名>/，用户还可以在实验室设置里改成任意路径——
+  所以 external-path 用 "." 覆盖整个外部存储根（这是"自定义下载目录"功能的硬需求，
+  无法收敛到固定子目录）；provider 本身 exported=false + 只按意图授出单个 URI 的读权限，
+  泄露前提是接收方主动转发 URI，暴露面可控，不要在未提供替代方案时删掉这条。
 -->
 <paths>
     <external-files-path
@@ -26,12 +28,9 @@
     <cache-path
         name="cache"
         path="terminal" />
-    <!--应用内更新包：UpdateManager 下载到 cache/update/（externalCacheDir 不可用时退化到内部 cacheDir），
+    <!--应用内更新包：UpdateManager 下载到内部 cacheDir/update/（其他进程不可写），
         需要以 content:// 交给系统安装器-->
     <cache-path
         name="update_apk"
-        path="update/" />
-    <external-cache-path
-        name="ext_cache_update"
         path="update/" />
 </paths>

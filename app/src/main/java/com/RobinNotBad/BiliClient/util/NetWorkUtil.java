@@ -67,39 +67,53 @@ public class NetWorkUtil {
             INSTANCE.compareAndSet(null, setOkHttpSsl(new OkHttpClient.Builder())
                     .followRedirects(false)
                     .addInterceptor(chain -> {
+                        //手动跟跳必须在拦截器内循环：followRedirects(false) 时网络层把每个 302
+                        //原样交回，chain.proceed 不会重入本拦截器，靠 request tag 累计跳数数不清
+                        //（保护失效）；且跟跳前不 close 上一跳响应会泄漏连接。
+                        //安全边界不变：目标必须在 B 站域名白名单内且为 https 才携带请求头跟随，
+                        //否则原样返回（绝不把带 Cookie 的请求转发给任意域名，也绝不跟跳到明文 http）
                         Request request = chain.request();
+                        int hops = 0;
                         Response response = chain.proceed(request);
-                        RedirectHandler handler;
-                        String location = response.header("Location");
-                        boolean isSslRedirect = false;
-                        try {
+                        while (response.isRedirect()) {
+                            String location = response.header("Location");
+                            if (location == null) break;
+
                             //相对路径 Location 的 getScheme()/getHost() 为 null，必须判空后再比较，
                             //否则 NPE 会从拦截器直接炸掉整个请求
-                            URI redirectUri = location != null ? new URI(location) : null;
-                            String scheme = redirectUri != null ? redirectUri.getScheme() : null;
-                            String redirectHost = redirectUri != null ? redirectUri.getHost() : null;
-                            isSslRedirect = scheme != null && !request.isHttps() && scheme.equalsIgnoreCase("https")
-                                    && request.url().host().equalsIgnoreCase(redirectHost);
-                        } catch (URISyntaxException ignored) {
-                        }
-
-                        if (response.isRedirect() && location != null) {
-                            if (request.url().host().equals("b23.tv") && !isSslRedirect && (handler = request.tag(RedirectHandler.class)) != null) {
-                                handler.handleRedirect(location);
-                            } else {
-                                HttpUrl target = HttpUrl.parse(location);
-                                //手动跟跳必须有安全边界：目标必须在 B 站域名白名单内且为 https 才携带请求头跟随，
-                                //否则原样返回（绝不把带 Cookie 的请求转发给任意域名，也绝不跟跳到明文 http）；
-                                //跳数通过 request tag 累计，防恶意循环重定向打爆调用栈
-                                if (target == null || !target.isHttps() || !isBilibiliHost(target.host())) return response;
-                                int hops = request.tag(Integer.class) != null ? request.tag(Integer.class) : 0;
-                                if (hops >= 5) return response;
-                                Request newRequest = request.newBuilder()
-                                        .url(target)
-                                        .tag(Integer.class, hops + 1)
-                                        .build();
-                                return chain.proceed(newRequest);
+                            boolean isSslRedirect = false;
+                            try {
+                                URI redirectUri = new URI(location);
+                                String scheme = redirectUri.getScheme();
+                                String redirectHost = redirectUri.getHost();
+                                isSslRedirect = scheme != null && !request.isHttps() && scheme.equalsIgnoreCase("https")
+                                        && request.url().host().equalsIgnoreCase(redirectHost);
+                            } catch (URISyntaxException ignored) {
                             }
+
+                            if (request.url().host().equals("b23.tv") && !isSslRedirect
+                                    && request.tag(RedirectHandler.class) != null) {
+                                //带 handler 的调用方（短链解析）只要位置不要跟随
+                                request.tag(RedirectHandler.class).handleRedirect(location);
+                                break;
+                            }
+
+                            //resolve 同时兼容绝对与相对 Location（HttpUrl.parse 只认绝对地址）
+                            HttpUrl target = request.url().resolve(location);
+                            if (target == null || !target.isHttps() || !isBilibiliHost(target.host())) break;
+                            if (hops >= 5) break;   //防恶意循环重定向打爆调用栈
+                            hops++;
+                            Request follow = request.newBuilder().url(target).build();
+                            Response next;
+                            try {
+                                next = chain.proceed(follow);
+                            } catch (IOException e) {
+                                response.close();   //跟跳失败也不能泄漏当前响应的连接
+                                throw e;
+                            }
+                            response.close();       //跟跳前必须关掉上一跳的响应体
+                            request = follow;
+                            response = next;
                         }
                         return response;
                     })
@@ -152,19 +166,31 @@ public class NetWorkUtil {
     }
 
     public static JSONObject getJsonNoCookie(String url) throws IOException, JSONException {
-        ArrayList<String> headers = new ArrayList<>(webHeaders);
-        headers.set(1, "");
-        String bodyString = getBodyStringWithDoctypeRetry(url, headers);
+        String bodyString = getBodyStringWithDoctypeRetry(url, webHeadersWithoutCookie());
         if (bodyString != null) return new JSONObject(bodyString);
         throw new JSONException("在访问" + url + "时返回数据为空");
     }
 
     public static JSONObject getJsonPrivacy(String url) throws IOException, JSONException {
         ArrayList<String> headers = new ArrayList<>(webHeaders);
-        headers.set(1, CookieGenerator.getCookieString(false));
+        //按 key 定位 Cookie 项，不依赖固定下标（webHeaders 的第 0/1 项不保证永远是 Cookie）
+        for (int i = 0; i < headers.size(); i += 2)
+            if (headers.get(i).equalsIgnoreCase("Cookie")) headers.set(i + 1, CookieGenerator.getCookieString(false));
         String bodyString = getBodyStringWithDoctypeRetry(url, headers);
         if (bodyString != null) return new JSONObject(bodyString);
         throw new JSONException("在访问" + url + "时返回数据为空");
+    }
+
+    /**当前全局请求头的副本，但剥离 Cookie（媒体/公开资源的请求不应携带登录会话）。*/
+    public static ArrayList<String> webHeadersWithoutCookie() {
+        ArrayList<String> snapshot = webHeaders;
+        ArrayList<String> headers = new ArrayList<>(snapshot.size());
+        for (int i = 0; i < snapshot.size(); i += 2) {
+            if (snapshot.get(i).equalsIgnoreCase("Cookie")) continue;
+            headers.add(snapshot.get(i));
+            headers.add(snapshot.get(i + 1));
+        }
+        return headers;
     }
 
     public static Response get(String url) throws IOException {
@@ -176,7 +202,8 @@ public class NetWorkUtil {
     }
 
     public static Response get(String url, ArrayList<String> headers, RedirectHandler redirectHandler) throws IOException {
-        Logu.d("get-url", url);
+        //URL 里可能带 csrf/wbi 等敏感 query，与 body 一样脱敏后再进日志
+        Logu.d("get-url", maskSensitiveData(url));
         OkHttpClient client = getOkHttpInstance();
         Request.Builder requestBuilder = new Request.Builder().url(url).get();
         for (int i = 0; i < headers.size(); i += 2)
@@ -190,7 +217,8 @@ public class NetWorkUtil {
     }
 
     public static Response post(String url, String data, List<String> headers, String contentType) throws IOException {
-        Logu.d("post-url", url);
+        //URL 同样可能带 csrf 等敏感 query（多个接口把 csrf 拼在 query 里），一并脱敏
+        Logu.d("post-url", maskSensitiveData(url));
         Logu.d("post-data", maskSensitiveData(data));
         OkHttpClient client = getOkHttpInstance();
         RequestBody body = RequestBody.create(MediaType.parse(contentType + "; charset=utf-8"), data);
@@ -395,12 +423,15 @@ public class NetWorkUtil {
         if (newCookies.isEmpty()) return;
         //旧账号时代发出的请求，其 Set-Cookie 属于旧账号会话，切号后到达必须丢弃
         Long requestGeneration = response.request().tag(Long.class);
-        if (requestGeneration != null && requestGeneration != accountGeneration) {
-            Logu.d("cookie-skip", "stale generation, response discarded");
-            return;
-        }
 
         synchronized (NetWorkUtil.class) {
+            //代际比对必须与 Cookie 合并在同一把锁内：放在锁外时，切号（在别处自增代际）
+            //可能发生在"检查通过"与"合并写入"之间，旧账号的 Set-Cookie 仍会混进新会话（TOCTOU）
+            if (requestGeneration != null && requestGeneration != accountGeneration) {
+                Logu.d("cookie-skip", "stale generation, response discarded");
+                return;
+            }
+
             String cookiesStr = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
             ArrayList<String> oldCookies = (cookiesStr.equals("") ? new ArrayList<>() : new ArrayList<>(Arrays.asList(cookiesStr.split("; "))));  //转list
 
@@ -415,9 +446,11 @@ public class NetWorkUtil {
                     //浏览器语义是"该域及其子域"，等价于 d.equals("bilibili.com") || d.endsWith(".bilibili.com")
                     if (!(d.equals("bilibili.com") || d.endsWith(".bilibili.com")))
                         continue;
-                } else if (!isBilibiliHost(response.request().url().host())) {
-                    //无 Domain 属性的 Set-Cookie 按响应来源校验：
-                    //第三方域（或被劫持的跳转目标）不能把 cookie 注入全局请求头
+                } else if (!isApiHost(response.request().url().host())) {
+                    //无 Domain 属性的 Set-Cookie 按响应来源校验，且必须是主站/API 域：
+                    //isBilibiliHost 放行的 CDN 域（hdslb/bilivideo/akamai）只用于媒体请求头与
+                    //重定向跟随，绝不允许它们写全局会话——被劫持的 CDN 返回
+                    //Set-Cookie: SESSDATA=... 可整体覆盖主站登录态
                     continue;
                 }
 
@@ -474,6 +507,17 @@ public class NetWorkUtil {
         return h.equals("b23.tv") || h.equals("bilibili.com") || h.endsWith(".bilibili.com")
                 || h.endsWith(".bilivideo.com") || h.endsWith(".hdslb.com")
                 || BILIBILI_AKAMAI_MIRROR_HOSTS.contains(h);
+    }
+
+    /**
+     * Cookie 接受域（比 isBilibiliHost 更严）：只有主站/API 域可以往全局 Cookie 注入数据。
+     * isBilibiliHost 额外放行的 CDN 域（hdslb/bilivideo/akamai）仅用于媒体请求头与重定向
+     * 跟随，不能作为会话写入方。
+     */
+    public static boolean isApiHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase(Locale.ROOT);
+        return h.equals("bilibili.com") || h.endsWith(".bilibili.com");
     }
 
     /**B 站视频 CDN 在 Akamai 上的已知镜像主机，有新增镜像时在这里补。*/

@@ -58,13 +58,15 @@ public class CookieRefreshApi {
     public static String getRefreshCsrf(String CorrespondPath) throws IOException {
         if (Objects.equals(CorrespondPath, "")) return "";
         String url = "https://www.bilibili.com/correspond/1/" + CorrespondPath;
-        Response response = NetWorkUtil.get(url);
-        if (response.body() != null) {
-            Document document = Jsoup.parse(response.body().string());
-            if (document.select("#1-name").size() > 0)
-                return document.select("#1-name").get(0).text();
-            else return "";
-        } else return "";
+        //try-with-resources：此前响应从不关闭，登录检测高频路径会泄漏连接
+        try (Response response = NetWorkUtil.get(url)) {
+            if (response.body() != null) {
+                Document document = Jsoup.parse(response.body().string());
+                if (document.select("#1-name").size() > 0)
+                    return document.select("#1-name").get(0).text();
+                else return "";
+            } else return "";
+        }
     }
 
     public static boolean refreshCookie(String RefreshCsrf) throws JSONException, IOException {

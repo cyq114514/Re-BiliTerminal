@@ -44,6 +44,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.zip.Inflater;
 
+import okhttp3.HttpUrl;
 import okhttp3.Response;
 import okio.BufferedSink;
 import okio.Okio;
@@ -64,7 +65,7 @@ public class DownloadService extends Service {
 
     private String exitMessage = null;
 
-    private Timer toastTimer, notifyTimer;
+    private Timer notifyTimer;
 
     private static final int NORMAL = 0;
     private static final int ERR_NETWORK = -1;
@@ -362,27 +363,16 @@ public class DownloadService extends Service {
         return Service.START_STICKY;
     }
 
-    private void fakeDownload() {
-        setState(section.id, "downloading");
-        percent = 0;
-        refreshDownloadList();
-        try {
-            Thread.sleep(3000);
-        } catch (Exception ignored) {
-        }
-
-        deleteSection(section.id);
-        refreshLocalList();
-    }
-
     private void toastState(String newState) {
         state = newState;
         percent = 0;
-        if (toastTimer != null)
-            toastTimer.cancel();
     }
 
     private void startNotifyProgress() {
+        //多次 start（START_STICKY 重投递、失败重试）会重复走到这里：新建前必须取消旧实例，
+        //否则旧 Timer 线程泄漏并重复发通知
+        if (notifyTimer != null)
+            notifyTimer.cancel();
         notifyTimer = new Timer();
         notifyTimer.schedule(new TimerTask() {
             @Override
@@ -459,10 +449,24 @@ public class DownloadService extends Service {
         return NORMAL;
     }
 
+    /**
+     * 服务端下发的媒体地址不可盲信：下载请求带登录 Cookie 与 Referer，此前会把它们
+     * 发往响应里给的任意 URL（含明文 http）。统一在这里收口：非 B 站白名单域拒绝，
+     * http 升级为 https（B 站媒体 CDN 均支持）。
+     */
+    private static String validateMediaUrl(String url) {
+        HttpUrl parsed = HttpUrl.parse(url);
+        if (parsed == null) return null;
+        if (!parsed.isHttps()) parsed = parsed.newBuilder().scheme("https").build();
+        return NetWorkUtil.isBilibiliHost(parsed.host()) ? parsed.toString() : null;
+    }
+
     private int downFile(String url, File file) throws IOException {
+        String safeUrl = validateMediaUrl(url);
+        if (safeUrl == null) return ERR_NETWORK;
         Response response;
         try {
-            response = NetWorkUtil.get(url);
+            response = NetWorkUtil.get(safeUrl);
         } catch (IOException e) {
             return ERR_NETWORK;
         }
@@ -509,9 +513,11 @@ public class DownloadService extends Service {
     }
 
     private int downDanmaku(String danmaku, File danmakuFile) throws IOException {
+        String safeUrl = validateMediaUrl(danmaku);
+        if (safeUrl == null) return ERR_NETWORK;
         Response response;
         try {
-            response = NetWorkUtil.get(danmaku);
+            response = NetWorkUtil.get(safeUrl);
         } catch (IOException e) {
             return ERR_NETWORK;
         }
@@ -546,10 +552,6 @@ public class DownloadService extends Service {
         started = false;
         percent = -1;
         state = null;
-
-        if (toastTimer != null)
-            toastTimer.cancel();
-        toastTimer = null;
 
         if (notifyTimer != null)
             notifyTimer.cancel();

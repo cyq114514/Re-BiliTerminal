@@ -282,9 +282,10 @@ public class PlayerApi {
                 break;
             case "mtvPlayer":
                 //显式 setClassName 锁定用户在设置里选择的播放器包名，Intent 不会被第三方应用截获；
-                //cookie 是 wearbiliPlayer 拉取清晰度/弹幕的既有协作契约，凭据的发送面因此仅限这两个包
+                //cookie 是 wearbiliPlayer 拉取清晰度/弹幕的既有协作契约（需要 SESSDATA 的只读会话），
+                //但会剥离 bili_jct——那是写操作的 CSRF 令牌，播放器只做读操作，没有下发它的理由
                 intent.setClassName(context.getString(R.string.player_package_mtv), "com.xinxiangshicheng.wearbiliplayer.cn.player.PlayerActivity");
-                intent.setAction(Intent.ACTION_VIEW).putExtra("cookie", SharedPreferencesUtil.getString("cookies", "")).putExtra("mode", playerData.isLocal() ? "2" : "0").putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("live_mode", playerData.isLive());
+                intent.setAction(Intent.ACTION_VIEW).putExtra("cookie", cookieForThirdPartyPlayer()).putExtra("mode", playerData.isLocal() ? "2" : "0").putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("live_mode", playerData.isLive());
                 break;
             case "aliangPlayer":
                 intent.setClassName(context.getString(R.string.player_package_aliang), "com.aliangmaker.media.PlayVideoActivity");
@@ -296,7 +297,7 @@ public class PlayerApi {
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 } else {
                     intent.setData(Uri.parse(playerData.videoUrl));
-                    Map<String, String> headers = new HashMap<>(); headers.put("Cookie", SharedPreferencesUtil.getString("cookies", "")); headers.put("Referer", "https://www.bilibili.com/");
+                    Map<String, String> headers = new HashMap<>(); headers.put("Cookie", cookieForThirdPartyPlayer()); headers.put("Referer", "https://www.bilibili.com/");
                     intent.putExtra("cookie", (Serializable) headers).putExtra("agent", NetWorkUtil.USER_AGENT_WEB).putExtra("progress", playerData.progress * 1000L);
                 }
                 intent.setAction(Intent.ACTION_VIEW);
@@ -308,6 +309,28 @@ public class PlayerApi {
 
     public static Uri getVideoUri(Context context, String path) {
         return FileProvider.getUriForFile(context, context.getPackageName() + ".FileProvider", new File(path));
+    }
+
+    /**
+     * 交给第三方播放器的 Cookie：剥离 bili_jct（写操作 CSRF 令牌）后下发。
+     * 播放器只调用读接口（playurl/弹幕/心跳），携 bili_jct 的完整 Cookie 等于把
+     * "以用户身份执行任意写操作"的能力一并送出；剥离后即使所选播放器被恶意替换，
+     * 泄露面也从"完整账号操作权"缩小为"只读会话"。
+     */
+    private static String cookieForThirdPartyPlayer() {
+        String cookies = SharedPreferencesUtil.getString("cookies", "");
+        if (cookies == null || cookies.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String pair : cookies.split(";")) {
+            String item = pair.trim();
+            if (item.isEmpty()) continue;
+            int eq = item.indexOf('=');
+            String key = eq == -1 ? item : item.substring(0, eq).trim();
+            if (key.equalsIgnoreCase("bili_jct")) continue;   //写令牌绝不下发
+            if (sb.length() > 0) sb.append("; ");
+            sb.append(item);
+        }
+        return sb.toString();
     }
 
     public static SubtitleLink[] getSubtitleLinks(File folder) {

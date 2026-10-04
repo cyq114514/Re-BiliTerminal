@@ -1,6 +1,6 @@
 package com.RobinNotBad.BiliClient.api;
 
-import android.util.Log;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.model.*;
 import com.RobinNotBad.BiliClient.util.*;
 import com.google.gson.annotations.SerializedName;
@@ -400,7 +400,6 @@ public class UserInfoApi {
         String url = "https://api.bilibili.com/x/member/web/update";
         String postData = arg.toString();
         
-        Log.e("UpdateUserInfo", "URL: " + url);
         //不打印 PostData（含 csrf）
         
         // 构建Cookie
@@ -439,11 +438,11 @@ public class UserInfoApi {
         }
         
         String contentEncoding = response.header("Content-Encoding");
-        Log.e("UpdateUserInfo", "HTTP Code: " + response.code());
-        Log.e("UpdateUserInfo", "Content-Encoding: " + contentEncoding);
+        Logu.d("UpdateUserInfo", "HTTP Code: " + response.code());
+        Logu.d("UpdateUserInfo", "Content-Encoding: " + contentEncoding);
         
         byte[] bodyBytes = respBody.bytes();
-        Log.e("UpdateUserInfo", "Compressed Length: " + bodyBytes.length);
+        Logu.d("UpdateUserInfo", "Compressed Length: " + bodyBytes.length);
         
         String responseStr;
         if ("br".equalsIgnoreCase(contentEncoding)) {
@@ -451,7 +450,7 @@ public class UserInfoApi {
             try {
                 responseStr = new String(com.netease.hearttouch.brotlij.Brotli.decompress(bodyBytes), CompatUtil.getCharsetUTF8());
             } catch (Exception e) {
-                Log.e("UpdateUserInfo", "Brotli解压失败: " + e.getMessage());
+                Logu.d("UpdateUserInfo", "Brotli解压失败: " + e.getMessage());
                 responseStr = new String(bodyBytes, CompatUtil.getCharsetUTF8());
             }
         } else if ("gzip".equalsIgnoreCase(contentEncoding)) {
@@ -469,8 +468,8 @@ public class UserInfoApi {
             responseStr = new String(bodyBytes, CompatUtil.getCharsetUTF8());
         }
         
-        Log.e("UpdateUserInfo", "Response Length: " + responseStr.length());
-        Log.e("UpdateUserInfo", "Response: " + (responseStr.length() > 500 ? responseStr.substring(0, 500) + "..." : responseStr));
+        Logu.d("UpdateUserInfo", "Response Length: " + responseStr.length());
+        //不打印响应体（含账号资料，且原生 Log 不受日志开关控制）
         
         if (responseStr == null || responseStr.trim().isEmpty()) {
             throw new IOException("响应为空");
@@ -479,7 +478,7 @@ public class UserInfoApi {
         try {
             return new org.json.JSONObject(responseStr);
         } catch (JSONException e) {
-            Log.e("UpdateUserInfo", "JSON解析失败: " + e.getMessage());
+            Logu.d("UpdateUserInfo", "JSON解析失败: " + e.getMessage());
             org.json.JSONObject errorObj = new org.json.JSONObject();
             errorObj.put("code", -1);
             errorObj.put("message", "JSON解析失败: " + responseStr.substring(0, Math.min(100, responseStr.length())));
@@ -552,19 +551,19 @@ public class UserInfoApi {
         if (respBody == null) throw new IOException("上传响应为空");
         
         String contentEncoding = resp.header("Content-Encoding");
-        Log.e("AvatarUpload", "HTTP Code: " + resp.code());
-        Log.e("AvatarUpload", "Content-Encoding: " + contentEncoding);
+        Logu.d("AvatarUpload", "HTTP Code: " + resp.code());
+        Logu.d("AvatarUpload", "Content-Encoding: " + contentEncoding);
         
         String responseStr;
         byte[] bodyBytes = respBody.bytes();
-        Log.e("AvatarUpload", "Compressed Length: " + bodyBytes.length);
+        Logu.d("AvatarUpload", "Compressed Length: " + bodyBytes.length);
         
         if ("br".equalsIgnoreCase(contentEncoding)) {
             // Brotli解压
             try {
                 responseStr = new String(com.netease.hearttouch.brotlij.Brotli.decompress(bodyBytes), CompatUtil.getCharsetUTF8());
             } catch (Exception e) {
-                Log.e("AvatarUpload", "Brotli解压失败: " + e.getMessage());
+                Logu.d("AvatarUpload", "Brotli解压失败: " + e.getMessage());
                 responseStr = new String(bodyBytes, CompatUtil.getCharsetUTF8());
             }
         } else if ("gzip".equalsIgnoreCase(contentEncoding)) {
@@ -582,8 +581,8 @@ public class UserInfoApi {
             responseStr = new String(bodyBytes, CompatUtil.getCharsetUTF8());
         }
         
-        Log.e("AvatarUpload", "Response Length: " + responseStr.length());
-        Log.e("AvatarUpload", "Response: " + (responseStr.length() > 500 ? responseStr.substring(0, 500) + "..." : responseStr));
+        Logu.d("AvatarUpload", "Response Length: " + responseStr.length());
+        //不打印响应体（含账号资料，且原生 Log 不受日志开关控制）
         
         if (responseStr == null || responseStr.trim().isEmpty()) {
             throw new IOException("响应为空");
@@ -592,7 +591,7 @@ public class UserInfoApi {
         try {
             return new org.json.JSONObject(responseStr);
         } catch (JSONException e) {
-            Log.e("AvatarUpload", "JSON解析失败: " + e.getMessage());
+            Logu.d("AvatarUpload", "JSON解析失败: " + e.getMessage());
             org.json.JSONObject errorObj = new org.json.JSONObject();
             errorObj.put("code", -1);
             errorObj.put("message", "JSON解析失败: " + responseStr.substring(0, Math.min(100, responseStr.length())));

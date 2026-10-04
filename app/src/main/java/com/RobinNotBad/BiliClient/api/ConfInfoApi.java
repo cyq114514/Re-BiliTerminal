@@ -82,12 +82,39 @@ public class ConfInfoApi {
         }
 
         String wts = String.valueOf(System.currentTimeMillis() / 1000);
-        String calc_str = sortUrlParams(Uri.encode(url_query, "@#&=*+-_.,:!?()/~'%") + "&wts=" + wts) + mixin_key;
-        Logu.d(calc_str);
+        //官方 WBI 算法要求先剔除参数值里的 !'()* 再编码：不过滤时这些字符会参与签名，
+        //算出与服务端不同的 w_rid（表现为含特殊字符的搜索词等静默 403/-352）
+        String calc_str = sortUrlParams(Uri.encode(filterWbiParamValues(url_query), "@#&=*+-_.,:!?()/~'%") + "&wts=" + wts) + mixin_key;
+        //不打印 calc_str（签名输入含用户查询内容，且尾部拼接的 mixin_key 是会话级密钥）
 
         String w_rid = ToolsUtil.md5(calc_str);
 
         return Objects.requireNonNull(HttpUrl.parse(url_query)).newBuilder().addQueryParameter("w_rid", w_rid).addQueryParameter("wts", wts).build().toString();
+    }
+
+    /**对 raw query 的每个参数值剔除 WBI 签名黑名单字符（!'()*），参数名不动。*/
+    private static String filterWbiParamValues(String url_query) {
+        int q = url_query.indexOf('?');
+        String prefix = q == -1 ? "" : url_query.substring(0, q + 1);
+        String query = q == -1 ? url_query : url_query.substring(q + 1);
+        StringBuilder sb = new StringBuilder(prefix);
+        String[] pairs = query.split("&");
+        for (int i = 0; i < pairs.length; i++) {
+            String pair = pairs[i];
+            if (i > 0) sb.append('&');
+            int eq = pair.indexOf('=');
+            if (eq == -1) {
+                sb.append(pair);
+                continue;
+            }
+            sb.append(pair, 0, eq + 1);
+            String value = pair.substring(eq + 1);
+            for (int j = 0; j < value.length(); j++) {
+                char c = value.charAt(j);
+                if (c != '!' && c != '\'' && c != '(' && c != ')') sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     public static String sortUrlParams(String url) {

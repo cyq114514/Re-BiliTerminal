@@ -29,7 +29,9 @@ import okhttp3.Response;
  */
 
 public class LoginApi {
-    private static String oauthKey;
+    //扫码会话的 qrcode_key：跟二维码一一对应，必须由调用方传递，
+    //静态字段在两次并发扫码（多账号切换）时会被后一次覆盖，前一次轮询到错误的 key
+    private static volatile String oauthKey;
 
     public static Bitmap getLoginQR() throws JSONException, IOException {
         String url = "https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header&go_url=https:%2F%2Fwww.bilibili.com%2F";

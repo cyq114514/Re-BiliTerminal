@@ -2,7 +2,6 @@ package com.RobinNotBad.BiliClient.api;
 
 import android.content.Context;
 import android.text.SpannableStringBuilder;
-import android.util.Log;
 
 import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.model.PrivateMsgSession;
@@ -121,7 +120,7 @@ public class PrivateMsgApi {
                 user.mid = userJson.getLong("mid");
                 user.name = userJson.getString("name");
                 user.avatar = userJson.getString("face");
-                Log.e("", user.mid + user.name + user.avatar);
+                //不打印用户资料（原生 Log 不受日志开关控制）
                 userMap.put(user.mid, user);
             }
         }

@@ -234,8 +234,8 @@ public class QRLoginFragment extends Fragment {
 
                             LoginApi.requestSSOs();
                             if (loginJson.getJSONObject("data").has("url")) {
-                                try {
-                                    NetWorkUtil.get(loginJson.getJSONObject("data").optString("url"));
+                                //跨域登出通知（SSO）：响应体用不到，但必须关闭连接
+                                try (Response ssoResponse = NetWorkUtil.get(loginJson.getJSONObject("data").optString("url"))) {
                                 } catch (Throwable ignored) {
                                 }
                             }

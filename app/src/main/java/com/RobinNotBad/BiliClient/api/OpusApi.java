@@ -63,8 +63,10 @@ public class OpusApi {
                 HttpUrl current = HttpUrl.parse(response.request().url().toString());
                 HttpUrl target = current != null ? current.resolve(location) : null;
                 response.close();
-                if (target == null || !NetWorkUtil.isBilibiliHost(target.host())) {
-                    return opus;    //非 B 站域名的跳转不带凭据跟进，放弃抓取
+                //isHttps 校验不能省：network_security_config 对 B 站域放行了明文 http，
+                //服务端 302 到 http://www.bilibili.com 时会把带 Cookie 的请求降级到明文
+                if (target == null || !target.isHttps() || !NetWorkUtil.isBilibiliHost(target.host())) {
+                    return opus;    //非 https 的 B 站域跳转或外站跳转都不带凭据跟进，放弃抓取
                 }
                 response = NetWorkUtil.get(target.toString());
             }

@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -40,7 +39,6 @@ public class GetIntentActivity extends Activity {
         Uri uri = intent.getData();
         if (uri != null) {
             String host = uri.getHost();
-            Log.e("debug-host", host);
 
             //外部链接不可信：host 可能为 null（例如 bilibili: 这种无 host 的深链），
             //pathSegment 也可能不是数字，这里直接崩会把整个链接入口炸掉

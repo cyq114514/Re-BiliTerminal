@@ -200,7 +200,8 @@ public class HistoryApi {
                 return;
             }
             String body = response.body().string();
-            Logu.d(tag, body);
+            //只记长度不打响应体
+            Logu.d(tag, "respLen=" + body.length());
             int code = new JSONObject(body).optInt("code", -1);
             if (code != 0) Logu.e(tag, "上报失败 code=" + code + " " + detail);
         } catch (JSONException e) {

@@ -117,8 +117,10 @@ public class AccountManager {
         if (cookies.isEmpty()) return;
 
         String refreshToken = SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "");
-        String accessKey = SharedPreferencesUtil.getString(SharedPreferencesUtil.access_key, "");
         String csrf = SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "");
+        //access_key 全仓库只写不读（本应用全走 Cookie 通道）：属"高危死凭据"，
+        //不再收集快照，顺手清掉历史遗留的全局值
+        SharedPreferencesUtil.putString(SharedPreferencesUtil.access_key, "");
 
         String avatar = "";
         String name = "UID:" + mid;
@@ -140,7 +142,7 @@ public class AccountManager {
                 if (accounts.get(i).mid == mid) {
                     accounts.get(i).cookies = cookies;
                     accounts.get(i).refreshToken = refreshToken;
-                    accounts.get(i).accessKey = accessKey;
+                    accounts.get(i).accessKey = "";   //access_key 停存（只写不读的高危死凭据）
                     accounts.get(i).csrf = csrf;
                     accounts.get(i).avatar = avatar;
                     accounts.get(i).name = name;
@@ -149,7 +151,7 @@ public class AccountManager {
                 }
             }
             if (!found) {
-                accounts.add(new AccountInfo(mid, name, cookies, refreshToken, accessKey, csrf, avatar));
+                accounts.add(new AccountInfo(mid, name, cookies, refreshToken, "", csrf, avatar));
             }
             saveAccounts(accounts);
             SharedPreferencesUtil.putLong(CURRENT_ACCOUNT_KEY, mid);
@@ -180,7 +182,6 @@ public class AccountManager {
             editor.putLong(SharedPreferencesUtil.mid, account.mid);
             editor.putString(SharedPreferencesUtil.cookies, account.cookies);
             editor.putString(SharedPreferencesUtil.refresh_token, account.refreshToken);
-            editor.putString(SharedPreferencesUtil.access_key, account.accessKey);
             editor.putString(SharedPreferencesUtil.csrf, account.csrf);
             editor.putLong(CURRENT_ACCOUNT_KEY, account.mid);
             editor.putBoolean(SharedPreferencesUtil.cookie_refresh, true);

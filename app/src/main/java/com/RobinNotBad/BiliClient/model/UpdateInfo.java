@@ -14,6 +14,7 @@ public class UpdateInfo {
     public String notes = "";         //release 说明（即更新日志）
     public String apkUrl = "";        //APK 资产下载地址（unsigned 包会被过滤）
     public String sha256 = null;      //安装包哈希（可选，用于下载校验）
+    public long size = -1;            //安装包期望大小（字节；sha256 缺失时的完整性校验兜底）
 
     /**是否携带了足够的自动更新信息（版本名 + 可安装的 APK 资产）。*/
     public boolean isUsable() {

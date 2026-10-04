@@ -46,16 +46,14 @@ public class SSLSocketFactoryCompat extends SSLSocketFactory {
                                 "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
                                 "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
                                 "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
-                                "TLS_ECHDE_RSA_WITH_AES_128_GCM_SHA256",
+                                "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
                                 // maximum interoperability
-                                "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
                                 "TLS_RSA_WITH_AES_128_CBC_SHA",
                                 // additionally
                                 "TLS_RSA_WITH_AES_256_CBC_SHA",
-                                "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA",
                                 "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
-                                "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA",
                                 "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA");
+                        //3DES 套件已被移除（SWEET32）：老设备握手兜底靠剩余的 CBC 套件足够
                         List<String> availableCiphers = Arrays.asList(socket.getSupportedCipherSuites());
                         // take all allowed ciphers that are available and put them into preferredCiphers
                         HashSet<String> preferredCiphers = new HashSet<>(allowedCiphers);
@@ -67,6 +65,10 @@ public class SSLSocketFactoryCompat extends SSLSocketFactory {
                         // add preferred ciphers to enabled ciphers
                         preferredCiphers.addAll(new HashSet<>(Arrays.asList(socket.getEnabledCipherSuites())));
                         SSLSocketFactoryCompat.cipherSuites = preferredCiphers.toArray(new String[0]);
+                    } else {
+                        //API 21+ 时 cipherSuites 保持 null 会从 getter 返回 null（违反契约），
+                        //这里直接采用系统默认套件
+                        SSLSocketFactoryCompat.cipherSuites = socket.getEnabledCipherSuites();
                     }
                 }
             }
