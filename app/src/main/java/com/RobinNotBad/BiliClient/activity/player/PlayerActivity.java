@@ -102,6 +102,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 import java.util.zip.Inflater;
 
@@ -749,7 +751,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
         } else {
             timestamp_click = now_timestamp;
-            if ((layout_top.getVisibility()) == View.GONE)
+            if (!controlsShown)
                 showcon();
             else
                 hidecon.run();
@@ -769,12 +771,41 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 && y >= centerTop && y <= centerTop + centerHeight;
     }
 
+    //控制栏显隐统一走 150ms 透明度过渡（ViewPropertyAnimator 硬件合成）：
+    //此前是硬切换 GONE/VISIBLE，观感生硬；取消挂起动画再切，快速连点不串
+    private static final long CONTROL_FADE_MS = 150;
+
+    //淡入淡出的"目标"状态：淡出动画期间容器可见性仍是 VISIBLE（endAction 未跑），
+    //所有读 layout_top.getVisibility() 做决策的地方（点击切换/onPrepared/debug按钮）
+    //必须读这个字段而不是真实可见性，否则会拿到中间态
+    private boolean controlsShown = true;
+
+    private void fadeControls(boolean show) {
+        controlsShown = show;
+        View[] controls = {right_control, layout_top, bottom_buttons, seekbar_progress};
+        for (View control : controls) {
+            if (control == null) continue;
+            control.animate().cancel();
+            if (show) {
+                if (control.getVisibility() != View.VISIBLE) {
+                    control.setAlpha(0f);
+                    control.setVisibility(View.VISIBLE);
+                }
+                control.animate().alpha(1f).setDuration(CONTROL_FADE_MS);
+            } else {
+                if (control.getVisibility() == View.VISIBLE && control.getAlpha() > 0f) {
+                    control.animate().alpha(0f).setDuration(CONTROL_FADE_MS)
+                            .withEndAction(() -> control.setVisibility(View.GONE));
+                } else {
+                    control.setVisibility(View.GONE);
+                }
+            }
+        }
+    }
+
     @SuppressLint("SetTextI18n")
     private void showcon() {
-        right_control.setVisibility(View.VISIBLE);
-        layout_top.setVisibility(View.VISIBLE);
-        bottom_buttons.setVisibility(View.VISIBLE);
-        seekbar_progress.setVisibility(View.VISIBLE);
+        fadeControls(true);
         seekbar_progress.setEnabled(false);
         seekbar_progress.postDelayed(progressbarEnable, 200);
         if (isPrepared && (!isLiveMode) && (!isAudioOnlyMode)) {
@@ -797,10 +828,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private final Runnable progressbarEnable = () -> seekbar_progress.setEnabled(true);
 
     private final Runnable hidecon = () -> {
-        right_control.setVisibility(View.GONE);
-        layout_top.setVisibility(View.GONE);
-        bottom_buttons.setVisibility(View.GONE);
-        seekbar_progress.setVisibility(View.GONE);
+        fadeControls(false);
         if (isPrepared && (!isAudioOnlyMode)) {
             text_speed.setVisibility(View.GONE);
             btn_debug.setVisibility(View.GONE);
@@ -814,6 +842,42 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (menu_opened)
             btn_menu.performClick();
     };
+
+    // ===== 播放器生命周期专用线程 =====
+    // native 的 release 内部要停掉解码/消息线程并 join，低端手表上可能秒级阻塞——
+    // 此前 stop/release 全部在主线程同步调用，是"退出播放页/切换清晰度 ANR"的直接来源。
+    // 改为捕获引用置空后投递到本线程执行；静态共享保证全进程只此一条线程（32 位进程的
+    // 线程/栈地址空间红线，见 pthread OOM 事故）。单线程 FIFO 同时保证顺序：
+    // 旧实例 release 完成（归还 ijkSurface）之后，才允许经 runAfterPlayerReleased 重建新实例。
+    private static final ExecutorService PLAYER_OPS = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "player-ops");
+        t.setDaemon(true);
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
+
+    /**回收当前播放器：立即置空字段（后续主线程代码与各定时器读到的都是 null），
+     * native release 在 player-ops 线程执行。release 内部含 stop 的清理动作，
+     * 不必再单独调 stop（少一次 native join，阻塞面减半）。*/
+    private void retirePlayer() {
+        final IjkMediaPlayer old = ijkPlayer;
+        if (old == null) return;
+        ijkPlayer = null;
+        PLAYER_OPS.execute(() -> {
+            try {
+                old.release();
+            } catch (Throwable t) {
+                Logu.e("player-ops", "release 异常: " + t);
+            }
+        });
+    }
+
+    /**在旧播放器 release 完成（FIFO）之后回到主线程执行 r。
+     * ijkSurface 是单实例，两个 native 播放器不能同时挂同一 Surface，
+     * 重建必须排在 release 之后；放回主线程是因为重建要触碰 View。*/
+    private void runAfterPlayerReleased(Runnable r) {
+        PLAYER_OPS.execute(() -> runOnUiThread(r));
+    }
 
     private void setDisplay() {
         Logu.v("创建播放器");
@@ -956,6 +1020,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void MPPrepare(String nowurl) {
         ijkPlayer.setOnPreparedListener(this);
+        //事件门：release 已异步化的旧实例仍可能滞后回调（onCompletion/onError/onInfo），
+        //按"回调实例 != 当前字段"丢弃，防止旧事件触发换P/错误重试等作用到新实例
+        final IjkMediaPlayer thisPlayer = ijkPlayer;
         playerError = false;   //任何新的载入（切P/切清晰度/重试）都清除错误态
 
         if (isLiveMode) {
@@ -980,6 +1047,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         ijkPlayer.setOnCompletionListener(iMediaPlayer -> {
+            if (iMediaPlayer != thisPlayer) return;
             finishWatching = true;
             
             if (interactionData != null && interactionData.edges != null && 
@@ -1014,6 +1082,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         });
 
         ijkPlayer.setOnErrorListener((iMediaPlayer, what, extra) -> {
+            if (iMediaPlayer != thisPlayer) return true;
             String EReport = "播放器可能遇到错误！\n错误码：" + what + "\n附加：" + extra;
             Logu.e("ijk-err", EReport);
             //原来返回 false，错误会继续走到 onCompletion 被当成“播放完毕”，用户会误以为视频播完了；
@@ -1036,10 +1105,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         });
 
         ijkPlayer.setOnBufferingUpdateListener(
-                (mp, percent) -> seekbar_progress.setSecondaryProgress(percent * video_all / 100));
+                (mp, percent) -> {
+                    if (mp != thisPlayer) return;
+                    seekbar_progress.setSecondaryProgress(percent * video_all / 100);
+                });
 
         if (isOnlineVideo || isLiveMode)
             ijkPlayer.setOnInfoListener((mp, what, extra) -> {
+                if (mp != thisPlayer) return false;
                 if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_START) {
                     runOnUiThread(() -> {
                         loading_info.setVisibility(View.VISIBLE);
@@ -1073,9 +1146,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     @SuppressLint("SetTextI18n")
     @Override
     public void onPrepared(IMediaPlayer mediaPlayer) {
+        //旧实例的滞后回调：它的 release 已在 player-ops 排队，直接忽略，防止旧事件作用到新实例
+        if (mediaPlayer != ijkPlayer) return;
         if (destroyed) {
-            ijkPlayer.release();
-            ijkPlayer = null;
+            retirePlayer();
             return;
         }
 
@@ -1083,6 +1157,21 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         video_all = (int) ijkPlayer.getDuration();
 
         changeVideoSize();
+
+        //记住倍速：上个会话手动调过速的话，新实例（含换P/换清晰度重建）自动应用；
+        //长按 3x 属临时加速不走这里，不会污染记忆值；直播流不应用倍速（倍速按钮在直播本来就隐藏）
+        if (!isLiveMode && SharedPreferencesUtil.getBoolean("player_speed_remember", false)) {
+            float savedSpeed = SharedPreferencesUtil.getFloat("player_speed_value", 1.0f);
+            for (int i = 0; i < speed_values.length; i++) {
+                if (speed_values[i] == savedSpeed && i != 2) {
+                    ijkPlayer.setSpeed(speed_values[i]);
+                    if (mDanmakuView != null) mDanmakuView.setSpeed(speed_values[i]);
+                    text_speed.setText(speed_strs[i]);
+                    seekbar_speed.setProgress(i);   //fromUser=false，监听器不会重复应用
+                    break;
+                }
+            }
+        }
 
         if ((isLiveMode || hasDanmaku) && mDanmakuView != null) {
             mDanmakuView.start();
@@ -1187,7 +1276,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         isPlaying = true;
         btn_control.setImageResource(R.drawable.btn_player_pause);
 
-        text_speed.setVisibility(layout_top.getVisibility());
+        text_speed.setVisibility(controlsShown ? View.VISIBLE : View.GONE);
         if (isLiveMode)
             text_speed.setVisibility(View.GONE);
         text_speed.setOnClickListener(view -> layout_speed.setVisibility(View.VISIBLE));
@@ -1809,6 +1898,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         HashMap<Integer, Integer> maxLinesPair = new HashMap<>();
         maxLinesPair.put(BaseDanmaku.TYPE_SCROLL_RL, SharedPreferencesUtil.getInt("player_danmaku_maxline", 15));
         HashMap<Integer, Boolean> overlap = new HashMap<>();
+        //allowoverlap 的 map 值传给 DFM 是"防重叠"语义（true=会撞的弹幕被拦）；
+        //此前只有 LR/BOTTOM 在 map 里，主滚动弹幕（RL）完全不受该设置控制，这里补上
+        overlap.put(BaseDanmaku.TYPE_SCROLL_RL, SharedPreferencesUtil.getBoolean("player_danmaku_allowoverlap", true));
         overlap.put(BaseDanmaku.TYPE_SCROLL_LR, SharedPreferencesUtil.getBoolean("player_danmaku_allowoverlap", true));
         overlap.put(BaseDanmaku.TYPE_FIX_BOTTOM, SharedPreferencesUtil.getBoolean("player_danmaku_allowoverlap", true));
         mContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 1)
@@ -1947,18 +2039,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 runOnUiThread(() -> {
                     isPrepared = false;
                     isPlaying = false;
-                    if (ijkPlayer != null) {
-                        ijkPlayer.stop();
-                        ijkPlayer.release();
-                        ijkPlayer = null;
-                    }
+                    retirePlayer();
                     loading_info.setVisibility(View.VISIBLE);
                     anim_loading.start();
                     loading_text0.setText("重新载入");
                 });
-                Thread.sleep(100);
-                runOnUiThread(() -> {
-                    //休眠期间页面可能已退出：对已销毁的窗口 setDisplay 会创建无人认领的播放器实例（native 泄漏）
+                //旧实例 release 完成后再重建（ijkSurface 单实例，见 runAfterPlayerReleased 注释）
+                runAfterPlayerReleased(() -> {
+                    //页面可能已退出：对已销毁的窗口 setDisplay 会创建无人认领的播放器实例（native 泄漏）
                     if (destroyed || isFinishing()) return;
                     ijkPlayer = new IjkMediaPlayer();
                     progress_history = resumePosition;
@@ -2235,10 +2323,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             mDanmakuView.release();
             mDanmakuView = null;
         }
-        if (ijkPlayer != null) {
-            ijkPlayer.release();
-            ijkPlayer = null;
-        }
+        //player 的 native release 移交 player-ops 线程（主线程同步 release 是 ANR 来源）；
+        //ijkSurface.release() 只做引用计数递减，主线程原时序保留
+        retirePlayer();
         if (ijkSurface != null) {
             ijkSurface.release();
             ijkSurface = null;
@@ -2708,6 +2795,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         ijkPlayer.setSpeed(speed_values[position]);
                     if (mDanmakuView != null)
                         mDanmakuView.setSpeed(speed_values[position]);
+                    //记住倍速：手动调速才落盘；长按 3x 与 onPrepared 的恢复（fromUser=false）不会走到这里
+                    if (SharedPreferencesUtil.getBoolean("player_speed_remember", false))
+                        SharedPreferencesUtil.putFloat("player_speed_value", speed_values[position]);
                 }
             }
 
@@ -2830,11 +2920,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         //轻则抛异常打死定时器（进度条与进度上报从此静默失效），重则卡在播放器原生锁上
                         isPrepared = false;
                         isPlaying = false;
-                        if (ijkPlayer != null) {
-                            ijkPlayer.stop();
-                            ijkPlayer.release();
-                            ijkPlayer = null;
-                        }
+                        retirePlayer();
 
                         loading_info.setVisibility(View.VISIBLE);
                         anim_loading.start();
@@ -2844,10 +2930,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         updateAudioOnlyUI();
                     });
 
-                    Thread.sleep(100);
-
-                    runOnUiThread(() -> {
-                        //休眠期间页面可能已退出：对已销毁的窗口 setDisplay 会创建无人认领的播放器实例（native 泄漏）
+                    //旧实例 release 完成后再重建（ijkSurface 单实例，见 runAfterPlayerReleased 注释）
+                    runAfterPlayerReleased(() -> {
+                        //页面可能已退出：对已销毁的窗口 setDisplay 会创建无人认领的播放器实例（native 泄漏）
                         if (destroyed || isFinishing()) return;
                         ijkPlayer = new IjkMediaPlayer();
                         progress_history = currentPosition;
@@ -3056,11 +3141,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     isPrepared = false;
                     isPlaying = false;
 
-                    if (ijkPlayer != null) {
-                        ijkPlayer.stop();
-                        ijkPlayer.release();
-                        ijkPlayer = null;
-                    }
+                    retirePlayer();
                     if (mDanmakuView != null) {
                         mDanmakuView.release();
                         mDanmakuView = null;
@@ -3106,10 +3187,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         interactionChoiceLayout.removeAllViews();
                     }
 
-                    ijkPlayer = new IjkMediaPlayer();
                     mDanmakuView = findViewById(R.id.sv_danmaku);
 
-                    setDisplay();
+                    //旧实例 release 完成后再重建：ijkSurface 单实例，两个 native 播放器不能同时挂同一 Surface
+                    runAfterPlayerReleased(() -> {
+                        if (destroyed || myToken != switchToken) return;
+                        ijkPlayer = new IjkMediaPlayer();
+
+                        setDisplay();
+                    });
 
                     layout_control.postDelayed(() -> CenterThreadPool.run(() -> {
                         if (destroyed || myToken != switchToken)
@@ -3224,11 +3310,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     //先摘掉播放状态再释放，避免进度定时器在 release 期间读到已释放实例
                     isPrepared = false;
                     isPlaying = false;
-                    if (ijkPlayer != null) {
-                        ijkPlayer.stop();
-                        ijkPlayer.release();
-                        ijkPlayer = null;
-                    }
+                    retirePlayer();
 
                     video_url = playerData.videoUrl;
                     currentQuality = newQuality;
@@ -3242,10 +3324,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     anim_loading.start();
                     loading_text0.setText("切换清晰度中");
 
-                    ijkPlayer = new IjkMediaPlayer();
-                    progress_history = currentPosition;
+                    //旧实例 release 完成后再重建（ijkSurface 单实例，见 runAfterPlayerReleased 注释）
+                    runAfterPlayerReleased(() -> {
+                        if (destroyed || myToken != switchToken) return;
+                        ijkPlayer = new IjkMediaPlayer();
+                        progress_history = currentPosition;
 
-                    setDisplay();
+                        setDisplay();
+                    });
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
@@ -3377,7 +3463,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (btn_debug == null) return;
         boolean debugEnabled = SharedPreferencesUtil.getBoolean("player_interaction_debug", false);
         if (debugEnabled && interactionData != null && interactionData.hiddenVars != null && !interactionData.hiddenVars.isEmpty() && !isLiveMode && !isAudioOnlyMode) {
-            btn_debug.setVisibility(layout_top.getVisibility());
+            btn_debug.setVisibility(controlsShown ? View.VISIBLE : View.GONE);
         } else {
             btn_debug.setVisibility(View.GONE);
         }
@@ -3616,11 +3702,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     isPrepared = false;
                     isPlaying = false;
 
-                    if (ijkPlayer != null) {
-                        ijkPlayer.stop();
-                        ijkPlayer.release();
-                        ijkPlayer = null;
-                    }
+                    retirePlayer();
                     if (mDanmakuView != null) {
                         mDanmakuView.release();
                         mDanmakuView = null;
@@ -3663,10 +3745,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         interactionChoiceLayout.removeAllViews();
                     }
                     
-                    ijkPlayer = new IjkMediaPlayer();
                     mDanmakuView = findViewById(R.id.sv_danmaku);
-                    
-                    setDisplay();
+
+                    //旧实例 release 完成后再重建：ijkSurface 单实例，两个 native 播放器不能同时挂同一 Surface
+                    runAfterPlayerReleased(() -> {
+                        if (destroyed) return;
+                        ijkPlayer = new IjkMediaPlayer();
+
+                        setDisplay();
+                    });
                     
                     layout_control.postDelayed(() -> CenterThreadPool.run(() -> {
                         if (destroyed)
