@@ -58,6 +58,8 @@ public class SearchActivity extends InstanceActivity {
     Handler handler;
     ArrayList<String> searchHistory;
     ArrayList<String> searchSuggestions;
+    //热搜词：每次进页拉一次，输入框为空时展示（此时历史卡片让位隐藏）
+    final ArrayList<String> hotSearchList = new ArrayList<>();
     private Runnable suggestionRunnable;
     private boolean suggestionsEnabled;
     //搜索建议请求代际：每次输入自增，响应到达时若代际已过期则丢弃（防慢响应覆盖新响应的乱序竞态）
@@ -120,7 +122,11 @@ public class SearchActivity extends InstanceActivity {
                     String keyword = keywordInput.getText().toString();
                     if (keyword.isEmpty() || !suggestionsEnabled || searchSuggestions.isEmpty()) {
                         historyRecyclerview.setVisibility(View.VISIBLE);
-                        suggestionsRecyclerview.setVisibility(View.GONE);
+                        if (keyword.isEmpty() && !hotSearchList.isEmpty()) {
+                            showHotSearch();
+                        } else {
+                            suggestionsRecyclerview.setVisibility(View.GONE);
+                        }
                     } else {
                         historyRecyclerview.setVisibility(View.GONE);
                         suggestionsRecyclerview.setVisibility(View.VISIBLE);
@@ -224,6 +230,23 @@ public class SearchActivity extends InstanceActivity {
             suggestionsRecyclerview.setLayoutManager(new CustomLinearManager(this));
             suggestionsRecyclerview.setAdapter(searchSuggestionsAdapter);
 
+            //热搜词：进页拉一次；输入框为空时与历史记录一同展示，点击复用建议列表的搜索逻辑
+            CenterThreadPool.run(() -> {
+                try {
+                    ArrayList<String> hot = SearchApi.getHotSearch();
+                    runOnUiThread(() -> {
+                        if (isDestroyed() || isFinishing() || hot.isEmpty()) return;
+                        hotSearchList.clear();
+                        hotSearchList.addAll(hot);
+                        if (keywordInput.getText().toString().isEmpty() && keywordInput.hasFocus()) {
+                            showHotSearch();
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.e("SearchActivity", "获取热搜失败", e);
+                }
+            });
+
             // 添加输入监听器获取搜索建议
             if (suggestionsEnabled) {
                 keywordInput.addTextChangedListener(new TextWatcher() {
@@ -248,11 +271,15 @@ public class SearchActivity extends InstanceActivity {
                         }
 
                         if (keyword.isEmpty()) {
-                            // 输入为空时显示历史记录
+                            // 输入为空时显示历史记录与热搜词
                             runOnUiThread(() -> {
                                 if (keywordInput.hasFocus()) {
                                     historyRecyclerview.setVisibility(View.VISIBLE);
-                                    suggestionsRecyclerview.setVisibility(View.GONE);
+                                    if (!hotSearchList.isEmpty()) {
+                                        showHotSearch();
+                                    } else {
+                                        suggestionsRecyclerview.setVisibility(View.GONE);
+                                    }
                                 }
                             });
                         } else {
@@ -268,6 +295,8 @@ public class SearchActivity extends InstanceActivity {
                                         //代际校验负责丢弃过期响应（防慢响应覆盖新响应的乱序竞态）
                                         if (gen != suggestionGeneration || refreshing || isFinishing() || isDestroyed())
                                             return;
+                                        //输入建议不带段标题（热搜标题只在热词模式下出现）
+                                        searchSuggestionsAdapter.setSectionTitle(null);
                                         searchSuggestions.clear();
                                         searchSuggestions.addAll(suggestions);
                                         searchSuggestionsAdapter.notifyDataSetChanged();
@@ -296,6 +325,20 @@ public class SearchActivity extends InstanceActivity {
                 MsgUtil.showMsg("可点击标题栏返回详情页");
             }
         });
+    }
+
+    /**输入框为空时把热搜词装进建议列表，卡片首行带"热搜"标题；此时历史卡片让位隐藏
+     * （两张卡在布局里同位叠放，不能同时可见）。*/
+    @SuppressLint("NotifyDataSetChanged")
+    private void showHotSearch() {
+        searchSuggestionsAdapter.setSectionTitle("热搜");
+        searchSuggestions.clear();
+        searchSuggestions.addAll(hotSearchList);
+        searchSuggestionsAdapter.notifyDataSetChanged();
+        if (!hotSearchList.isEmpty()) {
+            historyRecyclerview.setVisibility(View.GONE);
+            suggestionsRecyclerview.setVisibility(View.VISIBLE);
+        }
     }
 
     public boolean jumpToTargetId(View view) {
@@ -334,6 +377,10 @@ public class SearchActivity extends InstanceActivity {
             //否则该请求返回后会把建议卡片重新盖到搜索结果上
             suggestionGeneration++;
             if (suggestionRunnable != null) handler.removeCallbacks(suggestionRunnable);
+            //搜索执行后建议卡片即使因焦点回归被重新拉起，也不该显示旧热词/旧建议（露出的是历史卡片）
+            searchSuggestionsAdapter.setSectionTitle(null);
+            searchSuggestions.clear();
+            searchSuggestionsAdapter.notifyDataSetChanged();
             runOnUiThread(() -> suggestionsRecyclerview.setVisibility(View.GONE));
 
             if (str.isEmpty()) {

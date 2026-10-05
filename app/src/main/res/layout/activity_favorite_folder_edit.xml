@@ -93,6 +93,40 @@
                 android:maxLines="3"
                 android:gravity="top|start" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="4dp"
+                android:text="可见范围"
+                android:textSize="13sp" />
+
+            <RadioGroup
+                android:id="@+id/radioPrivacy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/background_edittext"
+                android:paddingHorizontal="8dp"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/radioPublic"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:text="公开"
+                    android:textSize="13sp"
+                    android:checked="true" />
+
+                <RadioButton
+                    android:id="@+id/radioPrivate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:minHeight="40dp"
+                    android:text="私有" />
+            </RadioGroup>
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/btnSave"
                 android:layout_width="match_parent"

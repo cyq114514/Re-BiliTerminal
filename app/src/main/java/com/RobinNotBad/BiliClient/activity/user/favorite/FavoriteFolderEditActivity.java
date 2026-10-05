@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.EditText;
+import android.widget.RadioGroup;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
@@ -18,6 +19,9 @@ public class FavoriteFolderEditActivity extends BaseActivity {
     private boolean isDefault;
     private EditText editTitle;
     private EditText editIntro;
+    private RadioGroup radioPrivacy;
+    private android.widget.RadioButton radioPublic;
+    private android.widget.RadioButton radioPrivate;
     private com.google.android.material.card.MaterialCardView btnSave;
     private com.google.android.material.card.MaterialCardView btnDelete;
     private int deleteClickCount = 0;
@@ -36,6 +40,9 @@ public class FavoriteFolderEditActivity extends BaseActivity {
 
         editTitle = findViewById(R.id.editTitle);
         editIntro = findViewById(R.id.editIntro);
+        radioPrivacy = findViewById(R.id.radioPrivacy);
+        radioPublic = findViewById(R.id.radioPublic);
+        radioPrivate = findViewById(R.id.radioPrivate);
         btnSave = findViewById(R.id.btnSave);
         btnDelete = findViewById(R.id.btnDelete);
 
@@ -49,6 +56,9 @@ public class FavoriteFolderEditActivity extends BaseActivity {
         if (isDefault) {
             editTitle.setEnabled(false);
             editIntro.setEnabled(false);
+            //ViewGroup.setEnabled 不可靠地禁用子项，两个单选钮要逐个禁
+            radioPublic.setEnabled(false);
+            radioPrivate.setEnabled(false);
             btnSave.setClickable(false);
             btnSave.setAlpha(0.5f);
             btnDelete.setVisibility(android.view.View.GONE);
@@ -56,7 +66,30 @@ public class FavoriteFolderEditActivity extends BaseActivity {
         } else {
             btnSave.setOnClickListener(v -> saveFolder());
             btnDelete.setOnClickListener(v -> handleDeleteClick());
+            //拉取真实简介与隐私：列表数据不带这两个字段，不预填的话一保存就会把简介清空、隐私重置为公开
+            CenterThreadPool.run(() -> {
+                FavoriteApi.FolderInfo info = FavoriteApi.getFolderInfo(mediaId);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (info == null) {
+                        MsgUtil.showMsg("收藏夹详情获取失败，保存前请自行确认隐私与简介");
+                        return;
+                    }
+                    if (info.intro != null && editIntro.getText().toString().isEmpty()) {
+                        editIntro.setText(info.intro);
+                    }
+                    if (info.privacy == 1) {
+                        radioPrivacy.check(R.id.radioPrivate);
+                    } else {
+                        radioPrivacy.check(R.id.radioPublic);
+                    }
+                });
+            });
         }
+    }
+
+    private int selectedPrivacy() {
+        return radioPrivacy.getCheckedRadioButtonId() == R.id.radioPrivate ? 1 : 0;
     }
 
     private void saveFolder() {
@@ -67,11 +100,12 @@ public class FavoriteFolderEditActivity extends BaseActivity {
         }
 
         String intro = editIntro.getText().toString().trim();
+        int privacy = selectedPrivacy();
         btnSave.setClickable(false);
 
         CenterThreadPool.run(() -> {
             try {
-                int result = FavoriteApi.editFolder(mediaId, title, intro, 0);
+                int result = FavoriteApi.editFolder(mediaId, title, intro, privacy);
                 runOnUiThread(() -> {
                     btnSave.setClickable(true);
                     if (result == 0) {

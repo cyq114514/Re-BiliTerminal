@@ -3,6 +3,7 @@ package com.RobinNotBad.BiliClient.activity.user.favorite;
 import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.widget.EditText;
+import android.widget.RadioGroup;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
@@ -16,6 +17,7 @@ public class FavoriteFolderCreateActivity extends BaseActivity {
 
     private EditText editTitle;
     private EditText editIntro;
+    private RadioGroup radioPrivacy;
     private MaterialCardView btnSave;
 
     @SuppressLint("MissingInflatedId")
@@ -26,6 +28,7 @@ public class FavoriteFolderCreateActivity extends BaseActivity {
 
         editTitle = findViewById(R.id.editTitle);
         editIntro = findViewById(R.id.editIntro);
+        radioPrivacy = findViewById(R.id.radioPrivacy);
         btnSave = findViewById(R.id.btnSave);
         MaterialCardView btnDelete = findViewById(R.id.btnDelete);
 
@@ -33,6 +36,10 @@ public class FavoriteFolderCreateActivity extends BaseActivity {
         setPageName("创建收藏夹");
 
         btnSave.setOnClickListener(v -> createFolder());
+    }
+
+    private int selectedPrivacy() {
+        return radioPrivacy.getCheckedRadioButtonId() == R.id.radioPrivate ? 1 : 0;
     }
 
     private void createFolder() {
@@ -43,11 +50,12 @@ public class FavoriteFolderCreateActivity extends BaseActivity {
         }
 
         String intro = editIntro.getText().toString().trim();
+        int privacy = selectedPrivacy();
         btnSave.setClickable(false);
 
         CenterThreadPool.run(() -> {
             try {
-                int result = FavoriteApi.addFolder(title, intro, 0);
+                int result = FavoriteApi.addFolder(title, intro, privacy);
                 runOnUiThread(() -> {
                     btnSave.setClickable(true);
                     if (result == 0) {

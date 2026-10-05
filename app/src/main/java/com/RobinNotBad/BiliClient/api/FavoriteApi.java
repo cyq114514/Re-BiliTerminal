@@ -71,6 +71,8 @@ public class FavoriteApi {
         public String pic;
         @SerializedName("aid")
         public long aid;
+        @SerializedName("progress")
+        public int progress;
         @SerializedName("owner")
         public RecommendApi.Owner owner;
         @SerializedName("stat")
@@ -215,7 +217,10 @@ public class FavoriteApi {
             if (item == null) continue;
             String upName = item.owner != null ? item.owner.name : "";
             int viewCount = item.stat != null ? item.stat.view : 0;
-            videoList.add(new VideoCard(item.title, upName, StringUtil.toWan(viewCount) + "观看", item.pic, item.aid, ""));
+            VideoCard card = new VideoCard(item.title, upName, StringUtil.toWan(viewCount) + "观看", item.pic, item.aid, "");
+            //收藏时看过的进度：VideoCardHolder 会把播放量换成"看到 xx:xx"
+            card.progress = item.progress;
+            videoList.add(card);
         }
         return 0;
     }
@@ -288,5 +293,38 @@ public class FavoriteApi {
         String url = "https://api.bilibili.com/x/v3/fav/folder/del";
         String data = new NetWorkUtil.FormData().put("media_ids", String.valueOf(mediaId)).put("csrf", SharedPreferencesUtil.getString("csrf", "")).toString();
         return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
+    }
+
+    public static class FolderInfo {
+        public String title;
+        public String intro;
+        public int privacy;
+    }
+
+    public static class FavFolderInfoData {
+        @SerializedName("title")
+        public String title;
+        @SerializedName("intro")
+        public String intro;
+        @SerializedName("privacy")
+        public int privacy;
+    }
+
+    /**收藏夹详情：编辑页用它预填简介与隐私。列表页的 model 不带这两个字段，
+     * 不预填的话 editFolder 一保存就会把简介清空、隐私重置为公开。*/
+    public static FolderInfo getFolderInfo(long mediaId) {
+        try {
+            String json = NetWorkUtil.getJson("https://api.bilibili.com/x/v3/fav/folder/info?media_id=" + mediaId).toString();
+            ApiResponse<FavFolderInfoData> resp = GsonUtil.fromJson(json,
+                    new com.google.gson.reflect.TypeToken<ApiResponse<FavFolderInfoData>>(){}.getType());
+            if (resp == null || !resp.isSuccess() || resp.data == null) return null;
+            FolderInfo info = new FolderInfo();
+            info.title = resp.data.title;
+            info.intro = resp.data.intro;
+            info.privacy = resp.data.privacy;
+            return info;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

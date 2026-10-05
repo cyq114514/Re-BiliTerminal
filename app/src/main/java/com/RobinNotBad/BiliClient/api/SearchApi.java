@@ -229,6 +229,51 @@ public class SearchApi {
         return suggestions;
     }
 
+    /**热搜词：/x/web-interface/search/square 无需登录与 WBI 签名（无 cookie 实测返回 code 0）。*/
+    public static ArrayList<String> getHotSearch() {
+        try {
+            String json = NetWorkUtil.getJson("https://api.bilibili.com/x/web-interface/search/square?limit=10").toString();
+            HotSearchResponse resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<HotSearchResponse>(){}.getType());
+            ArrayList<String> list = new ArrayList<>();
+            if (resp != null && resp.code == 0 && resp.data != null && resp.data.trending != null
+                    && resp.data.trending.list != null) {
+                for (HotWord word : resp.data.trending.list) {
+                    if (word == null) continue;
+                    //show_name 是带表情/注音的展示形式，缺省回落 keyword
+                    String text = (word.show_name != null && !word.show_name.isEmpty()) ? word.show_name : word.keyword;
+                    if (text != null && !text.isEmpty()) list.add(text);
+                }
+            }
+            return list;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    public static class HotSearchResponse {
+        @SerializedName("code")
+        public int code;
+        @SerializedName("data")
+        public HotSearchData data;
+    }
+
+    public static class HotSearchData {
+        @SerializedName("trending")
+        public Trending trending;
+    }
+
+    public static class Trending {
+        @SerializedName("list")
+        public List<HotWord> list;
+    }
+
+    public static class HotWord {
+        @SerializedName("keyword")
+        public String keyword;
+        @SerializedName("show_name")
+        public String show_name;
+    }
+
     public static String getDefaultSearchContent() throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/web-interface/wbi/search/default";
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url)).toString();

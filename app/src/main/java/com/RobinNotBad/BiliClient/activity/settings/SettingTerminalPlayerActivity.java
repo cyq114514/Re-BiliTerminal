@@ -26,6 +26,8 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "双击优先还原缩放/移动", "player_doubletap_reset_first",
                         "开启后，双击会优先还原视频缩放与位置，再进行播放/暂停切换", "true"));
                 add(new SettingSection("switch", "洗脑循环", "player_loop", "", "false"));
+                add(new SettingSection("switch", "记住倍速", "player_speed_remember",
+                        "手动调整倍速后，之后的视频（含换P/换清晰度）自动应用", "false"));
                 add(new SettingSection("switch", "后台/熄屏继续播放", "player_background",
                         "退到后台或熄屏时继续播放，并挂出通知栏遥控", "false"));
                 add(new SettingSection("switch", "默认横屏", "player_autolandscape", "", "false"));
@@ -60,14 +62,15 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
 
                 add(new SettingSection("switch", "显示高能进度条", "player_high_energy",
                         getString(R.string.desc_player_high_energy), "false"));
-                add(new SettingSection("switch", "弹幕允许重叠", "player_danmaku_allowoverlap", "", "true"));
+                //map 值在 DFM 里是"防重叠"语义，开关文案按实际效果命名
+                add(new SettingSection("switch", "弹幕防重叠", "player_danmaku_allowoverlap", "", "true"));
                 add(new SettingSection("switch", "合并重复弹幕", "player_danmaku_mergeduplicate", "",
                         "false"));
                 add(new SettingSection("switch", "强制为滚动弹幕", "player_danmaku_forceR2L",
                         getString(R.string.desc_danmaku_force_r2l), "false"));
                 add(new SettingSection("switch", "显示直播弹幕发送者", "player_danmaku_showsender",
                         getString(R.string.desc_danmaku_showsender), "true"));
-                add(new SettingSection("input_int", "弹幕最大行数", "player_danmaku_maxline", "", "10"));
+                add(new SettingSection("input_int", "弹幕最大行数", "player_danmaku_maxline", "", "15"));
                 add(new SettingSection("input_float", "弹幕字号大小", "player_danmaku_size", "", "0.7"));
                 add(new SettingSection("input_float", "弹幕不透明度", "player_danmaku_transparency", "",
                         "0.5"));
