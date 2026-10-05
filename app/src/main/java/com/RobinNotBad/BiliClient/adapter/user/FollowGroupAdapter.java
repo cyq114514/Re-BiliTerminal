@@ -260,7 +260,7 @@ public class FollowGroupAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                             .transition(GlideUtil.getTransitionOptions())
                             .placeholder(R.mipmap.akari)
                             .apply(RequestOptions.circleCropTransform())
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .into(userHolder.avatar);
                     userHolder.avatar.setVisibility(View.VISIBLE);
                     userHolder.desc.setSingleLine(true);

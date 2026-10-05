@@ -57,6 +57,7 @@ public class RefreshListFragment extends BaseFragment {
         recyclerView = view.findViewById(R.id.recyclerView);
         //列表是滚动加载内容，默认 item 动画（进场淡入/变更交叉淡入）在低配手表上开销明显，关闭
         recyclerView.setItemAnimator(null);
+        recyclerView.setHasFixedSize(true);
         recyclerView.setLayoutManager(getLayoutManager());
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override

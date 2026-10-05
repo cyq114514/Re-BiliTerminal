@@ -17,6 +17,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
+import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
@@ -52,12 +53,12 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
             return;
 
         holder.name.setText(user.name);
+        //非 vip 必须恢复主题默认色（textwhite #ebe0e2，不能显式设纯白，否则普通用户全部变色）；
+        //vip 分支统一走 parseVipColor（坏色值兜底白色），此前缺 else 导致复用后残留上一条 vip 色
         if (user.vip_nickname_color != null && !user.vip_nickname_color.isEmpty()) {
-            try {
-                holder.name.setTextColor(Color.parseColor(user.vip_nickname_color));
-            } catch (IllegalArgumentException e) {
-                holder.name.setTextColor(Color.WHITE);
-            }
+            holder.name.setTextColor(StringUtil.parseVipColor(user.vip_nickname_color));
+        } else {
+            holder.name.setTextColor(holder.defaultNameColor);
         }
         holder.desc.setText(user.sign);
 
@@ -69,7 +70,7 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
                     .apply(RequestOptions.circleCropTransform())
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .into(holder.avatar);
             holder.avatar.setVisibility(View.VISIBLE);
             holder.desc.setSingleLine(true);
@@ -94,12 +95,15 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
         final TextView name;
         final TextView desc;
         final ImageView avatar;
+        //构造时捕获 XML/主题默认色，供非 vip 复用恢复
+        final int defaultNameColor;
 
         public Holder(@NonNull View itemView) {
             super(itemView);
             name = itemView.findViewById(R.id.userName);
             desc = itemView.findViewById(R.id.userDesc);
             avatar = itemView.findViewById(R.id.userAvatar);
+            defaultNameColor = name.getTextColors().getDefaultColor();
         }
     }
 }

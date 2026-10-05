@@ -10,6 +10,8 @@ import androidx.annotation.Nullable;
 
 public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSeekBar {
     private float[] highEnergyData;
+    //归一化+pow 后的绘制曲线缓存（见 rebuildRenderData）
+    private float[] renderData;
     private Paint linePaint;
     private Paint fillPaint;
     private int stepSec = 10;
@@ -58,7 +60,31 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
     public void setHighEnergyData(float[] data, int stepSec) {
         this.highEnergyData = data;
         this.stepSec = stepSec;
+        rebuildRenderData();
         invalidate();
+    }
+
+    //归一化 + pow 曲线只在数据变化时算一次：此前每次 onDraw（随播放进度 ~250ms 一次）都逐点重算
+    private void rebuildRenderData() {
+        if (highEnergyData == null || highEnergyData.length == 0) {
+            renderData = null;
+            return;
+        }
+        float maxValue = 0;
+        for (float value : highEnergyData) {
+            if (value > maxValue) {
+                maxValue = value;
+            }
+        }
+        if (maxValue <= 0) {
+            renderData = null;
+            return;
+        }
+        float[] out = new float[highEnergyData.length];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = (float) Math.pow(highEnergyData[i] / maxValue, 0.7);
+        }
+        renderData = out;
     }
 
     /**
@@ -74,6 +100,7 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
      */
     public void clearHighEnergyData() {
         this.highEnergyData = null;
+        this.renderData = null;
         invalidate();
     }
 
@@ -91,18 +118,7 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
         int height = getHeight() - getPaddingTop() - getPaddingBottom();
         int max = getMax();
 
-        if (max <= 0 || width <= 0 || height <= 0) {
-            return;
-        }
-
-        float maxValue = 0;
-        for (float value : highEnergyData) {
-            if (value > maxValue) {
-                maxValue = value;
-            }
-        }
-
-        if (maxValue <= 0) {
+        if (max <= 0 || width <= 0 || height <= 0 || renderData == null) {
             return;
         }
 
@@ -120,10 +136,7 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
                 break;
 
             float x = startX + (float) time / max * width;
-
-            float density = highEnergyData[i] / maxValue;
-            density = (float) Math.pow(density, 0.7);
-            float y = baselineY - maxWaveHeight * density;
+            float y = baselineY - maxWaveHeight * renderData[i];
 
             if (!pathStarted) {
                 linePath.moveTo(x, y);

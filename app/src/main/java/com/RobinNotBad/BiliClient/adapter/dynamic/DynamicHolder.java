@@ -15,6 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
+import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
@@ -78,6 +79,18 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
     private ArticleCardHolder articleCardHolder;
     private String lastAvatarUrl;
     private String lastImageUrl;
+
+    //点赞图标静态缓存：矢量图无 per-view 状态，共享实例安全（此前每行 bind getDrawable）
+    private static Drawable likeIconOn;
+    private static Drawable likeIconOff;
+
+    private static Drawable getLikeIcon(Context context, boolean on) {
+        if (likeIconOn == null) {
+            likeIconOn = ContextCompat.getDrawable(context, R.drawable.icon_reply_like1);
+            likeIconOff = ContextCompat.getDrawable(context, R.drawable.icon_reply_like0);
+        }
+        return on ? likeIconOn : likeIconOff;
+    }
 
     /**复用前清掉“同 URL 跳过加载”的缓存，供 Adapter.onViewRecycled 调用。*/
     public void clearImageCache() {
@@ -347,12 +360,8 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
 
         username.setText(dynamic.userInfo.name);
         if (!dynamic.userInfo.vip_nickname_color.isEmpty()) {
-            try {
-                username.setTextColor(Color.parseColor(dynamic.userInfo.vip_nickname_color));
-            } catch (IllegalArgumentException e) {
-                //API 返回过非 #RRGGBB 格式的颜色串，解析失败不能让整个动态列表崩掉
-                username.setTextColor(0xFFFFFFFF);
-            }
+            //parseVipColor 内部兜底解析失败返回白色，不再让坏色值冒到列表
+            username.setTextColor(StringUtil.parseVipColor(dynamic.userInfo.vip_nickname_color));
         } else {
             username.setTextColor(0xFFFFFFFF);
         }
@@ -368,7 +377,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
             content.setVisibility(View.VISIBLE);
             content.setText(dynamic.content);
             StringUtil.setCopy(content);
-            content.setOnTouchListener(new StringUtil.ClickableSpanTouchListener());
+            content.setOnTouchListener(StringUtil.CLICKABLE_SPAN_TOUCH_LISTENER);
         } else
             content.setVisibility(View.GONE);
 
@@ -378,7 +387,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
                     .apply(RequestOptions.circleCropTransform())
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .into(avatar);
         }
 
@@ -454,17 +463,28 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
 
                     if (!pictureList.isEmpty()) {
                         ImageView imageView = cell_dynamic_image.findViewById(R.id.imageView);
-                        String firstImageUrl = pictureList.get(0);
+                        String firstImageUrl = GlideUtil.url(pictureList.get(0));
                         if (!firstImageUrl.equals(lastImageUrl)) {
                             lastImageUrl = firstImageUrl;
-                            Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(firstImageUrl))
-                                    .transition(GlideUtil.getTransitionOptions())
-                                    .placeholder(R.mipmap.placeholder)
-                                    .centerCrop()
-                                    .format(DecodeFormat.PREFER_RGB_565)
-                                    .sizeMultiplier(0.85f)
-                                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                                    .into(imageView);
+                            if (firstImageUrl.endsWith(".gif")) {
+                                //GIF 图组缩略图只解码首帧：动画逐帧重绘在列表里太贵（点开看图页仍是动图）
+                                Glide.with(BiliTerminal.context).asBitmap().load(firstImageUrl)
+                                        .placeholder(R.mipmap.placeholder)
+                                        .centerCrop()
+                                        .format(DecodeFormat.PREFER_RGB_565)
+                                        .sizeMultiplier(0.85f)
+                                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                                        .into(imageView);
+                            } else {
+                                Glide.with(BiliTerminal.context).asDrawable().load(firstImageUrl)
+                                        .transition(GlideUtil.getTransitionOptions())
+                                        .placeholder(R.mipmap.placeholder)
+                                        .centerCrop()
+                                        .format(DecodeFormat.PREFER_RGB_565)
+                                        .sizeMultiplier(0.85f)
+                                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                                        .into(imageView);
+                            }
                         }
                         TextView textView = cell_dynamic_image.findViewById(R.id.imageCount);
                         textView.setText("共" + pictureList.size() + "张图片");
@@ -593,11 +613,11 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                 if (dynamic.stats.liked) { // 这里，还有下面，一定要加else！否则会导致错乱
                     likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
                     likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                            ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null, null);
+                            getLikeIcon(context, true), null, null, null);
                 } else {
                     likeCount.setTextColor(Color.rgb(0xff, 0xff, 0xff));
                     likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                            ContextCompat.getDrawable(context, R.drawable.icon_reply_like0), null, null, null);
+                            getLikeIcon(context, false), null, null, null);
                 }
                 likeCount.setText(toWan(dynamic.stats.like));
             } else {
@@ -613,7 +633,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                                 likeCount.setText(toWan(++dynamic.stats.like));
                                 likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
                                 likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                                        ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null,
+                                        getLikeIcon(context, true), null, null,
                                         null);
                             });
                         } else
@@ -630,7 +650,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                                 likeCount.setText(toWan(--dynamic.stats.like));
                                 likeCount.setTextColor(Color.rgb(0xff, 0xff, 0xff));
                                 likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                                        ContextCompat.getDrawable(context, R.drawable.icon_reply_like0), null, null,
+                                        getLikeIcon(context, false), null, null,
                                         null);
                             });
                         } else

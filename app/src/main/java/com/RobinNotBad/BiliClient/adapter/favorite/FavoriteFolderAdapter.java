@@ -107,7 +107,7 @@ public class FavoriteFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
                         .load(StringUtil.getDrawable(context, R.drawable.article_fav_cover))
                         .transition(GlideUtil.getTransitionOptions())
                         .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(5))))
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .into(favoriteHolder.cover);
                 favoriteHolder.itemView.setOnClickListener(v -> {
                     Intent intent = new Intent(context, FavouriteOpusListActivity.class);

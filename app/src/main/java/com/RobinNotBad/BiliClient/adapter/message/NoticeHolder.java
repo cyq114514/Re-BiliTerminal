@@ -64,7 +64,7 @@ public class NoticeHolder extends RecyclerView.ViewHolder {
                     .load(GlideUtil.url(message.user.get(i).avatar))
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .apply(RequestOptions.circleCropTransform())
                     .into(imageView);
             imageView.setLayoutParams(new ViewGroup.LayoutParams(ToolsUtil.dp2px(32), ToolsUtil.dp2px(32)));

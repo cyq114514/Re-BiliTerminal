@@ -18,6 +18,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
@@ -54,6 +55,18 @@ import java.util.ArrayList;
 
 @SuppressLint("ClickableViewAccessibility")
 public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+
+    //点赞图标静态缓存：矢量图无 per-view 状态，共享实例安全（此前每行 bind getDrawable）
+    private static Drawable likeIconOn;
+    private static Drawable likeIconOff;
+
+    private static Drawable getLikeIcon(Context context, boolean on) {
+        if (likeIconOn == null) {
+            likeIconOn = ContextCompat.getDrawable(context, R.drawable.icon_reply_like1);
+            likeIconOff = ContextCompat.getDrawable(context, R.drawable.icon_reply_like0);
+        }
+        return on ? likeIconOn : likeIconOff;
+    }
 
     public boolean isDetail = false;
     public boolean isManager = false;
@@ -146,7 +159,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                         .transition(GlideUtil.getTransitionOptions())
                         .placeholder(R.mipmap.akari)
                         .apply(RequestOptions.circleCropTransform())
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .into(replyHolder.replyAvatar);
             }
 
@@ -156,7 +169,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             // 大会员红字（无红名或关闭开关时要恢复默认色，否则复用后普通用户名残留粉色）
             if (!TextUtils.isEmpty(sender.vip_nickname_color)
                     && !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NO_VIP_COLOR, false))
-                replyHolder.userName.setTextColor(Color.parseColor(sender.vip_nickname_color));
+                replyHolder.userName.setTextColor(StringUtil.parseVipColor(sender.vip_nickname_color));
             else
                 replyHolder.userName.setTextColor(replyHolder.defaultNameColor);
 
@@ -203,18 +216,18 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
 
             replyHolder.message.setText(reply.message);
             StringUtil.setCopy(replyHolder.message);
-            replyHolder.message.setOnTouchListener(new StringUtil.ClickableSpanTouchListener());
+            replyHolder.message.setOnTouchListener(StringUtil.CLICKABLE_SPAN_TOUCH_LISTENER);
 
             replyHolder.likeCount.setText(toWan(reply.likeCount));
 
             if (reply.liked) {
                 replyHolder.likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                        ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null, null);
+                        getLikeIcon(context, true), null, null, null);
             } else {
                 replyHolder.likeCount.setTextColor(Color.rgb(0xff, 0xff, 0xff));
                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                        ContextCompat.getDrawable(context, R.drawable.icon_reply_like0), null, null, null);
+                        getLikeIcon(context, false), null, null, null);
             }
 
             if (reply.childCount != 0 && !(realPosition == 0 && isDetail)) {
@@ -288,12 +301,21 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 String firstImageUrl = GlideUtil.url(reply.pictureList.get(0));
                 if (!firstImageUrl.equals(replyHolder.lastImageUrl)) {
                     replyHolder.lastImageUrl = firstImageUrl;
-                    Glide.with(BiliTerminal.context).asDrawable().load(firstImageUrl)
-                            .transition(GlideUtil.getTransitionOptions())
-                            .placeholder(R.mipmap.placeholder)
-                            .format(DecodeFormat.PREFER_RGB_565)
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
-                            .into(replyHolder.imageCard);
+                    if (firstImageUrl.endsWith(".gif")) {
+                        //GIF 配图缩略图只解码首帧：动画逐帧重绘在列表里太贵（点开看图页仍是动图）
+                        Glide.with(BiliTerminal.context).asBitmap().load(firstImageUrl)
+                                .placeholder(R.mipmap.placeholder)
+                                .format(DecodeFormat.PREFER_RGB_565)
+                                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                                .into(replyHolder.imageCard);
+                    } else {
+                        Glide.with(BiliTerminal.context).asDrawable().load(firstImageUrl)
+                                .transition(GlideUtil.getTransitionOptions())
+                                .placeholder(R.mipmap.placeholder)
+                                .format(DecodeFormat.PREFER_RGB_565)
+                                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                                .into(replyHolder.imageCard);
+                    }
                 }
 
                 replyHolder.imageCount.setText("共" + reply.pictureList.size() + "张图片");
@@ -335,7 +357,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                                 replyHolder.likeCount.setText(toWan(++reply.likeCount));
                                 replyHolder.likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
                                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                                        ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null,
+                                        getLikeIcon(context, true), null, null,
                                         null);
                             });
                         } else
@@ -354,7 +376,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                                 replyHolder.likeCount.setText(toWan(--reply.likeCount));
                                 replyHolder.likeCount.setTextColor(Color.rgb(0xff, 0xff, 0xff));
                                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
-                                        ContextCompat.getDrawable(context, R.drawable.icon_reply_like0), null, null,
+                                        getLikeIcon(context, false), null, null,
                                         null);
                             });
                         } else

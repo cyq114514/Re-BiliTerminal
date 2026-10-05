@@ -158,15 +158,18 @@ public class CollectionInfoActivity extends RefreshListActivity {
             this.data = collection.sections;
             this.collection = collection;
             this.recyclerView = recyclerView;
+            //types 只依赖构造时的 data（只读），构建一次即可：
+            //此前 getItemViewType/getSectionPos/getEpisodePos 每次调用都全量重建，集数多时每个 bind O(n) 三次
+            rebuildTypes();
         }
 
         @Override
         public int getItemViewType(int position) {
             if (position == 0) return -1;
-            return getTypes().get(--position);
+            return types.get(--position);
         }
 
-        private List<Integer> getTypes() {
+        private void rebuildTypes() {
             synchronized (this) {
                 types.clear();
                 for (Collection.Section section : data) {
@@ -175,24 +178,21 @@ public class CollectionInfoActivity extends RefreshListActivity {
                         types.add(0);
                     }
                 }
-                return types;
             }
         }
 
         private int getSectionPos(int pos) {
-            List<Integer> list = getTypes();
             int sectionPos = -1;
             for (int i = 0; i <= pos; i++) {
-                if (list.get(i) == 1) sectionPos++;
+                if (types.get(i) == 1) sectionPos++;
             }
             return sectionPos;
         }
 
         private int getEpisodePos(int pos) {
-            List<Integer> list = getTypes();
             int episodePos = -1;
             for (int i = pos; i >= 0; i--) {
-                if (list.get(i) == 1) return episodePos;
+                if (types.get(i) == 1) return episodePos;
                 episodePos++;
             }
             return 1;

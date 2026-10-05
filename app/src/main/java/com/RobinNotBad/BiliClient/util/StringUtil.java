@@ -69,6 +69,37 @@ public class StringUtil {
             R.mipmap.level_h
     };
 
+    //setLink 的 URL 正则预编译（BV/AV/CV 已是 LinkUrlUtil 常量）
+    private static final Pattern URL_PATTERN =
+            Pattern.compile("(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]");
+
+    //等级徽章按级缓存（0-7 级 + 大会员，bounds 与 lineHeight 全局一致，共享实例安全）
+    private static final ImageSpan[] levelBadgeCache = new ImageSpan[levelBadges.length];
+
+    //12sp 文本行高的测量 Paint 缓存：密度运行期不变，测量结果是常量
+    private static volatile Float textHeightCache;
+    private static final Object textHeightLock = new Object();
+
+    //无状态监听器，所有可点文本共享单例（此前每行 bind new 一个）
+    public static final ClickableSpanTouchListener CLICKABLE_SPAN_TOUCH_LISTENER = new ClickableSpanTouchListener();
+
+    //vip 昵称色解析缓存：B 站色值来自固定小调色板，按字符串缓存避免每行 Color.parseColor
+    private static final java.util.Map<String, Integer> vipColorCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    //解析失败（非 #RRGGBB）返回白色兜底，不让解析异常冒到列表绑定处
+    public static int parseVipColor(String color) {
+        if (color == null || color.isEmpty()) return 0xFFFFFFFF;
+        Integer cached = vipColorCache.get(color);
+        if (cached != null) return cached;
+        try {
+            int parsed = Color.parseColor(color);
+            if (vipColorCache.size() < 32) vipColorCache.put(color, parsed);
+            return parsed;
+        } catch (IllegalArgumentException e) {
+            return 0xFFFFFFFF;
+        }
+    }
+
     public static Pair<Integer, Integer> appendString(SpannableStringBuilder stringBuilder, String str) {
         int startIndex = stringBuilder.length();
         stringBuilder.append(str);
@@ -171,8 +202,8 @@ public class StringUtil {
 
         String text = spannableString.toString();
 
-        Pattern urlPattern = Pattern.compile("(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]");
-        Matcher urlMatcher = urlPattern.matcher(text);
+        //URL 正则预编译：此前每次调用现场 Pattern.compile（评论/动态/简介每次绑定都触发）
+        Matcher urlMatcher = URL_PATTERN.matcher(text);
         while (urlMatcher.find()) {
             int start = urlMatcher.start();
             int end = urlMatcher.end();
@@ -214,7 +245,7 @@ public class StringUtil {
             SpannableStringBuilder spannableString = new SpannableStringBuilder(textView.getText());
             setLink(spannableString);
             textView.setText(spannableString);
-            textView.setOnTouchListener(new ClickableSpanTouchListener());
+            textView.setOnTouchListener(CLICKABLE_SPAN_TOUCH_LISTENER);
         }
     }
 
@@ -249,7 +280,7 @@ public class StringUtil {
             }
 
             textView.setText(spannableString);
-            textView.setOnTouchListener(new ClickableSpanTouchListener());
+            textView.setOnTouchListener(CLICKABLE_SPAN_TOUCH_LISTENER);
         }
     }
 
@@ -263,20 +294,32 @@ public class StringUtil {
         if (level <= -1 || level >= 7) level = 0;
         if (userInfo.is_senior_member == 1) level = 7;
 
+        ImageSpan cached = levelBadgeCache[level];
+        if (cached != null) return cached;
+
         Drawable drawable = getDrawable(context, levelBadges[level]);
 
         float lineHeight = getTextHeightWithSize(context);
         float lineWidth = lineHeight * 1.56f;
         if (userInfo.is_senior_member == 1) lineWidth = lineHeight * 1.96f;
         drawable.setBounds(0, 0, (int) lineWidth, (int) lineHeight);
-        return new ImageSpan(drawable);
+        ImageSpan span = new ImageSpan(drawable);
+        levelBadgeCache[level] = span;
+        return span;
     }
 
     public static float getTextHeightWithSize(Context context) {
-        Paint paint = new Paint();
-        paint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12, context.getResources().getDisplayMetrics()));
-        Paint.FontMetrics fontMetrics = paint.getFontMetrics();
-        return fontMetrics.descent - fontMetrics.ascent;
+        Float cached = textHeightCache;
+        if (cached != null) return cached;
+        synchronized (textHeightLock) {
+            if (textHeightCache == null) {
+                Paint paint = new Paint();
+                paint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12, context.getResources().getDisplayMetrics()));
+                Paint.FontMetrics fontMetrics = paint.getFontMetrics();
+                textHeightCache = fontMetrics.descent - fontMetrics.ascent;
+            }
+            return textHeightCache;
+        }
     }
 
     public static Drawable getDrawable(Context context, @DrawableRes int res) {

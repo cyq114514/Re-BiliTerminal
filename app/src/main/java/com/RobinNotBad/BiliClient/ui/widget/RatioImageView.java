@@ -17,6 +17,8 @@ import com.RobinNotBad.BiliClient.R;
 public class RatioImageView extends AppCompatImageView {
 
     private float ratio = 0f;
+    //XML 里声明的 adjustViewBounds 原始值：ratio 归零回经典模式时按原值恢复
+    private boolean xmlAdjustViewBounds = false;
 
     public RatioImageView(Context context) {
         super(context);
@@ -27,17 +29,26 @@ public class RatioImageView extends AppCompatImageView {
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.RatioImageView);
         ratio = a.getFloat(R.styleable.RatioImageView_coverRatio, 0f);
         a.recycle();
+        xmlAdjustViewBounds = getAdjustViewBounds();
+        applyAdjustViewBounds();
     }
 
     public void setRatio(float ratio) {
         if (this.ratio == ratio) return;
         this.ratio = ratio;
+        applyAdjustViewBounds();
         requestLayout();
         invalidate();
     }
 
     public float getRatio() {
         return ratio;
+    }
+
+    //ratio 生效时必须关掉 adjustViewBounds：两套定高机制并存会让测量路径叠加
+    //（ratio 在 onMeasure 直接定高，adjustViewBounds 又按 drawable 内在比例再调一次）
+    private void applyAdjustViewBounds() {
+        setAdjustViewBounds(ratio <= 0 && xmlAdjustViewBounds);
     }
 
     @Override

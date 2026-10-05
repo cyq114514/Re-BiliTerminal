@@ -31,9 +31,9 @@ public class MarqueeTextView extends TextView {
                 setSelected(true);
                 setEllipsize(TextUtils.TruncateAt.MARQUEE);
                 setSingleLine();
-                setMarqueeRepeatLimit(-1);
+                //有限次数而非无限循环：溢出文本此前会永久逐帧重绘，列表页最费
+                setMarqueeRepeatLimit(3);
                 setFocusable(true);
-                setFocusableInTouchMode(true);
             } else {
                 setEllipsize(TextUtils.TruncateAt.END);
                 setSingleLine();

@@ -68,7 +68,7 @@ public class MedalListAdapter extends RecyclerView.Adapter<MedalListAdapter.Hold
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
                     .apply(RequestOptions.circleCropTransform())
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .into(holder.avatar);
             holder.avatar.setVisibility(View.VISIBLE);
         } else {

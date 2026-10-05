@@ -38,6 +38,9 @@ public class RefreshMainActivity extends InstanceActivity {
         swipeRefreshLayout.setRefreshing(true);
         recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(getLayoutManager());
+        //与 RefreshListActivity 同口径：低配设备滚动减负（默认 ItemAnimator 在动态页每行增删都在跑）
+        recyclerView.setItemAnimator(null);
+        recyclerView.setHasFixedSize(true);
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {

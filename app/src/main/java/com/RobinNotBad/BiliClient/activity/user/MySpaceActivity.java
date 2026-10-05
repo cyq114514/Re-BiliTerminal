@@ -71,7 +71,7 @@ public class MySpaceActivity extends InstanceActivity {
                         Glide.with(MySpaceActivity.this).load(GlideUtil.url(userInfo.avatar))
                                 .transition(GlideUtil.getTransitionOptions())
                                 .placeholder(R.mipmap.akari).apply(RequestOptions.circleCropTransform())
-                                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                                 .into(userAvatar);
                         userName.setText(userInfo.name);
                         userFans.setText(StringUtil.toWan(userInfo.fans) + "粉丝 " + userCoin + "硬币");

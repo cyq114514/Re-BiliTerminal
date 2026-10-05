@@ -66,7 +66,7 @@ public class GlideUtil {
 
     public static void request(ImageView view, String url, int placeholder) {
         Glide.with(view).asDrawable().load(url(url))
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .format(DecodeFormat.PREFER_RGB_565)
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(placeholder)
@@ -75,7 +75,7 @@ public class GlideUtil {
 
     public static void requestRound(ImageView view, String url, int placeholder) {
         Glide.with(view).asDrawable().load(url(url))
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .format(DecodeFormat.PREFER_RGB_565)
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(placeholder)
@@ -122,7 +122,7 @@ public class GlideUtil {
         if (newUi) {
             view.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Glide.with(view).asDrawable().load(url(url))
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .format(DecodeFormat.PREFER_RGB_565)
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(placeholder)
@@ -132,7 +132,7 @@ public class GlideUtil {
             //旧版观感：fitCenter 自适应 + 5dp 圆角（与历史版本各封面调用点的 RoundedCorners(5) 一致）
             view.setScaleType(ImageView.ScaleType.FIT_CENTER);
             Glide.with(view).asDrawable().load(url(url))
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .format(DecodeFormat.PREFER_RGB_565)
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(placeholder)
@@ -143,7 +143,7 @@ public class GlideUtil {
 
     public static void request(ImageView view, String url, int roundCorners, int placeholder) {
         Glide.with(view).asDrawable().load(url(url))
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .format(DecodeFormat.PREFER_RGB_565)
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(placeholder)
@@ -151,9 +151,20 @@ public class GlideUtil {
                 .into(view);
     }
 
+    //淡入工厂复用（Glide 官方建议）：每图 new 一个此前是纯浪费；开关两态懒初始化
+    private static volatile DrawableCrossFadeFactory crossFadeFactory;
+
     public static TransitionOptions<?, ? super Drawable> getTransitionOptions() {
         if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LOAD_TRANSITION, true)) {
-            return DrawableTransitionOptions.with(new DrawableCrossFadeFactory.Builder(300).setCrossFadeEnabled(true).build());
+            DrawableCrossFadeFactory factory = crossFadeFactory;
+            if (factory == null) {
+                synchronized (GlideUtil.class) {
+                    if (crossFadeFactory == null)
+                        crossFadeFactory = new DrawableCrossFadeFactory.Builder(300).setCrossFadeEnabled(true).build();
+                    factory = crossFadeFactory;
+                }
+            }
+            return DrawableTransitionOptions.with(factory);
         } else {
             return new DrawableTransitionOptions();
         }

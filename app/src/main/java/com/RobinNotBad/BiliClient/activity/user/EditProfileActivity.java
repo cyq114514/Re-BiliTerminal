@@ -59,7 +59,7 @@ public class EditProfileActivity extends BaseActivity {
             Glide.with(this)
                     .load(GlideUtil.url(currentAvatar))
                     .apply(RequestOptions.circleCropTransform())
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .into(avatarIcon);
         }
 
@@ -156,7 +156,7 @@ public class EditProfileActivity extends BaseActivity {
                                 Glide.with(EditProfileActivity.this)
                                         .load(GlideUtil.url(faceUrl))
                                         .apply(RequestOptions.circleCropTransform())
-                                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                                         .into(avatarIcon);
                             }
                         }

@@ -159,8 +159,9 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                                 .asDrawable()
                                 .load(GlideUtil.url(picUrl))
                                 .transition(GlideUtil.getTransitionOptions())
-                                .override(Target.SIZE_ORIGINAL)
-                                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                //聊天行缩略图按 256px 解码：SIZE_ORIGINAL 会按原图全尺寸解码（32 位内存红线）
+                                .override(256)
+                                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                                 .into(holder.picMsg);
                         holder.picMsg.setOnClickListener(view -> {
                             ArrayList<String> imageList = new ArrayList<>();
@@ -200,7 +201,7 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                             .load(GlideUtil.url(msg.content.optString("thumb")))
                             .transition(GlideUtil.getTransitionOptions())
                             .format(DecodeFormat.PREFER_RGB_565)
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .into(holder.videoCover);
                     if (!msg.content.has("thumb")) holder.videoCover.setVisibility(View.GONE);
 

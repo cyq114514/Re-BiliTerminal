@@ -50,7 +50,7 @@ public class ElectricUserAdapter extends RecyclerView.Adapter<ElectricUserAdapte
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(R.mipmap.akari)
                 .apply(RequestOptions.circleCropTransform())
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .into(holder.userAvatar);
 
         if (user.message != null && !user.message.isEmpty()) {

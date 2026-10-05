@@ -127,7 +127,7 @@ public class AboutActivity extends BaseActivity {
                             .transition(GlideUtil.getTransitionOptions())
                             .placeholder(R.mipmap.akari)
                             .apply(RequestOptions.circleCropTransform())
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .into(developerAvaterViews.get(i));
                 } catch (Exception ignored) {
                 }
@@ -162,7 +162,7 @@ public class AboutActivity extends BaseActivity {
                                     .transition(GlideUtil.getTransitionOptions())
                                     .placeholder(R.mipmap.akari)
                                     .apply(RequestOptions.circleCropTransform())
-                                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                                     .into(cyqAvatarView);
                         }
                     });

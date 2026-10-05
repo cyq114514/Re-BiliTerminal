@@ -128,7 +128,7 @@ public class PrivateMsgSessionsAdapter
 
             if (avatarUrl != null && !avatarUrl.isEmpty()) {
                 Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(avatarUrl))
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .placeholder(R.mipmap.akari)
                         .apply(RequestOptions.circleCropTransform())
                         .into(holder.avatarView);

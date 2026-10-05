@@ -4,14 +4,16 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
-import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerViewAdapter;
 import com.RobinNotBad.BiliClient.ui.widget.PhotoViewpager;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
@@ -22,7 +24,6 @@ import com.bumptech.glide.request.target.Target;
 import com.github.chrisbanes.photoview.PhotoView;
 
 import java.util.ArrayList;
-import java.util.List;
 
 public class ImageViewerActivity extends BaseActivity {
 
@@ -42,8 +43,6 @@ public class ImageViewerActivity extends BaseActivity {
         PhotoViewpager viewPager = findViewById(R.id.viewPager);
         TextView textView = findViewById(R.id.text_page);
 
-        List<View> photoViewList = new ArrayList<>();
-
         ImageButton download = findViewById(R.id.btn_download);
         download.setOnClickListener(v -> {
             long time_now = System.currentTimeMillis();
@@ -57,29 +56,50 @@ public class ImageViewerActivity extends BaseActivity {
             longClickTimestamp = time_now;
         });
 
-        for (int i = 0; i < imageList.size(); i++) {
-            PhotoView photoView = new PhotoView(this);
-            try {
-                Glide.with(this).asDrawable()
-                        .load(GlideUtil.url_hq(imageList.get(i)))  //让b站自己压缩一下以加速获取
-                        .transition(GlideUtil.getTransitionOptions())
-                        .override(Target.SIZE_ORIGINAL)//override这一项一定要加，这样才会显示原图，不然一放大就糊成使
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .into(photoView);
-                photoView.setMaximumScale(6.25f);
-            } catch (OutOfMemoryError e) {
-                MsgUtil.showMsg("超出内存，加载失败");
-            } catch (Exception e) {
-                MsgUtil.err("图片查看", e);
+        //懒加载：此前为全部图一次性 new PhotoView 并 SIZE_ORIGINAL 解码全量驻留，
+        //图组一多直接吃穿 32 位进程内存。改为 instantiateItem 时才建视图、开解码，
+        //离屏页 destroyItem 时连同位图一起释放（默认 offscreenPageLimit=1，同屏最多 3 张在内存）。
+        viewPager.setAdapter(new PagerAdapter() {
+            @Override
+            public int getCount() {
+                return imageList != null ? imageList.size() : 0;
             }
 
-            photoViewList.add(photoView);
+            @Override
+            public boolean isViewFromObject(@NonNull View view, @NonNull Object object) {
+                return view == object;
+            }
 
-        }
+            @NonNull
+            @Override
+            public Object instantiateItem(@NonNull ViewGroup container, int position) {
+                PhotoView photoView = new PhotoView(ImageViewerActivity.this);
+                photoView.setMaximumScale(6.25f);
+                try {
+                    Glide.with(ImageViewerActivity.this).asDrawable()
+                            .load(GlideUtil.url_hq(imageList.get(position)))  //让b站自己压缩一下以加速获取
+                            .transition(GlideUtil.getTransitionOptions())
+                            //限宽不设高：B 站高清档 CDN 图本身 ≤1024w 不受影响，兜住外站/afdian 超大原图；
+                            //高度保持原图，长图放大依旧清晰
+                            .override(1024, Target.SIZE_ORIGINAL)
+                            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                            .into(photoView);
+                } catch (OutOfMemoryError e) {
+                    MsgUtil.showMsg("超出内存，加载失败");
+                } catch (Exception e) {
+                    MsgUtil.err("图片查看", e);
+                }
+                container.addView(photoView);
+                return photoView;
+            }
 
-        ViewPagerViewAdapter vpiAdapter = new ViewPagerViewAdapter(photoViewList);
-
-        viewPager.setAdapter(vpiAdapter);
+            @Override
+            public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
+                //先清请求（此刻视图还 attach 着）再移除，释放离屏页位图
+                Glide.with((View) object).clear((View) object);
+                container.removeView((View) object);
+            }
+        });
 
         viewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @SuppressLint("SetTextI18n")

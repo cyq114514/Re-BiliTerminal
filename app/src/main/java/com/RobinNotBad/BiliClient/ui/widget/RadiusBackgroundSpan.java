@@ -16,6 +16,10 @@ public class RadiusBackgroundSpan extends ReplacementSpan {
     private final int bgColor;
     private final int maxHeight;
 
+    //字段复用：getSize/draw 每次调用都在文本布局路径上，new TextPaint/RectF 是纯浪费
+    private final TextPaint textPaint = new TextPaint();
+    private final RectF rect = new RectF();
+
     public RadiusBackgroundSpan(int margin, int radius, int textColor, int bgColor) {
         this.margin = margin;
         this.radius = radius;
@@ -45,7 +49,6 @@ public class RadiusBackgroundSpan extends ReplacementSpan {
 
         int textWidth = (int) newPaint.measureText(text, start, end);
 
-        RectF rect = new RectF();
         top = bottom - top > maxHeight ? Math.max(bottom - maxHeight, 0) : top;
         rect.top = top + margin;
         rect.bottom = bottom - margin;
@@ -62,6 +65,7 @@ public class RadiusBackgroundSpan extends ReplacementSpan {
     }
 
     private TextPaint getCustomTextPaint(Paint srcPaint) {
-        return new TextPaint(srcPaint);
+        textPaint.set(srcPaint);
+        return textPaint;
     }
 }

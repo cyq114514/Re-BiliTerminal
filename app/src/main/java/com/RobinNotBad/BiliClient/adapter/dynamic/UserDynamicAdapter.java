@@ -246,7 +246,7 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
                     .apply(RequestOptions.circleCropTransform())
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .into(this.userAvatar);
 
             this.userAvatar.setOnClickListener(view -> {
