@@ -41,7 +41,7 @@
         android:layout_height="40dp"
         android:layout_below="@id/top"
         android:orientation="horizontal"
-        android:background="?android:attr/colorBackground">
+    >
 
         <TextView android:id="@+id/tab0" android:layout_width="0dp" android:layout_height="match_parent"
             android:layout_weight="1" android:gravity="center" android:text="新番"
@@ -175,7 +175,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_below="@id/filterBar"
-        android:background="?android:attr/colorBackground">
+    >
 
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/refresh0" android:layout_width="match_parent" android:layout_height="match_parent">
