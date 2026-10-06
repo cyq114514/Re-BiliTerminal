@@ -85,7 +85,13 @@ public class SplashActivity extends Activity {
             //先一次性取出"上次停留页面链"的恢复点（取出即清除，恢复页若崩溃不会成循环），
             //后续无论走正常流程还是错误兜底流程，都优先回到用户上次停留的页面。
             //恢复的是完整返回链（栈底→栈顶），只恢复栈顶单个页面会导致恢复页下没有上级，点返回直接退出应用
-            List<Intent> resumeIntents = fromLauncher ? ResumePageUtil.takeRestoreIntents() : null;
+            //是否恢复由"记住退出页面"开关决定；取出即清除始终执行，关掉开关前遗留的旧记录不会残留到下次
+            List<Intent> resumeIntents = null;
+            if (fromLauncher) {
+                List<Intent> restore = ResumePageUtil.takeRestoreIntents();
+                if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.RESUME_PAGE_ENABLE, false))
+                    resumeIntents = restore;
+            }
 
             NetWorkUtil.refreshHeaders();
 

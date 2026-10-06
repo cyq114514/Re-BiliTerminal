@@ -30,6 +30,8 @@ public class SharedPreferencesUtil {
     public static final String API_RETRY_INTERVAL_SECONDS = "api_retry_interval_seconds";
     public static final String API_RETRY_MAX_TIMES = "api_retry_max_times";
     public static final String PRIVACY_MODE = "privacy_mode";
+    //冷启动页面恢复总开关（恢复栈读写见 ResumePageUtil），默认关闭：关闭时不再写入恢复栈、冷启动始终进主页
+    public static final String RESUME_PAGE_ENABLE = "resume_page_enable";
     //新版美学设计（移植自 Re-WearBili 的视觉语言）总开关，关闭后回到旧版观感
     public static final String NEW_UI_DESIGN = "new_ui_design";
 

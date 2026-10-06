@@ -152,6 +152,7 @@
     <string name="desc_private_msg_auto_read_enable">打开私信会话时自动将会话标记为已读</string>
     <string name="desc_follow_group_mode">以分组形式展示关注列表</string>
     <string name="desc_night_reminder">在23:00–03:00期间打开应用时显示休息提醒</string>
+    <string name="desc_resume_page">默认关闭。开启后，下次打开应用会回到上次退出前浏览的页面（应用被系统回收后重开时生效）；关闭则始终进入主页</string>
     <string name="section_ui_size">界面大小</string>
     <string name="desc_setup_ui_size">有效范围：0.25倍-5.00倍，建议少量多次调节</string>
     <string name="text_ui_padding_horizontal">横向</string>

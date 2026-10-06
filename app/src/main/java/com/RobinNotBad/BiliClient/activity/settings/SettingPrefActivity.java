@@ -46,6 +46,8 @@ public class SettingPrefActivity extends RefreshListActivity {
                         getString(R.string.desc_follow_group_mode), "false"));
                 add(new SettingSection("switch", "夜深了", SharedPreferencesUtil.NIGHT_REMINDER_ENABLE,
                         getString(R.string.desc_night_reminder), "true"));
+                add(new SettingSection("switch", "记住退出页面", SharedPreferencesUtil.RESUME_PAGE_ENABLE,
+                        getString(R.string.desc_resume_page), "false"));
 
 
                 add(new SettingSection("title", "优化", "", "", ""));

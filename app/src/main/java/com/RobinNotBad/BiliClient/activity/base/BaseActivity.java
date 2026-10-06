@@ -77,7 +77,8 @@ public class BaseActivity extends AppCompatActivity {
         //冷启动页面栈恢复：可恢复页面在创建时入栈，销毁时出栈（见 ResumePageUtil），
         //进程被杀后由 Splash 按栈重建整个返回链，返回键才能逐级回退而不是直接退出。
         //token 是本实例的出栈凭证：同类页叠放时按凭证精确出栈，防止删错条目留幽灵页
-        if (isRestorablePage()) resumeToken = ResumePageUtil.push(this);
+        if (isRestorablePage() && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.RESUME_PAGE_ENABLE, false))
+            resumeToken = ResumePageUtil.push(this);
 
         int paddingH_percent = SharedPreferencesUtil.getInt("paddingH_percent", 0);
         int paddingV_percent = SharedPreferencesUtil.getInt("paddingV_percent", 0);
