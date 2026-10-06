@@ -134,10 +134,11 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 desc.setVisibility(View.VISIBLE);
             }
             switchMaterial.setText(settingSection.name);
-            switchMaterial.setOnCheckedChangeListener(
-                    (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, isChecked));
+            switchMaterial.setOnCheckedChangeListener(null);
             switchMaterial.setChecked(SharedPreferencesUtil.getBoolean(settingSection.id,
                     Boolean.parseBoolean(settingSection.defaultValue)));
+            switchMaterial.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, isChecked));
         }
     }
 
@@ -169,11 +170,15 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
             boolean value = SharedPreferencesUtil.getBoolean(settingSection.id,
                     Boolean.parseBoolean(settingSection.defaultValue));
+            chocola.setOnCheckedChangeListener(null);
+            vanilla.setOnCheckedChangeListener(null);
             chocola.setChecked(value);
             vanilla.setChecked(!value);
 
             chocola.setOnCheckedChangeListener(
                     (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, isChecked)); // 有些选项的true和false不能改了，所以交换
+            vanilla.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, !isChecked));
         }
     }
 
@@ -181,12 +186,44 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         final EditText input;
         final TextView name;
         final TextView desc;
+        SettingSection bound; //当前绑定的设置项；重绑 setText 期间置空，防止把本项值串写进其他项的 key
 
         public InputHolder(@NonNull View itemView) {
             super(itemView);
             input = itemView.findViewById(R.id.setting_input_edittext);
             desc = itemView.findViewById(R.id.setting_input_desc);
             name = itemView.findViewById(R.id.setting_input_name);
+            input.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable editable) {
+                    SettingSection settingSection = bound;
+                    if (settingSection == null)
+                        return;
+                    try {
+                        switch (settingSection.type) {
+                            case "input_int":
+                                SharedPreferencesUtil.putInt(settingSection.id,
+                                        Integer.parseInt(editable.toString()));
+                                break;
+                            case "input_float":
+                                SharedPreferencesUtil.putFloat(settingSection.id,
+                                        Float.parseFloat(editable.toString()));
+                                break;
+                            default:
+                                SharedPreferencesUtil.putString(settingSection.id, editable.toString());
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
         }
 
         public void bind(SettingSection settingSection) {
@@ -197,73 +234,26 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 desc.setVisibility(View.VISIBLE);
             }
             name.setText(settingSection.name);
+            bound = null;
             switch (settingSection.type) {
                 case "input_int":
                     int intValue = SharedPreferencesUtil.getInt(settingSection.id,
                             Integer.parseInt(settingSection.defaultValue));
                     input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
                     input.setText(String.valueOf(intValue));
-                    input.addTextChangedListener(new TextWatcher() {
-                        @Override
-                        public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-                        }
-
-                        @Override
-                        public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-                        }
-
-                        @Override
-                        public void afterTextChanged(Editable editable) {
-                            try {
-                                SharedPreferencesUtil.putInt(settingSection.id, Integer.parseInt(editable.toString()));
-                            } catch (Exception ignored) {
-                            }
-                        }
-                    });
                     break;
                 case "input_float":
                     float floatValue = SharedPreferencesUtil.getFloat(settingSection.id,
                             Float.parseFloat(settingSection.defaultValue));
                     input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
                     input.setText(String.valueOf(floatValue));
-                    input.addTextChangedListener(new TextWatcher() {
-                        @Override
-                        public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-                        }
-
-                        @Override
-                        public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-                        }
-
-                        @Override
-                        public void afterTextChanged(Editable editable) {
-                            try {
-                                SharedPreferencesUtil.putFloat(settingSection.id,
-                                        Float.parseFloat(editable.toString()));
-                            } catch (Exception ignored) {
-                            }
-                        }
-                    });
                     break;
                 default:
                     String strValue = SharedPreferencesUtil.getString(settingSection.id, settingSection.defaultValue);
                     input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
                     input.setText(strValue);
-                    input.addTextChangedListener(new TextWatcher() {
-                        @Override
-                        public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-                        }
-
-                        @Override
-                        public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-                        }
-
-                        @Override
-                        public void afterTextChanged(Editable editable) {
-                            SharedPreferencesUtil.putString(settingSection.id, editable.toString());
-                        }
-                    });
             }
+            bound = settingSection;
         }
     }
 
