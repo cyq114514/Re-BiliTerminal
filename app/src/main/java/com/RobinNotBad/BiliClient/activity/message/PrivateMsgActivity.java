@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.activity.message;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -11,12 +12,15 @@ import android.view.animation.TranslateAnimation;
 import android.widget.EditText;
 import android.widget.ImageButton;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.adapter.message.PrivateMsgAdapter;
+import com.RobinNotBad.BiliClient.api.ImageApi;
 import com.RobinNotBad.BiliClient.api.PrivateMsgApi;
 import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
@@ -41,6 +45,7 @@ public class PrivateMsgActivity extends BaseActivity {
     RecyclerView msgView;
     EditText contentEt;
     ImageButton sendBtn;
+    ImageButton picBtn;
     View layout_input;
     PrivateMsgAdapter adapter;
     long uid;
@@ -48,6 +53,14 @@ public class PrivateMsgActivity extends BaseActivity {
     Timer refreshTimer, animTimer;
     //refreshTimer 在后台线程创建，onDestroy 可能早于它：靠该标志闭合"销毁后 Timer 才被创建"的竞态
     volatile boolean destroyed;
+    //图片上传+发送进行中禁止再次触发，防止连点重复发图
+    volatile boolean sendingImage;
+
+    //相册选图；回调在主线程，IO 与网络在 sendPic 里转后台线程
+    private final ActivityResultLauncher<String> pickImageLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri != null) sendPic(uri);
+            });
 
     boolean animVisible = true;
 
@@ -59,6 +72,7 @@ public class PrivateMsgActivity extends BaseActivity {
         msgView = findViewById(R.id.msg_view);
         contentEt = findViewById(R.id.msg_input_et);
         sendBtn = findViewById(R.id.send_btn);
+        picBtn = findViewById(R.id.pic_btn);
         layout_input = findViewById(R.id.layout_input);
 
         Intent intent = getIntent();
@@ -151,6 +165,11 @@ public class PrivateMsgActivity extends BaseActivity {
             }
         });
 
+        picBtn.setOnClickListener(view -> {
+            if (sendingImage) MsgUtil.showMsg("正在发送图片，稍等喵~");
+            else pickImageLauncher.launch("image/*");
+        });
+
         sendBtn.setOnClickListener(view -> CenterThreadPool.run(() -> {
             try {
                 String content = contentEt.getText().toString().trim();
@@ -179,6 +198,36 @@ public class PrivateMsgActivity extends BaseActivity {
                 runOnUiThread(() -> MsgUtil.showMsg("发送失败：" + e.getMessage()));
             }
         }));
+    }
+
+    private void sendPic(Uri uri) {
+        sendingImage = true;
+        MsgUtil.showMsg("正在上传图片...");
+        CenterThreadPool.run(() -> {
+            try {
+                ImageApi.PreparedImage prepared = ImageApi.prepareImage(this, uri);
+                ImageApi.UploadedImage image = ImageApi.uploadImage(prepared.data, prepared.fileName,
+                        prepared.mimeType, ImageApi.BIZ_IM, null);
+                JSONObject result = PrivateMsgApi.sendPicMsg(
+                        SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0), uid,
+                        image.url, image.width, image.height,
+                        prepared.mimeType.substring("image/".length()), prepared.data.length);
+                if (destroyed) return;
+                runOnUiThread(() -> {
+                    if (result.optInt("code", -1) == 0) {
+                        MsgUtil.showMsg("发送成功");
+                        refresh();
+                    } else {
+                        String msg = result.optString("message", result.optString("msg", "发送失败"));
+                        MsgUtil.showMsg("发送失败：" + msg);
+                    }
+                });
+            } catch (Exception e) {
+                if (!destroyed) runOnUiThread(() -> MsgUtil.err(e));
+            } finally {
+                sendingImage = false;
+            }
+        });
     }
     //1在上面0在下面
 

@@ -58,7 +58,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginEnd="4dp"
-            android:layout_toStartOf="@id/send_btn"
+            android:layout_toStartOf="@id/pic_btn"
             android:background="@drawable/background_edittext_privatemsg"
             android:hint="@string/hint_private_message"
             android:maxHeight="128dp"
@@ -69,6 +69,15 @@
             android:textCursorDrawable="@drawable/cursor_drawable"
             android:textSize="13sp"
             android:inputType="textMultiLine" />
+
+        <ImageButton
+            android:id="@+id/pic_btn"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/background_privatemsg_send"
+            android:src="@drawable/icon_image"
+            android:layout_toStartOf="@id/send_btn"
+            android:layout_marginEnd="4dp" />
 
         <ImageButton
             android:id="@+id/send_btn"

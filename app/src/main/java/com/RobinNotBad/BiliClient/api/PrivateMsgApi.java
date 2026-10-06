@@ -235,6 +235,21 @@ public class PrivateMsgApi {
         return result;
     }
 
+    /**发送图片私信：content 字段结构与 PiliPlus 一致（url/width/height/imageType/original/size）*/
+    public static JSONObject sendPicMsg(long senderUid, long receiverUid, String url,
+                                        int width, int height, String imageType, long sizeBytes)
+            throws IOException, JSONException {
+        String content = new JSONObject()
+                .put("url", url)
+                .put("width", width)
+                .put("height", height)
+                .put("imageType", imageType)
+                .put("original", 1)
+                .put("size", sizeBytes)
+                .toString();
+        return sendMsg(senderUid, receiverUid, MSG_TYPE_PIC, System.currentTimeMillis() / 1000, content);
+    }
+
     public static JSONObject updateAck(long talkerId, int sessionType, long ackSeqno)
             throws IOException, JSONException {
         String url = "https://api.vc.bilibili.com/session_svr/v1/session_svr/update_ack";

@@ -28,12 +28,13 @@ import okhttp3.ResponseBody;
 
 /**
  * B站图床上传（web端 upload_bfs 接口，动态图片与评论图片共用）
- * 动态业务 biz=new_dyn，评论业务 biz=new_reply
+ * 动态业务 biz=new_dyn，评论业务 biz=new_reply，私信业务 biz=im
  */
 public class ImageApi {
 
     public static final String BIZ_DYNAMIC = "new_dyn";
     public static final String BIZ_REPLY = "new_reply";
+    public static final String BIZ_IM = "im";
 
     /**单张本地图片读取后的产物，用于上传*/
     public static class PreparedImage {
@@ -121,19 +122,24 @@ public class ImageApi {
         return new PreparedImage(baos.toByteArray(), "img_" + now + ".jpg", "image/jpeg");
     }
 
-    /**上传图片到B站图床，返回图片外链与尺寸信息*/
+    /**上传图片到B站图床，返回图片外链与尺寸信息（动态/评论：带 category=daily）*/
     public static UploadedImage uploadImage(byte[] imageData, String fileName, String mimeType, String biz) throws IOException, JSONException {
+        return uploadImage(imageData, fileName, mimeType, biz, "daily");
+    }
+
+    /**category 传 null 时省略该字段（私信 biz=im 不带 category，与 PiliPlus 一致）*/
+    public static UploadedImage uploadImage(byte[] imageData, String fileName, String mimeType, String biz, String category) throws IOException, JSONException {
         String csrf = SharedPreferencesUtil.getString("csrf", "");
         String url = "https://api.bilibili.com/x/dynamic/feed/draw/upload_bfs";
 
         RequestBody fileBody = RequestBody.create(MediaType.parse(mimeType), imageData);
-        MultipartBody multipartBody = new MultipartBody.Builder()
+        MultipartBody.Builder multipartBuilder = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file_up", fileName, fileBody)
-                .addFormDataPart("biz", biz)
-                .addFormDataPart("category", "daily")
-                .addFormDataPart("csrf", csrf)
-                .build();
+                .addFormDataPart("biz", biz);
+        if (category != null) multipartBuilder.addFormDataPart("category", category);
+        multipartBuilder.addFormDataPart("csrf", csrf);
+        MultipartBody multipartBody = multipartBuilder.build();
 
         Request.Builder requestBuilder = new Request.Builder().url(url).post(multipartBody);
         for (int i = 0; i < NetWorkUtil.webHeaders.size(); i += 2)
