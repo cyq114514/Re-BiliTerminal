@@ -72,6 +72,7 @@ import com.RobinNotBad.BiliClient.ui.widget.BatteryView;
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.EpisodeProgressStore;
 import com.RobinNotBad.BiliClient.util.CookieGenerator;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -1506,10 +1507,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 BangumiApi.SeasonProgress sp = fSeasonId != 0
                         ? BangumiApi.getSeasonProgress(fSeasonId) : new BangumiApi.SeasonProgress();
                 long wbiMs = PlayerApi.getLastPlayProgress(fAid, fCid, true);
+                //服务端对一季只留"最近观看的那一集"一条记录，所以"本机存档"才是每集续播的关键：
+                //这里一并打出来，便于确认"这一集的位置有没有被下一集挤掉"
                 ProgressDiag.log("回读自检", "epid=" + fEpid + " 本次播放位置=" + playedSec + "s"
                         + " → 观看记录=" + historyMs + "ms"
                         + " / 季级(last_ep_id=" + sp.lastEpid + ", " + sp.lastProgressMs + "ms)"
                         + " / wbi=" + wbiMs + "ms"
+                        + " / " + EpisodeProgressStore.describe(NetWorkUtil.getLoginMid(), fEpid, fCid)
                         + (historyMs > 0 || wbiMs > 0 ? "  [上报已落库]" : "  [上报疑似未落库]"));
             } catch (Exception e) {
                 ProgressDiag.log("回读自检", "失败: " + e);

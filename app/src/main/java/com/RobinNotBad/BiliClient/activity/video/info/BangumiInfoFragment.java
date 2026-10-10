@@ -339,13 +339,14 @@ public class BangumiInfoFragment extends Fragment {
     }
 
     /**
-     * 上报当前选中集的历史，作用与普通视频详情页(VideoInfoFragment)的历史上报一致：
-     * 让番剧出现在历史记录里并带上当前进度。
+     * 刷新服务端的"上次看到"记录（时机：进入详情页 / 页内切季后定位完成）。
      *
-     * 触发时机：定位完成之后（上报的集 = 用户真正看过的集）；
-     * 定位流程未启动时（未登录/开关关闭/数据异常）由 initView 直接调用。
-     * 只有在能证明"该进度确实属于这一集"时才上报；查不到就安静跳过——
-     * 详情页并没有真的播放，凭空写一个"别集的位置"会把服务端记录写串（1.2.0 的集间串进度就是这么来的）。
+     * **只刷新服务端自己记录的那一集**：服务端对一季只维护一条记录
+     * （{@code last_ep_id + last_time}，看下一集就把上一集覆盖掉，官方客户端同样如此），
+     * 详情页并没有真的播放，如果拿着"别的集的位置"去写这一条，就会把服务端的
+     * "上次看到第 N 话"指针挪到一集老番上——官方客户端的续播入口立刻跟着错位。
+     * 所以这里先查季级状态，只有 {@code last_ep_id == 本集 epid} 时才回写同一条记录
+     * （值不变，只是把记录刷新到最新，让番剧保持出现在观看记录里）；证明不了就安静跳过。
      */
     private void reportEpisodeHistory() {
         Bangumi.Section section = bangumi.sectionList.get(selectedSection);
@@ -359,18 +360,18 @@ public class BangumiInfoFragment extends Fragment {
         final String fBvid = episode.bvid;
         CenterThreadPool.run(() -> {
             try {
-                //只上报"确实属于这一集"的进度：getEpisodeProgressMs 三层都会校验集身份。
-                //读不到本集身份时宁可不报——报一个别集的位置比不报更糟
-                long progress = PlayerApi.getEpisodeProgressMs(episode.aid, episode.cid, episode.id, fSeasonId);
-                if (progress <= 0) {
-                    Logu.d("BangumiInfoFragment", "本集无观看进度，跳过上报 epid=" + episode.id);
+                BangumiApi.SeasonProgress sp = fSeasonId != 0 ? BangumiApi.getSeasonProgress(fSeasonId)
+                        : new BangumiApi.SeasonProgress();
+                if (!sp.known || sp.lastEpid == 0 || sp.lastEpid != episode.id || sp.lastProgressMs <= 0) {
+                    Logu.d("BangumiInfoFragment", "本集不在服务端记录里，跳过上报 epid=" + episode.id
+                            + " lastEpid=" + sp.lastEpid + " known=" + sp.known);
                     return;
                 }
                 //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录
                 HistoryApi.reportHistoryPgc(fBvid, episode.aid, episode.cid, episode.id,
                         fSeasonId,
                         fSeasonType,
-                        progress / 1000);
+                        sp.lastProgressMs / 1000);
             } catch (Exception e) {
                 Logu.e("BangumiInfoFragment", "历史上报失败: " + e.getMessage());
             }

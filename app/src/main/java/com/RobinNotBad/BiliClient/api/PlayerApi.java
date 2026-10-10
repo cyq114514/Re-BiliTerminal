@@ -24,6 +24,7 @@ import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
+import com.RobinNotBad.BiliClient.util.EpisodeProgressStore;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.ProgressDiag;
@@ -282,32 +283,48 @@ public class PlayerApi {
      * 打开一集**从没看过**的新番，cid 配对会通过，而 last_play_time 却是**上一次看的那一集**的位置
      * ——表现就是"看了 A 集，打开没看过的 B 集，却从 A 集的位置开始播"。
      *
-     * 两层都证明不了 → 返回 0（从头播）。这与官方客户端一致：没看过的集本来就该从头播。
-     * 已经看过的集一定有第 1 层的观看记录（心跳上报会写入），所以不会因此丢掉续播能力。
+     * 两层都证明不了 → 用**本机存档**；再没有才从头播。
+     *
+     * 为什么必须有本机存档：服务端对本季只维护"最近观看的那一集"这一条位置，
+     * 看下一集会把上一集的位置覆盖掉（官方客户端里同样如此）——
+     * 也就是说"服务端没有这一集的记录"并不代表"这一集没看过"，
+     * 这时只有终端自己存的那份能给出正确的续播位置（见 {@link EpisodeProgressStore}）。
      */
     public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId) {
+        long mid = NetWorkUtil.getLoginMid();
         ProgressDiag.log("续播查询", "aid=" + aid + " cid=" + cid + " epid=" + epid + " seasonId=" + seasonId
-                + " 登录中=" + NetWorkUtil.isLoggedIn() + " 实时mid=" + NetWorkUtil.getLoginMid()
-                + " 本地mid=" + SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
+                + " 登录中=" + NetWorkUtil.isLoggedIn() + " 实时mid=" + mid
+                + " 本地mid=" + SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0)
+                + " " + EpisodeProgressStore.describe(mid, epid, cid));
 
-        //1. 观看记录里这一集自己的条目（最可信）
-        long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
-        if (historyMs > 0) {
-            ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
-            return historyMs;
-        }
-
-        //2. 季级配对
+        //1. 季级配对：服务端对"本季最近观看的那一集"是权威且自洽的 (last_ep_id, last_time)
         BangumiApi.SeasonProgress sp = seasonId != 0 ? BangumiApi.getSeasonProgress(seasonId)
                 : new BangumiApi.SeasonProgress();
         boolean isSeasonLastEpisode = sp.known && sp.lastEpid != 0 && sp.lastEpid == epid;
         if (isSeasonLastEpisode && sp.lastProgressMs > 0) {
             ProgressDiag.log("续播结果", "采用季级状态: " + sp.lastProgressMs + "ms（本集=本季最后观看的那一集）");
+            EpisodeProgressStore.save(mid, epid, cid, sp.lastProgressMs);   //顺手同步本机存档
             return sp.lastProgressMs;
         }
 
-        //3. 只有投稿视频才回退 wbi/v2：那种场景 last_play_cid 与 last_play_time 是真正的 aid 级配对数据。
-        //   番剧走到这里说明两层身份证明都没通过 —— 这一集确实没有属于它自己的观看记录，从头播才对。
+        //2. 本机存档：服务端只会留"最近观看的那一集"，别的集早就被覆盖了，自己存的那份才是这一集的位置
+        long localMs = EpisodeProgressStore.load(mid, epid, cid);
+        if (localMs > 0) {
+            ProgressDiag.log("续播结果", "采用本机存档: " + localMs + "ms（服务端已无本集记录：季级 lastEpid="
+                    + sp.lastEpid + " 本集epid=" + epid + "）");
+            return localMs;
+        }
+
+        //3. 观看记录里这一集自己的条目（全身份命中）：本机没存档时（比如在别的设备上看过）的兜底
+        long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
+        if (historyMs > 0) {
+            ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
+            EpisodeProgressStore.save(mid, epid, cid, historyMs);
+            return historyMs;
+        }
+
+        //4. 只有投稿视频才回退 wbi/v2：那种场景 last_play_cid 与 last_play_time 是真正的 aid 级配对数据。
+        //   番剧走到这里说明服务端与本机都没有这一集的位置 —— 从头播才对。
         //   判"是番剧"用 epid 或 seasonId 任一非 0：少数分区条目(花絮/PV)的 epid 可能缺失，
         //   但详情页一定会带上 seasonId，不能因为 epid 缺失就退回会串集的投稿视频口径。
         boolean isPgc = epid != 0 || seasonId != 0;
