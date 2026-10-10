@@ -42,6 +42,9 @@ public class HistoryApi {
         public String business;
         @SerializedName("long_title")
         public String long_title;
+        /** 观看时间（UNIX 秒）：诊断里用来判断"这条记录是刚写的还是很久以前的" */
+        @SerializedName("view_at")
+        public long view_at;
         @SerializedName("history")
         public HistoryRef history;
     }
@@ -352,20 +355,37 @@ public class HistoryApi {
     }
 
     /**
+     * 观看记录条目的简短标题（仅诊断用）：番剧带 long_title（"第9话"）时拼上，
+     * 因为同一季多集可能共用一个 avid，只有标题能一眼分辨出候选记录是哪一集。
+     */
+    private static String shortTitle(HistoryItem item) {
+        if (item == null) return "";
+        String t = item.title != null ? item.title : "";
+        String lt = item.long_title != null ? item.long_title : "";
+        String s = lt.isEmpty() ? t : (t + " " + lt);
+        s = s.replace("\n", " ").replace("\r", " ");
+        if (s.length() > 24) s = s.substring(0, 24) + "…";
+        return s;
+    }
+
+    /**
      * 从观看记录里取"这一集/这一个分P"自己的播放进度（毫秒；0 表示取不到）。
      *
-     * 这是续播位置**最可信**的来源：一条观看记录里同时带着"集身份"（oid=集 avid、cid=视频 cid、
-     * epid=集 epid）与"位置"（progress，单位秒），三者天然配对，不存在把别集位置套上来的可能。
+     * 这是续播位置**最可信**的来源：一条观看记录里同时带着"集身份"（cid=视频 cid、epid=集 epid）与
+     * "位置"（progress，单位秒），天然配对，不存在把别集位置套上来的可能。
      * 另外它不需要 WBI 签名，只要登录过就能读，可靠性高于 x/player/wbi/v2。
      *
-     * 命中条件（任一成立即视为"就是这一集"，越靠前越精确）：
-     *  1. history.cid == cid  —— 分P/剧集流的唯一身份，vid 与番剧通用；
-     *  2. history.epid == epid —— 番剧集身份（cid 缺失时的等价判据）；
-     *  3. history.oid == aid  —— 稿件或剧集 avid（番剧每一集的 avid 各不相同）。
-     * 只命中"同一季的别的集"时一律不采纳——那正是"同番剧不同集互相串进度"的来源。
+     * 命中条件（必须命中**集身份**，任一成立即可）：
+     *  1. history.cid == cid  —— 分P/剧集流的唯一身份；
+     *  2. history.epid == epid —— 番剧集身份（cid 缺失时的等价判据）。
+     * 注意 **history.oid(avid) 不能单独作为集身份**（旧版把它当兜底，正是跨集串进度的真正根因）：
+     * 实测某季番剧（season 1564）第 8/9 话的观看记录 `oid` **都是 135433**——
+     * 同一季多集共用一个 avid，只按 aid 命中会把"上一集刚写下的记录"当成"这一集的记录"
+     * （诊断里 `命中本集：progress=797s（cid=false epid=false aid=true）` 就是它）。
+     * 因此只有 **cid 与 epid 都不知道**（都传 0）时才退回按 aid 命中。
      *
      * @param cid  目标 cid（0 表示未知）
-     * @param aid  目标 avid（0 表示未知）
+     * @param aid  目标 avid（0 表示未知；仅当 cid/epid 都未知时才参与命中）
      * @param epid 目标 epid（0 表示未知）
      * @return 毫秒；未登录、无记录或进度为 0/-1（已看完）时返回 0
      */
@@ -378,6 +398,8 @@ public class HistoryApi {
             ProgressDiag.log("观看记录", "未登录（实时 Cookie 无 DedeUserID 且本地 mid=0），跳过查询");
             return 0;
         }
+        //集身份是否已知：已知就必须靠 cid/epid 证明，绝不用 aid 兜底（见方法注释）
+        boolean identityKnown = cid != 0 || epid != 0;
 
         long viewAt = 0, max = 0;
         String business = "";
@@ -402,22 +424,30 @@ public class HistoryApi {
                     //业务类型：history.business 可能为空串，此时以外层 business 为准（空串不能当成"已给出"）
                     String itemBusiness = item.history.business != null && !item.history.business.isEmpty()
                             ? item.history.business : item.business;
-                    if (candidates.length() < 600 && BUSINESS_PGC.equals(itemBusiness)) {
-                        candidates.append("{epid=").append(item.history.epid)
+                    if (candidates.length() < 900 && BUSINESS_PGC.equals(itemBusiness)) {
+                        //候选里带上标题与时间：同季多集共用一个 avid 时，只有标题能一眼分辨是哪一集
+                        candidates.append("{ep=").append(item.history.epid)
                                 .append(",oid=").append(item.history.oid)
                                 .append(",cid=").append(item.history.cid)
-                                .append(",progress=").append(item.progress).append("}");
+                                .append(",prog=").append(item.progress)
+                                .append(",t=").append(item.view_at)
+                                .append(",title=").append(shortTitle(item)).append("}");
                     }
                     if (!BUSINESS_PGC.equals(itemBusiness)) continue;
                     boolean sameCid = cid != 0 && item.history.cid != 0 && item.history.cid == cid;
                     boolean sameEpid = epid != 0 && item.history.epid != 0 && item.history.epid == epid;
                     boolean sameAid = aid != 0 && item.history.oid != 0 && item.history.oid == aid;
-                    //命中同一季的别的集时，cid/epid/oid 三者全都对不上，自然不会误采纳
-                    if (!sameCid && !sameEpid && !sameAid) continue;
+                    //集身份已知时只认 cid/epid；aid 只在"连 cid 和 epid 都不知道"时才作为最后手段
+                    boolean matched = sameCid || sameEpid || (!identityKnown && sameAid);
+                    if (!matched) continue;
                     //progress 单位是秒；-1 表示已看完，没有可续播的位置
                     if (item.progress > 0) {
                         ProgressDiag.log("观看记录", "命中本集：progress=" + item.progress + "s（cid=" + sameCid
-                                + " epid=" + sameEpid + " aid=" + sameAid + "）");
+                                + " epid=" + sameEpid + " aid=" + sameAid + " title=" + shortTitle(item) + "）");
+                        //命中也把候选打出来：能看出"有没有别的集的记录被正确跳过"，
+                        //同季多集共用一个 avid 时这是唯一能证明"A 集的记录没有被当成 B 集"的证据
+                        if (candidates.length() > 0)
+                            ProgressDiag.log("观看记录", "本次候选=" + candidates);
                         return item.progress * 1000L;
                     }
                 }
