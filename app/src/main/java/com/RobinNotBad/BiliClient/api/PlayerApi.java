@@ -267,18 +267,23 @@ public class PlayerApi {
 
     /**
      * 集级续播进度（毫秒，取不到为 0）。番剧每个 episode 有独立 aid/cid，集身份用 epid(集) + cid(流) + aid 表达。
-     * 三个来源按"可信度"排序，每一层都必须先证明"这个位置确实属于这一集"：
      *
-     * 1. 观看记录里**这一集自己的**条目（business=pgc 且 cid/epid/oid 任一命中）——身份与位置在同一条记录里，
+     * **番剧只认"身份与位置在同一条数据里"的来源，只有两层**：
+     *
+     * 1. 观看记录里**这一集自己的**条目（business=pgc 且 cid/epid/oid 任一命中）——身份与位置写在同一条记录上，
      *    天然不会串，且不需要 WBI，是最可信的来源；
-     * 2. 季级状态 (last_ep_id, last_time)：只有 last_ep_id == epid 时才采纳 last_time；
-     * 3. x/player/wbi/v2 的 last_play_time（服务端按季保存、aid 维度不区分集）：
-     *    只有"last_play_cid == cid"或"季级状态证明本集就是本季最后观看的那一集"时才采纳。
+     * 2. 季级状态 (last_ep_id, last_time)：只有 last_ep_id == epid 时才把 last_time 当本集位置（服务端把两者严格配对）。
      *
-     * 三层都证明不了 → 返回 0（从头播）。这是与 1.2.0 的关键差别：1.2.0 直接裸取第 3 层的值，
-     * 于是同一部番剧的每一集都会拿到"本季最后观看的那一集的位置"——那才是集间串进度的根因；
-     * 而上一版修复又把三层都收得过紧（且都被本地 mid 快照卡死），一旦服务端数据不齐就全部归零，
-     * 表现为"每一集都从头播"。这里两边的坑都避开。
+     * **番剧绝不再回退 {@code x/player/wbi/v2} 的 last_play_time**（上一版这么做过，是"跨集串进度"的残余根因）：
+     * 该接口对 PGC 的 last_play_time 是按**季**(kid=ssid)保存的"本季最近观看位置"，而 last_play_cid 并不可靠
+     * ——它不是"真正最后观看的那一集的 cid"，经常就是"最近一次被请求过的 cid"（App 自己取流/查字幕时
+     * 用目标集的 cid 请求过该接口，服务端就会把它当成 last_play_cid 回给下一次请求）。
+     * 于是对它做 `last_play_cid == cid` 的严格配对并不能证明"这个位置属于本集"：
+     * 打开一集**从没看过**的新番，cid 配对会通过，而 last_play_time 却是**上一次看的那一集**的位置
+     * ——表现就是"看了 A 集，打开没看过的 B 集，却从 A 集的位置开始播"。
+     *
+     * 两层都证明不了 → 返回 0（从头播）。这与官方客户端一致：没看过的集本来就该从头播。
+     * 已经看过的集一定有第 1 层的观看记录（心跳上报会写入），所以不会因此丢掉续播能力。
      */
     public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId) {
         ProgressDiag.log("续播查询", "aid=" + aid + " cid=" + cid + " epid=" + epid + " seasonId=" + seasonId
@@ -292,7 +297,7 @@ public class PlayerApi {
             return historyMs;
         }
 
-        //2. 季级配对：顺带拿到"本季最近观看的是哪一集"，供第 3 层判断能否采纳季级数据
+        //2. 季级配对
         BangumiApi.SeasonProgress sp = seasonId != 0 ? BangumiApi.getSeasonProgress(seasonId)
                 : new BangumiApi.SeasonProgress();
         boolean isSeasonLastEpisode = sp.known && sp.lastEpid != 0 && sp.lastEpid == epid;
@@ -301,15 +306,21 @@ public class PlayerApi {
             return sp.lastProgressMs;
         }
 
-        //3. x/player/wbi/v2：严格配对优先；若季级已证明"本集就是本季最后观看的那一集"，则允许按季级口径采纳
-        long wbiMs = getLastPlayProgress(aid, cid, isSeasonLastEpisode);
+        //3. 只有投稿视频才回退 wbi/v2：那种场景 last_play_cid 与 last_play_time 是真正的 aid 级配对数据。
+        //   番剧走到这里说明两层身份证明都没通过 —— 这一集确实没有属于它自己的观看记录，从头播才对。
+        //   判"是番剧"用 epid 或 seasonId 任一非 0：少数分区条目(花絮/PV)的 epid 可能缺失，
+        //   但详情页一定会带上 seasonId，不能因为 epid 缺失就退回会串集的投稿视频口径。
+        boolean isPgc = epid != 0 || seasonId != 0;
+        ProgressDiag.log("续播结果", "本集无可用续播位置，从头播放（季级 known=" + sp.known
+                + " lastEpid=" + sp.lastEpid + " 本集epid=" + epid + " seasonId=" + seasonId + "）"
+                + (isPgc ? "；番剧不做 wbi/v2 回退（该接口对 PGC 按季维护，无法证明位置属于本集）" : ""));
+        if (isPgc) return 0;
+
+        long wbiMs = getLastPlayProgress(aid, cid, false);
         if (wbiMs > 0) {
-            ProgressDiag.log("续播结果", "采用 wbi/v2: " + wbiMs + "ms（季级证明=" + isSeasonLastEpisode + "）");
+            ProgressDiag.log("续播结果", "投稿视频回退 wbi/v2: " + wbiMs + "ms");
             return wbiMs;
         }
-
-        ProgressDiag.log("续播结果", "本集无可用续播位置，从头播放（季级 known=" + sp.known
-                + " lastEpid=" + sp.lastEpid + "）");
         return 0;
     }
 

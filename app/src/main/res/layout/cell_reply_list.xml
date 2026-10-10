@@ -3,8 +3,12 @@
   一条评论（而非"一张卡片"）：根布局保持平铺，只留左右内边距，
   让评论直接落在页面底色上，与"每条评论框成一张卡"的旧改法区分开；
   评论之间的分隔由底部 divider 承担。
-  需要子卡片语言的只有折叠楼中楼(repliesCard)与"UP主觉得很赞"小胶囊，
-  它们用主题令牌 ?attr/biliCardBackground：新版 UI 下是新材料卡片，经典主题下等于原来的灰卡片。
+  需要子卡片语言的只有折叠楼中楼(repliesCard)与"UP主觉得很赞"小胶囊。
+  这两处用 @drawable/background_card_soft：与搜索页的结果卡/建议面板
+  （cell_choose 的 MaterialCardView、background_searchhistory）同一套 token —— 
+  10dp 圆角 + 0.5dp 实心 #363636 描边 + 半透明底。
+  注意不能用 ?attr/biliCardBackground：那是主卡片语言（渐变描边），
+  在评论里看起来就是"一个模糊的灰盒子"，与搜索页那种清晰细描边的卡片风格不一致。
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -136,7 +140,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:background="?attr/biliCardBackground"
+        android:background="@drawable/background_card_soft"
         android:gravity="center"
         android:paddingStart="12dp"
         android:paddingTop="5dp"
@@ -155,7 +159,7 @@
         android:layout_marginTop="4dp"
         android:paddingVertical="8dp"
         android:paddingHorizontal="8dp"
-        android:background="?attr/biliCardBackground"
+        android:background="@drawable/background_card_soft"
         android:orientation="vertical"
         app:layout_constraintEnd_toEndOf="@+id/replyText"
         app:layout_constraintStart_toStartOf="@+id/replyText"
