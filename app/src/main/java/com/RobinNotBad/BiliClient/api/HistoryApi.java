@@ -3,7 +3,6 @@ package com.RobinNotBad.BiliClient.api;
 import com.RobinNotBad.BiliClient.model.ApiResponse;
 import com.RobinNotBad.BiliClient.model.ApiResult;
 import com.RobinNotBad.BiliClient.model.VideoCard;
-import com.RobinNotBad.BiliClient.util.EpisodeProgressStore;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
@@ -135,13 +134,8 @@ public class HistoryApi {
             Logu.d("history-report", "跳过 0 进度上报 epid=" + epid);
             return;
         }
-        //本机分集存档：服务端对一季只维护"最近观看的那一集"这一条位置——看下一集就会把上一集
-        //覆盖掉（官方客户端里同样只有最新一集能续播，诊断已确认）。所以"每集各自记住看到哪里"
-        //必须自己存一份，读取链路在服务端已无本集记录时用它兜底（见 PlayerApi.getEpisodeProgressMs）。
-        if (epid != 0) {
-            if (progress > 0) EpisodeProgressStore.save(currentMid(), epid, cid, progress * 1000L);
-            else EpisodeProgressStore.clear(currentMid(), epid, cid);   //看完：不再需要续播位置
-        }
+        //进度只写服务端：服务端对本季"最近观看"按季维护一条记录，本机不再保存任何分集进度
+        //（读取链路见 PlayerApi.getEpisodeProgressMs，口径与 PiliPlus 一致）。
         String csrf = currentCsrf();
         if (csrf.isEmpty())
             Logu.e("history-report", "csrf 为空，上报必被服务端拒绝(-111)，请确认已登录");

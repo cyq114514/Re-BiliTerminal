@@ -72,7 +72,6 @@ import com.RobinNotBad.BiliClient.ui.widget.BatteryView;
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
-import com.RobinNotBad.BiliClient.util.EpisodeProgressStore;
 import com.RobinNotBad.BiliClient.util.CookieGenerator;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -193,10 +192,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private String bvid = "";
     //周期上报节流：记录上次上报的视频位置，推进超过阈值才再报，避免 250ms tick 打爆接口
     private long lastReportedProgressMs = -1;
-    private static final long PROGRESS_REPORT_INTERVAL_MS = 15000;
+    //5 秒与 PiliPlus 一致（它按播放位置每 +5s 发一次心跳），服务端记录更接近"退出那一刻"
+    private static final long PROGRESS_REPORT_INTERVAL_MS = 5000;
     //兜底上报（onPause/onStop/onDestroy）去重：记录已上报的秒数，避免三连发写同一个位置
     private long lastReportedProgressSec = -1;
-    //未登录只提示一次，否则每 15 秒刷一条日志
+    //未登录只提示一次，否则每隔一个上报周期刷一条日志
     private boolean notLoggedInWarned = false;
     //进度端到端自检：播放到 25 秒时回读一次服务端，确认上报是否真的落库（诊断用，只做一次）
     private boolean diagReadbackDone = false;
@@ -1440,7 +1440,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
-     * 播放中周期性上报观看进度：进程被杀/异常退出时最多丢 15 秒进度。
+     * 播放中周期性上报观看进度：进程被杀/异常退出时最多丢 5 秒进度（v6 起由 15s 收紧，对齐 PiliPlus）。
      * 复用 progressTimer 的 tick 做节流判断（按视频推进位置而非墙钟），网络 IO 抛到公共线程池，不拖慢 UI 更新。
      * 番剧(epid!=0)走心跳接口，普通视频走 history/report，与 JumpToPlayerActivity 的退出上报口径一致。
      */
@@ -1507,13 +1507,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 BangumiApi.SeasonProgress sp = fSeasonId != 0
                         ? BangumiApi.getSeasonProgress(fSeasonId) : new BangumiApi.SeasonProgress();
                 long wbiMs = PlayerApi.getLastPlayProgress(fAid, fCid, true);
-                //服务端对一季只留"最近观看的那一集"一条记录，所以"本机存档"才是每集续播的关键：
-                //这里一并打出来，便于确认"这一集的位置有没有被下一集挤掉"
+                //服务端对本季只留"最近观看的那一集"一条记录，v6 起不再有本机存档：
+                //这里连 v2 取流接口的 watch_progress 一起回读，才能确认"本集的进度有没有落库、
+                //有没有被下一集挤掉"（current_watch_progress 是本集自己的位置）
+                PlayerApi.WatchProgress wp = fEpid != 0
+                        ? PlayerApi.queryPgcWatchProgress(fAid, fCid, fEpid, fSeasonId) : null;
                 ProgressDiag.log("回读自检", "epid=" + fEpid + " 本次播放位置=" + playedSec + "s"
                         + " → 观看记录=" + historyMs + "ms"
                         + " / 季级(last_ep_id=" + sp.lastEpid + ", " + sp.lastProgressMs + "ms)"
+                        + " / v2进度=" + PlayerApi.describeWatchProgress(wp)
                         + " / wbi=" + wbiMs + "ms"
-                        + " / " + EpisodeProgressStore.describe(NetWorkUtil.getLoginMid(), fEpid, fCid)
                         + (historyMs > 0 || wbiMs > 0 ? "  [上报已落库]" : "  [上报疑似未落库]"));
             } catch (Exception e) {
                 ProgressDiag.log("回读自检", "失败: " + e);

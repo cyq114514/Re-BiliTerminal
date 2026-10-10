@@ -332,50 +332,10 @@ public class BangumiInfoFragment extends Fragment {
 
         refreshReplies();
 
-        //先定位再上报：reportEpisodeHistory 依赖定位后的选中集。
-        //若在定位前上报初始集(第1集)，本季服务端观看记录会被"第1集 progress=0"覆盖，
-        //后续定位（含官方客户端写入的记录）就只能命中这条 0 进度条目——自动定位失效的根因
-        if (!locateLastWatchedEpisode()) reportEpisodeHistory();
-    }
-
-    /**
-     * 刷新服务端的"上次看到"记录（时机：进入详情页 / 页内切季后定位完成）。
-     *
-     * **只刷新服务端自己记录的那一集**：服务端对一季只维护一条记录
-     * （{@code last_ep_id + last_time}，看下一集就把上一集覆盖掉，官方客户端同样如此），
-     * 详情页并没有真的播放，如果拿着"别的集的位置"去写这一条，就会把服务端的
-     * "上次看到第 N 话"指针挪到一集老番上——官方客户端的续播入口立刻跟着错位。
-     * 所以这里先查季级状态，只有 {@code last_ep_id == 本集 epid} 时才回写同一条记录
-     * （值不变，只是把记录刷新到最新，让番剧保持出现在观看记录里）；证明不了就安静跳过。
-     */
-    private void reportEpisodeHistory() {
-        Bangumi.Section section = bangumi.sectionList.get(selectedSection);
-        if (section == null || section.episodeList == null || section.episodeList.isEmpty()) return;
-        Bangumi.Episode episode = section.episodeList.get(selectedEpisode);
-        if (episode == null || episode.aid == 0 || episode.cid == 0) return;
-        //season 维度必须在主线程快照：后台执行时 currentSeasonId 可能已被切季改变，
-        //会把这一集上报到别的季的 season_id/sub_type 上
-        final long fSeasonId = currentSeasonId;
-        final int fSeasonType = currentSeasonType();
-        final String fBvid = episode.bvid;
-        CenterThreadPool.run(() -> {
-            try {
-                BangumiApi.SeasonProgress sp = fSeasonId != 0 ? BangumiApi.getSeasonProgress(fSeasonId)
-                        : new BangumiApi.SeasonProgress();
-                if (!sp.known || sp.lastEpid == 0 || sp.lastEpid != episode.id || sp.lastProgressMs <= 0) {
-                    Logu.d("BangumiInfoFragment", "本集不在服务端记录里，跳过上报 epid=" + episode.id
-                            + " lastEpid=" + sp.lastEpid + " known=" + sp.known);
-                    return;
-                }
-                //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录
-                HistoryApi.reportHistoryPgc(fBvid, episode.aid, episode.cid, episode.id,
-                        fSeasonId,
-                        fSeasonType,
-                        sp.lastProgressMs / 1000);
-            } catch (Exception e) {
-                Logu.e("BangumiInfoFragment", "历史上报失败: " + e.getMessage());
-            }
-        });
+        //只做"上次看到第 N 话"的定位，不写任何观看记录：详情页并没有真的播放，
+        //拿没播过的集去写服务端那条唯一的季级记录，只会把"上次看到"指针挪走。
+        //记录一律由播放器的心跳(玩家真正播过)写入，这也正是 PiliPlus 的口径。
+        locateLastWatchedEpisode();
     }
 
     /**
@@ -385,8 +345,7 @@ public class BangumiInfoFragment extends Fragment {
      * 数据源走观看记录(HistoryApi)而不是逐集查进度：一季几十集逐集探测要发几十个请求。
      * 定位与"从历史位置播放"(player_from_last)开关保持一致，关掉该开关即不做定位。
      *
-     * @return true 表示定位流程已启动，定位完成后会在回调内上报观看历史；
-     *         false 表示流程未启动（未登录/开关关闭/数据异常），调用方需自行完成历史上报
+     * @return true 表示定位流程已启动；false 表示流程未启动（未登录/开关关闭/数据异常）
      */
     private boolean locateLastWatchedEpisode() {
         if (bangumi == null || bangumi.sectionList == null || bangumi.sectionList.isEmpty()) return false;
@@ -413,7 +372,7 @@ public class BangumiInfoFragment extends Fragment {
         final long seasonAtStart = currentSeasonId;   //定位期间用户切季的话，结果按旧季下标套新季数据会错位
         CenterThreadPool.run(() -> {
             long epid = HistoryApi.findLastWatchedEpid(epIds);
-            if (epid == 0) return; //从未看过本季：不上报，避免产生"progress=0"的污染记录
+            if (epid == 0) return; //从未看过本季：不定位
             int[] position = positionOfEpid.get(epid);
             if (position == null) return;
             CenterThreadPool.runOnUiThread(() -> {
@@ -423,8 +382,6 @@ public class BangumiInfoFragment extends Fragment {
                 boolean moved = position[0] != 0 || position[1] != 0;
                 Bangumi.Episode located = selectEpisode(position[0], position[1], true);
                 if (moved && located != null) MsgUtil.showMsg("已定位到上次观看的 " + located.title);
-                //定位完成后再上报当前（即用户真正看过的）集，写路径晚于读路径，竞态与污染一并消除
-                reportEpisodeHistory();
             });
         });
         return true;
@@ -610,9 +567,7 @@ public class BangumiInfoFragment extends Fragment {
         //记住离开的这一季的选中位置
         seasonSelection.put(currentSeasonId, new int[]{selectedSection, selectedEpisode});
 
-        long previousSeasonId = currentSeasonId;
-        currentSeasonId = tab.season_id;
-        tab.seasonType = meta.seasonType != 0 ? meta.seasonType : (bangumi.info != null ? bangumi.info.type : 0);
+        currentSeasonId = tab.season_id;        tab.seasonType = meta.seasonType != 0 ? meta.seasonType : (bangumi.info != null ? bangumi.info.type : 0);
         tab.statusDesc = meta.statusDesc;
 
         bangumi.sectionList = meta.sectionList;
@@ -657,8 +612,7 @@ public class BangumiInfoFragment extends Fragment {
         if (locatedByProgress && !(sectionIdx == 0 && episodeIdx == 0)) {
             MsgUtil.showMsg("已定位到上次观看的 " + located.title);
         }
-        //与进入详情页同语义：切到某季的某集后上报该集（reportHistoryPgc 内部会拒绝 0 进度，不会产生污染记录）
-        if (previousSeasonId != currentSeasonId) reportEpisodeHistory();
+        //切季后同样只做定位展示，不写观看记录（口径同进入详情页，见 initView）
     }
 
     /**在该季分区列表里按 epid 查 (sectionIdx, epIdx)，查不到返回 null。*/

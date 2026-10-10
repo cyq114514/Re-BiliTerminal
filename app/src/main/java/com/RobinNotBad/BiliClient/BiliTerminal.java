@@ -54,6 +54,13 @@ public class BiliTerminal extends Application {
             ErrorCatch errorCatch = ErrorCatch.getInstance();
             errorCatch.init(context);
 
+            //1.2.0-v5 曾在本地保存过"每集看到哪里"(episode_progress)，v6 起改为只信服务端
+            //（与 PiliPlus 同口径）。这里每次冷启动清空一次，避免旧数据残留在设备上造成记录错乱。
+            try {
+                getSharedPreferences("episode_progress", MODE_PRIVATE).edit().clear().apply();
+            } catch (Exception ignored) {
+            }
+
             //冷启动恢复记录的生命周期：所有 Activity 都销毁 = 用户正常退出任务，清除记录；
             //后台被系统杀进程不会走任何回调，记录保留，下次冷启动由 Splash 恢复页面。
             //配置变更重建时新页 onCreate 先于旧页 onDestroy，计数不会跌到 0，不会误清

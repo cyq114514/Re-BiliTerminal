@@ -24,7 +24,6 @@ import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
-import com.RobinNotBad.BiliClient.util.EpisodeProgressStore;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.ProgressDiag;
@@ -49,6 +48,16 @@ public class PlayerApi {
     //续播位置的合理上限，用于兜底异常数据
     private static final long MAX_PROGRESS_MS = 24L * 60 * 60 * 1000;
 
+    //番剧取流：v2 才有 play_view_business_info（观看进度），v1 只做兜底
+    private static final String PGC_PLAYURL_V2 = "https://api.bilibili.com/pgc/player/web/v2/playurl";
+    private static final String PGC_PLAYURL_V1 = "https://api.bilibili.com/pgc/player/web/playurl";
+
+    /**
+     * current_watch_progress 的单位（true=秒，false=毫秒，null=尚未判定）。
+     * 这是服务端字段口径，不是用户数据，只放在内存里做自校准，不落盘、不随账号变化。
+     */
+    private static Boolean pgcProgressUnitSeconds = null;
+
     public static class PlayUrlData {
         @SerializedName("durl") public List<DurlItem> durl;
         @SerializedName("dash") public DashData dash;
@@ -65,6 +74,45 @@ public class PlayerApi {
 
     public static class PlayUrlResult {
         @SerializedName("result") public PlayUrlData result;
+    }
+
+    /** pgc/player/web/v2/playurl：流信息在 result.video_info，观看进度在 result.play_view_business_info。 */
+    public static class PgcPlayUrlResult {
+        @SerializedName("result") public PgcPlayUrlData result;
+    }
+
+    public static class PgcPlayUrlData {
+        @SerializedName("video_info") public PlayUrlData video_info;
+        @SerializedName("play_view_business_info") public PgcBusinessInfo play_view_business_info;
+    }
+
+    public static class PgcBusinessInfo {
+        @SerializedName("episode_info") public PgcEpisodeInfo episode_info;
+        @SerializedName("user_status") public PgcUserStatus user_status;
+    }
+
+    /** 服务端认定的"这次请求的是哪一集/哪条流"：拿它给进度做身份校验，不能只信调用方传参。 */
+    public static class PgcEpisodeInfo {
+        @SerializedName("ep_id") public long ep_id;
+        @SerializedName("cid") public long cid;
+    }
+
+    public static class PgcUserStatus {
+        @SerializedName("watch_progress") public WatchProgress watch_progress;
+    }
+
+    /**
+     * 服务端保存的番剧观看进度（只有 pgc/player/web/v2/playurl 会返回）。
+     *
+     * <p>{@code current_watch_progress}：**本次请求的这一集**自己的续播位置（PiliPlus 直接拿它当起播位置）。
+     * 它必须与 {@code last_ep_id / last_time} 一起看：后者是"本季最近观看的那一集"这一条季级记录，
+     * 若某个版本的服务端把季级位置漏进了 current_watch_progress，就会表现成"不同集互相串进度"
+     * （见 {@link #isSeasonProgressLeak}）。
+     */
+    public static class WatchProgress {
+        @SerializedName("current_watch_progress") public long current_watch_progress;
+        @SerializedName("last_ep_id") public long last_ep_id;
+        @SerializedName("last_time") public long last_time;
     }
 
     public static class SubtitleLinkData {
@@ -184,37 +232,117 @@ public class PlayerApi {
         }
     }
 
+    /**
+     * 番剧取流 + 续播位置。
+     *
+     * <p>取流走 {@code pgc/player/web/v2/playurl}（PiliPlus 同款）：只有 v2 的响应里带
+     * {@code play_view_business_info.user_status.watch_progress}，那是"这一集自己的观看进度"；
+     * 老 v1 接口的 result 里完全没有这些字段，只能靠季级状态兜底。
+     * v2 若取不到 durl（个别内容/接口抖动）自动退回 v1：能播，但本轮拿不到集级进度。
+     */
     public static void getBangumi(PlayerData playerData) throws IOException, JSONException {
         String session = ToolsUtil.md5(String.valueOf(System.currentTimeMillis() - SystemClock.currentThreadTimeMillis()));
-        String url = "https://api.bilibili.com/pgc/player/web/playurl" + new NetWorkUtil.FormData().setUrlParam(true)
-                .put("aid", playerData.aid).put("cid", playerData.cid).put("fnval", 1).put("fnver", 0).put("qn", playerData.qn).put("season_type", 1).put("session", session).put("platform", "pc");
-        String json = NetWorkUtil.getJson(url).toString();
-        PlayUrlResult result = GsonUtil.fromJson(json, PlayUrlResult.class);
-        if (result == null || result.result == null || result.result.durl == null || result.result.durl.isEmpty())
-            throw new JSONException("获取番剧播放地址失败");
-        playerData.videoUrl = result.result.durl.get(0).url;
+        NetWorkUtil.FormData params = new NetWorkUtil.FormData().setUrlParam(true)
+                .put("aid", playerData.aid).put("cid", playerData.cid).put("fnval", 1).put("fnver", 0)
+                .put("qn", playerData.qn).put("season_type", 1).put("session", session).put("platform", "pc");
+        //番剧进度是按集(ep_id)保存的，请求必须带上目标集；season_id 用于兜底查季级状态
+        if (playerData.epid != 0) params.put("ep_id", playerData.epid);
+        if (playerData.seasonId != 0) params.put("season_id", playerData.seasonId);
+
+        PlayUrlData stream = null;
+        WatchProgress watchProgress = null;
+        //服务端自己认定的集身份：epid 缺失（从历史/搜索进来只有 cid）时也拿得到，用于给进度做身份校验
+        long confirmedEpid = 0;
+        try {
+            PgcPlayUrlResult v2 = GsonUtil.fromJson(
+                    NetWorkUtil.getJson(PGC_PLAYURL_V2 + params).toString(), PgcPlayUrlResult.class);
+            if (v2 != null && v2.result != null) {
+                stream = v2.result.video_info;
+                PgcBusinessInfo business = v2.result.play_view_business_info;
+                if (business != null) {
+                    if (business.episode_info != null) {
+                        confirmedEpid = business.episode_info.ep_id;
+                        //响应的流与请求的流必须是同一条，否则说明服务端按别的 cid 回的，
+                        //这时它的进度字段不属于本集，直接丢弃（身份与位置必须来自同一条数据）
+                        if (business.episode_info.cid != 0 && business.episode_info.cid != playerData.cid) {
+                            ProgressDiag.log("服务端进度", "响应 cid=" + business.episode_info.cid
+                                    + " 与请求 cid=" + playerData.cid + " 不一致，丢弃进度字段");
+                            confirmedEpid = 0;
+                        } else if (business.user_status != null) {
+                            watchProgress = business.user_status.watch_progress;
+                        }
+                    } else if (business.user_status != null) {
+                        watchProgress = business.user_status.watch_progress;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            ProgressDiag.log("番剧取流", "v2 请求异常，回退 v1: " + e);
+        }
+        if (stream == null || stream.durl == null || stream.durl.isEmpty()) {
+            ProgressDiag.log("番剧取流", "v2 未取到 durl，回退 v1（本轮无集级进度字段）epid=" + playerData.epid);
+            PlayUrlResult v1 = GsonUtil.fromJson(
+                    NetWorkUtil.getJson(PGC_PLAYURL_V1 + params).toString(), PlayUrlResult.class);
+            if (v1 == null || v1.result == null || v1.result.durl == null || v1.result.durl.isEmpty())
+                throw new JSONException("获取番剧播放地址失败");
+            stream = v1.result;
+            watchProgress = null;
+            confirmedEpid = 0;
+        }
+        //续播解析用的集身份：优先调用方给的 epid，缺失时用服务端回显的 ep_id。
+        //顺便补齐 playerData.epid——历史/搜索入口只有 cid，缺了它播放器的心跳上报会整条跳过
+        long identityEpid = playerData.epid != 0 ? playerData.epid : confirmedEpid;
+        if (playerData.epid == 0 && identityEpid != 0) playerData.epid = identityEpid;
+
+        playerData.videoUrl = stream.durl.get(0).url;
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
-        //番剧取流接口(pgc/player/web/playurl)的 result 不返回 last_play_*，续播进度必须单独查询。
-        //必须走集级校验：服务端"本季最近观看"是按季(kid=ssid)维护的，直接采用会把上次看的那一集
-        //的位置塞给本次要播的这一集，表现就是"同一部番剧不同集互相串进度"（详见 getEpisodeProgressMs）
         playerData.cidHistory = playerData.cid;
-        long lastProgress = getEpisodeProgressMs(playerData.aid, playerData.cid, playerData.epid, playerData.seasonId);
+        ProgressDiag.log("服务端进度", "epid=" + playerData.epid + "/服务端=" + confirmedEpid
+                + " v2 watch_progress=" + describeWatchProgress(watchProgress)
+                + " timelength=" + stream.timelength);
+        long lastProgress = getEpisodeProgressMs(playerData.aid, playerData.cid, identityEpid,
+                playerData.seasonId, watchProgress, stream.timelength);
         if (lastProgress > 0)
             Logu.d("history-last", "番剧续播命中 epid=" + playerData.epid + " " + lastProgress + "ms");
         else
             Logu.w("history-last", "番剧未取到本集续播进度，从头播放 epid=" + playerData.epid
                     + " aid=" + playerData.aid + " cid=" + playerData.cid);
-        playerData.progress = normalizeProgress(lastProgress, result.result.timelength);
+        playerData.progress = normalizeProgress(lastProgress, stream.timelength);
         ProgressDiag.log("开播续播", "「" + playerData.title + "」epid=" + playerData.epid
                 + " aid=" + playerData.aid + " cid=" + playerData.cid + " bvid=" + playerData.bvid
                 + " sid=" + playerData.seasonId + " subType=" + playerData.seasonType
-                + " timelength=" + result.result.timelength
+                + " timelength=" + stream.timelength
                 + " 原始=" + lastProgress + "ms → 最终=" + playerData.progress + "ms");
-        if (result.result.accept_description != null && result.result.accept_quality != null) {
-            playerData.qnStrList = result.result.accept_description.toArray(new String[0]);
-            int[] qnValueList = new int[result.result.accept_quality.size()];
-            for (int i = 0; i < qnValueList.length; i++) qnValueList[i] = result.result.accept_quality.get(i);
+        if (stream.accept_description != null && stream.accept_quality != null) {
+            playerData.qnStrList = stream.accept_description.toArray(new String[0]);
+            int[] qnValueList = new int[stream.accept_quality.size()];
+            for (int i = 0; i < qnValueList.length; i++) qnValueList[i] = stream.accept_quality.get(i);
             playerData.qnValueList = qnValueList;
+        }
+    }
+
+    public static String describeWatchProgress(WatchProgress wp) {
+        if (wp == null) return "无（v1 回退或字段缺失）";
+        return "{current=" + wp.current_watch_progress + ",last_ep_id=" + wp.last_ep_id + ",last_time=" + wp.last_time + "}";
+    }
+
+    /** 只回读 v2 取流接口的 watch_progress（诊断用：确认本集进度有没有真的落库，不参与播放决策）。 */
+    public static WatchProgress queryPgcWatchProgress(long aid, long cid, long epid, long seasonId) {
+        try {
+            String session = ToolsUtil.md5(String.valueOf(System.currentTimeMillis() - SystemClock.currentThreadTimeMillis()));
+            NetWorkUtil.FormData params = new NetWorkUtil.FormData().setUrlParam(true)
+                    .put("aid", aid).put("cid", cid).put("fnval", 1).put("fnver", 0).put("qn", 32)
+                    .put("season_type", 1).put("session", session).put("platform", "pc");
+            if (epid != 0) params.put("ep_id", epid);
+            if (seasonId != 0) params.put("season_id", seasonId);
+            PgcPlayUrlResult v2 = GsonUtil.fromJson(
+                    NetWorkUtil.getJson(PGC_PLAYURL_V2 + params).toString(), PgcPlayUrlResult.class);
+            if (v2 == null || v2.result == null || v2.result.play_view_business_info == null
+                    || v2.result.play_view_business_info.user_status == null) return null;
+            return v2.result.play_view_business_info.user_status.watch_progress;
+        } catch (Exception e) {
+            ProgressDiag.log("服务端进度", "回读 v2 watch_progress 失败: " + e);
+            return null;
         }
     }
 
@@ -269,67 +397,83 @@ public class PlayerApi {
     /**
      * 集级续播进度（毫秒，取不到为 0）。番剧每个 episode 有独立 aid/cid，集身份用 epid(集) + cid(流) + aid 表达。
      *
-     * **番剧只认"身份与位置在同一条数据里"的来源，只有两层**：
+     * <p>口径与 PiliPlus 一致：**不在本地保存任何进度**，读取顺序全部来自服务端的同一条数据
+     * （身份与位置写在一起），因此天然不会串集：
      *
-     * 1. 观看记录里**这一集自己的**条目（business=pgc 且 cid/epid/oid 任一命中）——身份与位置写在同一条记录上，
-     *    天然不会串，且不需要 WBI，是最可信的来源；
-     * 2. 季级状态 (last_ep_id, last_time)：只有 last_ep_id == epid 时才把 last_time 当本集位置（服务端把两者严格配对）。
+     * <ol>
+     *   <li>{@code pgc/player/web/v2/playurl} 的 {@code watch_progress.current_watch_progress}——
+     *       本次请求这一集自己的续播位置，直接采用（PiliPlus 就是这么取 {@code lastPlayTime} 的）；
+     *       用 {@link #isSeasonProgressLeak} 挡住"季级位置漏进本集"的情况；</li>
+     *   <li>同一个响应里的 {@code last_ep_id}/{@code last_time}：只有 {@code last_ep_id == 本集 epid}
+     *       时才拿 {@code last_time}(秒) 当本集位置（服务端把两者严格配对）；</li>
+     *   <li>季级状态接口 {@code pgc/view/web/season/user/status}（v1 回退或字段缺失时才查）；</li>
+     *   <li>观看记录里**这一集自己的**条目（business=pgc 且 cid/epid/oid 全身份命中）。</li>
+     * </ol>
      *
-     * **番剧绝不再回退 {@code x/player/wbi/v2} 的 last_play_time**（上一版这么做过，是"跨集串进度"的残余根因）：
-     * 该接口对 PGC 的 last_play_time 是按**季**(kid=ssid)保存的"本季最近观看位置"，而 last_play_cid 并不可靠
-     * ——它不是"真正最后观看的那一集的 cid"，经常就是"最近一次被请求过的 cid"（App 自己取流/查字幕时
-     * 用目标集的 cid 请求过该接口，服务端就会把它当成 last_play_cid 回给下一次请求）。
-     * 于是对它做 `last_play_cid == cid` 的严格配对并不能证明"这个位置属于本集"：
-     * 打开一集**从没看过**的新番，cid 配对会通过，而 last_play_time 却是**上一次看的那一集**的位置
-     * ——表现就是"看了 A 集，打开没看过的 B 集，却从 A 集的位置开始播"。
+     * <p>**番剧绝不回退 {@code x/player/wbi/v2} 的 last_play_time**（v3 之前这么做过，是"跨集串进度"的根因）：
+     * 该接口对 PGC 的 last_play_time 是按**季**保存的"本季最近观看位置"，而 last_play_cid 并不可靠
+     * ——它不是"真正最后观看的那一集的 cid"，经常就是"最近一次被请求过的 cid"。
+     * 于是 `last_play_cid == cid` 的严格配对并不能证明"这个位置属于本集"：
+     * 打开一集**从没看过**的新番，cid 配对会通过，而 last_play_time 却是**上一次看的那一集**的位置。
      *
-     * 两层都证明不了 → 用**本机存档**；再没有才从头播。
-     *
-     * 为什么必须有本机存档：服务端对本季只维护"最近观看的那一集"这一条位置，
-     * 看下一集会把上一集的位置覆盖掉（官方客户端里同样如此）——
-     * 也就是说"服务端没有这一集的记录"并不代表"这一集没看过"，
-     * 这时只有终端自己存的那份能给出正确的续播位置（见 {@link EpisodeProgressStore}）。
+     * <p>四层都证明不了 → 从头播。这正是官方客户端/PiliPlus 的行为：服务端对本季只维护
+     * "最近观看的那一集"这一条位置，看下一集会把上一集覆盖掉，"服务端没有这一集的记录"
+     * 并不等于"这一集没看过"，但本轮明确选择不为它引入任何本地记录（避免记录混乱）。
      */
-    public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId) {
-        long mid = NetWorkUtil.getLoginMid();
+    public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId,
+                                            WatchProgress watchProgress, long durationMs) {
         ProgressDiag.log("续播查询", "aid=" + aid + " cid=" + cid + " epid=" + epid + " seasonId=" + seasonId
-                + " 登录中=" + NetWorkUtil.isLoggedIn() + " 实时mid=" + mid
-                + " 本地mid=" + SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0)
-                + " " + EpisodeProgressStore.describe(mid, epid, cid));
+                + " 服务端进度=" + describeWatchProgress(watchProgress)
+                + " 单位已判定=" + (pgcProgressUnitSeconds == null ? "未知" : (pgcProgressUnitSeconds ? "秒" : "毫秒")));
 
-        //1. 季级配对：服务端对"本季最近观看的那一集"是权威且自洽的 (last_ep_id, last_time)
-        BangumiApi.SeasonProgress sp = seasonId != 0 ? BangumiApi.getSeasonProgress(seasonId)
-                : new BangumiApi.SeasonProgress();
-        boolean isSeasonLastEpisode = sp.known && sp.lastEpid != 0 && sp.lastEpid == epid;
-        if (isSeasonLastEpisode && sp.lastProgressMs > 0) {
-            ProgressDiag.log("续播结果", "采用季级状态: " + sp.lastProgressMs + "ms（本集=本季最后观看的那一集）");
-            EpisodeProgressStore.save(mid, epid, cid, sp.lastProgressMs);   //顺手同步本机存档
-            return sp.lastProgressMs;
+        //1. 服务端按集保存的本集进度（PiliPlus 口径）
+        long adopted = 0;
+        String source = null;
+        if (watchProgress != null && watchProgress.current_watch_progress > 0) {
+            if (isSeasonProgressLeak(watchProgress, epid)) {
+                ProgressDiag.log("续播结果", "守卫拦下：current_watch_progress=" + watchProgress.current_watch_progress
+                        + " 与季级位置(last_ep_id=" + watchProgress.last_ep_id + " last_time=" + watchProgress.last_time
+                        + ")完全一致且本集不是那一集 → 判定为别集记录漏过来，丢弃");
+            } else {
+                adopted = pgcProgressToMs(watchProgress, epid, durationMs);
+                if (adopted > 0) source = "服务端按集进度 current_watch_progress";
+            }
         }
 
-        //2. 本机存档：服务端只会留"最近观看的那一集"，别的集早就被覆盖了，自己存的那份才是这一集的位置
-        long localMs = EpisodeProgressStore.load(mid, epid, cid);
-        if (localMs > 0) {
-            ProgressDiag.log("续播结果", "采用本机存档: " + localMs + "ms（服务端已无本集记录：季级 lastEpid="
-                    + sp.lastEpid + " 本集epid=" + epid + "）");
-            return localMs;
+        //2. 本集就是"本季最近观看"那一集：同响应的 last_time(秒) 就是本集位置（同一条记录，不会串）
+        if (adopted <= 0 && watchProgress != null && epid != 0
+                && watchProgress.last_ep_id == epid && watchProgress.last_time > 0) {
+            adopted = watchProgress.last_time * 1000L;
+            source = "季级(同响应 last_time)";
         }
 
-        //3. 观看记录里这一集自己的条目（全身份命中）：本机没存档时（比如在别的设备上看过）的兜底
+        //3. v1 回退或字段缺失时才查季级状态接口（多一次请求）
+        BangumiApi.SeasonProgress sp = null;
+        if (adopted <= 0 && seasonId != 0) {
+            sp = BangumiApi.getSeasonProgress(seasonId);
+            if (sp.known && sp.lastEpid != 0 && sp.lastEpid == epid && sp.lastProgressMs > 0) {
+                adopted = sp.lastProgressMs;
+                source = "季级状态接口";
+            }
+        }
+        if (adopted > 0) {
+            ProgressDiag.log("续播结果", "采用" + source + ": " + adopted + "ms（epid=" + epid + "）");
+            return adopted;
+        }
+
+        //4. 观看记录里这一集自己的条目（全身份命中）
         long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
         if (historyMs > 0) {
             ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
-            EpisodeProgressStore.save(mid, epid, cid, historyMs);
             return historyMs;
         }
 
-        //4. 只有投稿视频才回退 wbi/v2：那种场景 last_play_cid 与 last_play_time 是真正的 aid 级配对数据。
-        //   番剧走到这里说明服务端与本机都没有这一集的位置 —— 从头播才对。
+        //5. 只有投稿视频才回退 wbi/v2：那种场景 last_play_cid 与 last_play_time 是真正的 aid 级配对数据。
         //   判"是番剧"用 epid 或 seasonId 任一非 0：少数分区条目(花絮/PV)的 epid 可能缺失，
         //   但详情页一定会带上 seasonId，不能因为 epid 缺失就退回会串集的投稿视频口径。
         boolean isPgc = epid != 0 || seasonId != 0;
-        ProgressDiag.log("续播结果", "本集无可用续播位置，从头播放（季级 known=" + sp.known
-                + " lastEpid=" + sp.lastEpid + " 本集epid=" + epid + " seasonId=" + seasonId + "）"
+        ProgressDiag.log("续播结果", "本集无可用续播位置，从头播放（季级 lastEpid="
+                + (sp != null ? sp.lastEpid : -1) + " 本集epid=" + epid + " seasonId=" + seasonId + "）"
                 + (isPgc ? "；番剧不做 wbi/v2 回退（该接口对 PGC 按季维护，无法证明位置属于本集）" : ""));
         if (isPgc) return 0;
 
@@ -339,6 +483,49 @@ public class PlayerApi {
             return wbiMs;
         }
         return 0;
+    }
+
+    /**
+     * 判断 {@code current_watch_progress} 是不是"季级最近观看位置"漏过来的。
+     *
+     * <p>正常语义下它是**本集**的进度；但只要它恰好等于同响应里季级记录的位置
+     * （{@code last_time}，或按另一种单位换算后的同一个值）而 {@code last_ep_id} 又不是本集，
+     * 就说明这一条根本不是本集的记录 —— 采用它必然重现"没看过的 B 集从 A 集位置起播"。
+     */
+    private static boolean isSeasonProgressLeak(WatchProgress wp, long epid) {
+        if (wp.last_ep_id == 0 || wp.last_ep_id == epid) return false;   // 无季级记录 / 本集就是那一集
+        if (wp.last_time <= 0) return false;                             // 没有可比对的季级位置
+        long raw = wp.current_watch_progress;
+        return raw == wp.last_time || raw == wp.last_time * 1000L;
+    }
+
+    /**
+     * 把 {@code current_watch_progress} 换算成毫秒。
+     *
+     * <p>单位以毫秒为准（PiliPlus 直接按毫秒用：{@code Duration(milliseconds: lastPlayTime)}）。
+     * 自校准：当本集就是季级"最近观看"那一集时，{@code current_watch_progress} 与 {@code last_time}
+     * 指同一个位置，两者相差 1000 倍即可反推出真实单位（结果只记在内存里，不落盘）。
+     * 未校准时再用视频时长做一次保护：只有明确超过"秒"的取值范围才按秒换算。
+     */
+    private static long pgcProgressToMs(WatchProgress wp, long epid, long durationMs) {
+        long raw = wp.current_watch_progress;
+        if (raw <= 0) return 0;
+        if (epid != 0 && wp.last_ep_id == epid && wp.last_time > 0) {
+            if (raw == wp.last_time) pgcProgressUnitSeconds = Boolean.TRUE;
+            else if (raw == wp.last_time * 1000L) pgcProgressUnitSeconds = Boolean.FALSE;
+        }
+        long durationSec = durationMs > 0 ? durationMs / 1000L : 0;
+        if (pgcProgressUnitSeconds != null) {
+            long ms = pgcProgressUnitSeconds ? raw * 1000L : raw;
+            ProgressDiag.log("续播单位", "已校准为" + (pgcProgressUnitSeconds ? "秒" : "毫秒")
+                    + "：raw=" + raw + " → " + ms + "ms");
+            return ms;
+        }
+        if (durationSec > 0 && raw > durationSec && raw * 1000L <= durationMs) {
+            ProgressDiag.log("续播单位", "未校准但 raw=" + raw + " 超过时长秒数(" + durationSec + ")，按秒处理");
+            return raw * 1000L;
+        }
+        return raw;
     }
 
     /**
