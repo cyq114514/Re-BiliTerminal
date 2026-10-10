@@ -12,11 +12,12 @@ import java.util.regex.Pattern;
  * 是每次发版必然变化、且面向用户展示的字段——用它可以彻底消除"忘记递增"这一类问题。
  *
  * 支持的格式：v 前缀可选；主.次.修订（次/修订可省略）；可选后缀 -fix / -fixN /
- * -BETAN / -RCN（大小写不敏感）。排序规则：
+ * -BETAN / -RCN（大小写不敏感；后缀前的连字符可省略，1.2.0fix 与 1.2.0-fix 等价）。排序规则：
  *   1.1.3 < 1.1.4
  *   1.1.1 < 1.1.1-fix < 1.1.1-fix2 < 1.1.2     （修复版介于同版本与下一版之间）
  *   1.1.4-BETA1 < 1.1.4-BETA2 < 1.1.4          （预发布版早于正式版）
  *   1.1.10 > 1.1.4                              （数字感知，不是字典序）
+ *   1.2.0 < 1.2.0fix < 1.2.1                    （无连字符的修复版同样可比较）
  *
  * 编码为单个 long 便于比较：主×10^10 + 次×10^8 + 修订×10^5 + 类型×10^4 + 序号。
  * 类型：预发布(BETA/RC/PRE)=0，无后缀=1，修复(fix/hotfix)=2。
@@ -24,8 +25,9 @@ import java.util.regex.Pattern;
  */
 public final class VersionNameUtil {
 
+    //后缀前的连字符可省略：1.2.0fix / 1.1.6-fix 都能解析（历史上两种写法都用过）
     private static final Pattern PATTERN = Pattern.compile(
-            "^(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?(?:-([A-Za-z]+)(\\d*))?$");
+            "^(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?(?:-?([A-Za-z]+)(\\d*))?$");
 
     private static final long TYPE_PRE_RELEASE = 0;
     private static final long TYPE_PLAIN = 1;
