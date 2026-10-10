@@ -73,9 +73,12 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
                         getString(R.string.setting_lab_jsonerr_detailed), String.valueOf(debugBuild)));
                 add(new SettingSection("switch", "详细显示列表报错", "dev_recyclererr_detailed",
                         getString(R.string.setting_lab_recyclererr_detailed), String.valueOf(debugBuild)));
-                add(new SettingSection("switch", "进度上报回读自检", "diag_readback",
-                        "播放番剧满 25 秒后回读一次服务端（观看记录/季级状态/v2集级进度），确认上报真的落库并写入诊断文件。"
-                                + "诊断文件在 Download/ReBiliDiag/ 或 Android/media/ 对应包名目录下。关闭可省下这次回读的请求。", "true"));
+                //番剧进度诊断默认关闭：它会额外请求服务端并在设备上写诊断文件，
+                //普通使用没必要承担这份开销与痕迹；排查番剧进度问题时才打开
+                add(new SettingSection("switch", "番剧进度诊断", "diag_readback",
+                        "打开后：播放番剧满 25 秒会回读一次服务端（观看记录/季级状态/本集进度）确认上报是否落库，"
+                                + "并把番剧进度的读写细节写入诊断文件（Download/ReBiliDiag/ 或 Android/media/ 对应包名目录下）。"
+                                + "排查\"续播位置不对/进度记不上\"这类问题时打开，把诊断文件发给维护者即可。", "false"));
             }
         };
 

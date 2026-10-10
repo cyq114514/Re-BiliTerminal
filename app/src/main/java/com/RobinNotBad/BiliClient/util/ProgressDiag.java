@@ -110,7 +110,24 @@ public class ProgressDiag {
     }
 
     /**
-     * 写一条诊断：logcat + 文件，任何失败都静默忽略。
+     * 番剧进度诊断开关（设置→实验室→调试，默认关闭）。
+     *
+     * <p>关闭时本类只写 logcat，不再在设备上落任何文件——诊断文件与额外的回读请求都只为排查问题服务，
+     * 普通使用没有必要承担这份开销与痕迹。开关打开后文件落在 {@link #path()} 指示的位置。
+     */
+    private static final String PREF_ENABLE = "diag_readback";
+
+    private static boolean enabled() {
+        try {
+            //getBoolean 自带空保护（Application.onCreate 之前 sharedPreferences 为 null 时返回默认值）
+            return SharedPreferencesUtil.getBoolean(PREF_ENABLE, false);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 写一条诊断：logcat + 文件（文件仅在"番剧进度诊断"开关打开时写），任何失败都静默忽略。
      *
      * <p>文件侧只写**一个**落点（审计 P3-3）：播放中每 5 秒就有两条日志，原来"每条日志把三个落点
      * 各开-写-关一遍"是三倍的文件 I/O；现在优先写 init() 探测出的第一个可用落点，
@@ -123,6 +140,7 @@ public class ProgressDiag {
         } catch (Throwable ignored) {
         }
         try {
+            if (!enabled()) return;
             init();
             if (targets == null || targets.length == 0) return;
             synchronized (LOCK) {
