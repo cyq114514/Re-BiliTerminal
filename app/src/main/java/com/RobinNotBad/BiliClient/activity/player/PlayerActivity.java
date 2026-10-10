@@ -53,6 +53,7 @@ import com.RobinNotBad.BiliClient.activity.InteractionDebugActivity;
 import com.RobinNotBad.BiliClient.adapter.QualitySelectorAdapter;
 import com.RobinNotBad.BiliClient.adapter.ViewPointAdapter;
 import com.RobinNotBad.BiliClient.api.ConfInfoApi;
+import com.RobinNotBad.BiliClient.api.BangumiApi;
 import com.RobinNotBad.BiliClient.api.DanmakuApi;
 import com.RobinNotBad.BiliClient.api.HistoryApi;
 import com.RobinNotBad.BiliClient.api.InteractionVideoApi;
@@ -75,6 +76,7 @@ import com.RobinNotBad.BiliClient.util.CookieGenerator;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.ProgressDiag;
 import com.RobinNotBad.BiliClient.util.ProtobufParser;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
@@ -187,6 +189,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private long epid = 0;
     private long seasonId = 0;
     private int seasonType = 0;
+    private String bvid = "";
     //周期上报节流：记录上次上报的视频位置，推进超过阈值才再报，避免 250ms tick 打爆接口
     private long lastReportedProgressMs = -1;
     private static final long PROGRESS_REPORT_INTERVAL_MS = 15000;
@@ -194,6 +197,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private long lastReportedProgressSec = -1;
     //未登录只提示一次，否则每 15 秒刷一条日志
     private boolean notLoggedInWarned = false;
+    //进度端到端自检：播放到 25 秒时回读一次服务端，确认上报是否真的落库（诊断用，只做一次）
+    private boolean diagReadbackDone = false;
 
     //弹幕跳转请求：弹幕尚未 prepare 时 DanmakuView.seekTo 会被丢弃，先记住位置等 prepared 回调补做
     private long pendingDanmakuSeekMs = -1;
@@ -292,10 +297,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         aid = intent.getLongExtra("aid", 0);
         cid = intent.getLongExtra("cid", 0);
         mid = intent.getLongExtra("mid", 0);
-        //番剧维度（jumpToPlayer 补传），播放中的周期进度上报依赖这三个值
+        //番剧维度（jumpToPlayer 补传），播放中的周期进度上报依赖这几个值
         epid = intent.getLongExtra("epid", 0);
         seasonId = intent.getLongExtra("seasonId", 0);
         seasonType = intent.getIntExtra("seasonType", 0);
+        bvid = intent.getStringExtra("bvid");
+        if (bvid == null) bvid = "";
 
         progress_history = intent.getIntExtra("progress", 0);
         Logu.d("history", String.valueOf(progress_history));
@@ -1071,6 +1078,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 switchToPage(currentPageIndex + 1);
             } else {
                 isPlaying = false;
+                //看完上报：官方口径 played_time=-1（已看完）。不报的话服务端只知道"看到最后一秒"，
+                //官方客户端的"已看完/未看完"标记与续播入口都会不一致。
+                //只对番剧(PGC)用这个约定值，普通投稿视频的 history/report 没有 -1 语义。
+                if (epid != 0) {
+                    lastReportedProgressSec = HistoryApi.PROGRESS_FINISHED;
+                    lastReportedProgressMs = video_now;
+                    sendProgressReport(HistoryApi.PROGRESS_FINISHED, "看完上报");
+                }
                 if (hasDanmaku && mDanmakuView != null) {
                     mDanmakuView.pause();
                 }
@@ -1389,6 +1404,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     if (video_now_last != video_now) { // 检测进度是否在变动
                         video_now_last = video_now;
                         maybeReportProgress();
+                        diagReadbackIfNeeded();
                         syncDanmakuIfDrifted(video_now);
                         float curr_sec = video_now / 1000f;
                         runOnUiThread(() -> {
@@ -1445,6 +1461,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void reportProgressNow(boolean force) {
         if (!isOnlineVideo || isLiveMode) return;
         if (!canReportProgress()) return;
+        //看完之后再退出/切后台：必须继续报 -1（已看完），否则会把"已看完"覆盖成"看到最后一秒"，
+        //官方客户端的看完标记就丢了。去重避免退出链路三连发（onPause/onStop/onDestroy）
+        if (finishWatching && epid != 0) {
+            if (lastReportedProgressSec != HistoryApi.PROGRESS_FINISHED) {
+                lastReportedProgressSec = HistoryApi.PROGRESS_FINISHED;
+                sendProgressReport(HistoryApi.PROGRESS_FINISHED, "看完·退出上报");
+            }
+            return;
+        }
         //位置只取 progressTimer 在后台线程维护的 video_now，绝不能在主线程调 ijkPlayer.getCurrentPosition()：
         //那是会取播放器原生锁的 JNI 调用，seek/重新缓冲期间可能长时间不返回，
         //而本方法跑在 onPause/onStop/onDestroy 上——一旦卡住就是"退出播放后整个应用卡死"（ANR）。
@@ -1460,6 +1485,39 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
+     * 端到端自检（诊断用，一次播放只做一次）。
+     *
+     * 番剧进度上报走心跳接口，而该接口对"未登录/参数不对"的请求同样返回 code:0——
+     * 只看返回码无法判断是否真的写进了服务端。这里在播放满 25 秒后回读一次观看记录、
+     * 季级状态与 wbi 接口，把结果写进诊断文件：只要回读能读回刚上报的位置，
+     * 就说明上报真的落库了；读不回来就是"静默失败"，据此才能定位。
+     */
+    private void diagReadbackIfNeeded() {
+        if (diagReadbackDone || epid == 0) return;
+        if (video_now < 25000) return;
+        diagReadbackDone = true;
+        final long fAid = aid, fCid = cid, fEpid = epid, fSeasonId = seasonId;
+        final long playedSec = video_now / 1000;
+        CenterThreadPool.run(() -> {
+            try {
+                //触发点在播放 25 秒，而周期上报第一次发生在播放 15 秒，
+                //中间隔了 10 秒，足够服务端落库，不需要再 sleep 占着线程池
+                long historyMs = HistoryApi.findEpisodeProgressMs(fCid, fAid, fEpid);
+                BangumiApi.SeasonProgress sp = fSeasonId != 0
+                        ? BangumiApi.getSeasonProgress(fSeasonId) : new BangumiApi.SeasonProgress();
+                long wbiMs = PlayerApi.getLastPlayProgress(fAid, fCid, true);
+                ProgressDiag.log("回读自检", "epid=" + fEpid + " 本次播放位置=" + playedSec + "s"
+                        + " → 观看记录=" + historyMs + "ms"
+                        + " / 季级(last_ep_id=" + sp.lastEpid + ", " + sp.lastProgressMs + "ms)"
+                        + " / wbi=" + wbiMs + "ms"
+                        + (historyMs > 0 || wbiMs > 0 ? "  [上报已落库]" : "  [上报疑似未落库]"));
+            } catch (Exception e) {
+                ProgressDiag.log("回读自检", "失败: " + e);
+            }
+        });
+    }
+
+    /**
      * 上报前置条件检查：不满足时留下可见日志（Logu.e/w 不受调试开关控制），
      * 避免"静默没上报"这种在设备上完全无从排查的故障。
      */
@@ -1468,7 +1526,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             Logu.e("进度上报", "跳过：aid/cid 缺失 aid=" + aid + " cid=" + cid);
             return false;
         }
-        if (mid == 0) resolveMidFromCookie();
+        //登录态一律以实时 Cookie 为准（本地快照 mid 会因切号/刷新 Cookie 而错位）
+        mid = NetWorkUtil.getLoginMid();
         if (mid == 0) {
             if (!notLoggedInWarned) {
                 notLoggedInWarned = true;
@@ -1479,31 +1538,19 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         return true;
     }
 
-    /**
-     * mid 平时随 Intent 进来（PlayerData.mid ← 本地记录）。换设备、清数据或 Cookie 刷新后本地记录可能滞后，
-     * 而实时 Cookie 里的 DedeUserID 一定是当前登录态。补这一次解析，
-     * 可以避免"明明已登录却被判未登录、整条上报链路被静默跳过"这类只有部分设备才复现的故障。
-     */
-    private void resolveMidFromCookie() {
-        String midStr = NetWorkUtil.getInfoFromCookie("DedeUserID",
-                SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
-        if (midStr == null || midStr.isEmpty()) return;
-        try {
-            mid = Long.parseLong(midStr);
-        } catch (NumberFormatException ignored) {
-            //Cookie 形态异常时保持 0，交给上层的未登录日志提示
-        }
-    }
-
     private void sendProgressReport(long progressSec, String reason) {
         final long fAid = aid, fCid = cid, fEpid = epid, fSeasonId = seasonId;
         final int fSeasonType = seasonType;
+        final String fBvid = bvid;
         Logu.w("进度上报", reason + " aid=" + fAid + " cid=" + fCid + " epid=" + fEpid
                 + " sid=" + fSeasonId + " subType=" + fSeasonType + " progress=" + progressSec + "s");
+        ProgressDiag.log("播放器上报", reason + " aid=" + fAid + " cid=" + fCid + " bvid=" + fBvid
+                + " epid=" + fEpid + " sid=" + fSeasonId + " subType=" + fSeasonType
+                + " progress=" + progressSec + "s mid=" + mid);
         CenterThreadPool.run(() -> {
             try {
                 if (fEpid != 0)
-                    HistoryApi.reportHistoryPgc(fAid, fCid, fEpid, fSeasonId, fSeasonType, progressSec);
+                    HistoryApi.reportHistoryPgc(fBvid, fAid, fCid, fEpid, fSeasonId, fSeasonType, progressSec);
                 else
                     HistoryApi.reportHistory(fAid, fCid, progressSec);
             } catch (Exception e) {

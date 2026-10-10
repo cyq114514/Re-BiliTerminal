@@ -37,6 +37,7 @@ public class PlayerData implements Parcelable {
     public long epid = 0;      //剧集 epid
     public long seasonId = 0;  //番剧 ssid（season_id）
     public int seasonType = 0; //剧集副类型，取值同 season_type：1番剧/2电影/3纪录片/4国创/5电视剧/7综艺
+    public String bvid = "";   //剧集 bvid（心跳上报的第二种稿件标识；取不到为空串）
 
     public PlayerData() {
     }
@@ -67,6 +68,7 @@ public class PlayerData implements Parcelable {
         epid = in.readLong();
         seasonId = in.readLong();
         seasonType = in.readInt();
+        bvid = in.readString();
         // dashData不序列化，下载时会重新获取
     }
 
@@ -109,6 +111,7 @@ public class PlayerData implements Parcelable {
         dest.writeLong(epid);
         dest.writeLong(seasonId);
         dest.writeInt(seasonType);
+        dest.writeString(bvid);
         // dashData不序列化，下载时会重新获取
     }
 

@@ -21,6 +21,7 @@ import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import org.json.JSONException;
@@ -55,10 +56,12 @@ public class JumpToPlayerActivity extends BaseActivity {
             Logu.d("进度回调", String.valueOf(progress));
 
             CenterThreadPool.run(() -> {
-                if (!playerData.isLive() && !playerData.isLocal() && playerData.mid != 0 && playerData.aid != 0) try {
+                //登录态一律按实时 Cookie 判定：本地快照 mid 在切号/刷新Cookie 后会错位，
+                //过去这里用 playerData.mid != 0 做门槛，错位时会把整条退出上报静默跳过
+                if (!playerData.isLive() && !playerData.isLocal() && NetWorkUtil.isLoggedIn() && playerData.aid != 0) try {
                     //番剧必须走带 epid/sid 的心跳接口，否则观看记录不会按番剧维度落库——进度等于没上报
                     if (playerData.isBangumi() && playerData.epid != 0)
-                        HistoryApi.reportHistoryPgc(playerData.aid, finalCid, playerData.epid,
+                        HistoryApi.reportHistoryPgc(playerData.bvid, playerData.aid, finalCid, playerData.epid,
                                 playerData.seasonId, playerData.seasonType, progress / 1000);
                     else
                         HistoryApi.reportHistory(playerData.aid, finalCid, progress / 1000);

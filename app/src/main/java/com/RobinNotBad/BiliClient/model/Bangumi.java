@@ -88,6 +88,7 @@ public class Bangumi {
         public long id;
         public long aid;
         public long cid;
+        public String bvid;
         public String title;
         @SerializedName("long_title")
         public String title_long;
@@ -101,7 +102,9 @@ public class Bangumi {
             PlayerData data = new PlayerData(PlayerData.TYPE_BANGUMI);
             data.aid = aid;
             data.cid = cid;
+            data.bvid = bvid;
             data.title = title;
+            //mid 只作兜底：上报/读取都以实时 Cookie 派生为准（见 NetWorkUtil.getLoginMid）
             data.mid = SharedPreferencesUtil.getLong("mid", 0);
             //epid 是番剧进度上报的必需维度（心跳接口的 epid），在这里设好，
             //任何调用方都不需要记得带；seasonId/seasonType 只有详情页拿得到 Info，由详情页补

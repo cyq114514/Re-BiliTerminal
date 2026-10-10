@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.ProgressDiag;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.google.gson.annotations.SerializedName;
@@ -203,6 +204,11 @@ public class PlayerApi {
             Logu.w("history-last", "番剧未取到本集续播进度，从头播放 epid=" + playerData.epid
                     + " aid=" + playerData.aid + " cid=" + playerData.cid);
         playerData.progress = normalizeProgress(lastProgress, result.result.timelength);
+        ProgressDiag.log("开播续播", "「" + playerData.title + "」epid=" + playerData.epid
+                + " aid=" + playerData.aid + " cid=" + playerData.cid + " bvid=" + playerData.bvid
+                + " sid=" + playerData.seasonId + " subType=" + playerData.seasonType
+                + " timelength=" + result.result.timelength
+                + " 原始=" + lastProgress + "ms → 最终=" + playerData.progress + "ms");
         if (result.result.accept_description != null && result.result.accept_quality != null) {
             playerData.qnStrList = result.result.accept_description.toArray(new String[0]);
             int[] qnValueList = new int[result.result.accept_quality.size()];
@@ -215,44 +221,96 @@ public class PlayerApi {
      * 查询稿件/剧集的"上次播放进度"（毫秒，取不到时为 0）。
      * 投稿视频可从 playurl 的 last_play_time 拿到，但番剧的 playurl 不返回该字段，
      * 因此统一走 x/player/wbi/v2（与 {@link #getSubtitleLinks(long, long)} 是同一个接口）。
+     *
+     * @param allowSeasonScoped true 表示调用方已经独立证明"这一集就是本季最后观看的那一集"，
+     *                          此时即使 last_play_cid 对不上（番剧的该字段服务端基本不维护，
+     *                          而 last_play_time 其实是按季保存的）也可以采纳——这是不丢续播能力的关键；
+     *                          false 时严格配对，避免把别一集/别一分P的位置套上来。
      */
-    public static long getLastPlayProgress(long aid, long cid) {
+    public static long getLastPlayProgress(long aid, long cid, boolean allowSeasonScoped) {
         try {
             String json = NetWorkUtil.getJson(ConfInfoApi.signWBI("https://api.bilibili.com/x/player/wbi/v2?aid=" + aid + "&cid=" + cid)).toString();
             SubtitleLinkData data = GsonUtil.fromJson(json, SubtitleLinkData.class);
-            if (data == null || data.data == null) return 0;
-            //last_play_time 只属于 last_play_cid 那一集/那一P：配对不成立就必须丢弃，
-            //直接采用会把"上一次播的那一集"的位置当成"这一集"的续播位置（集间串进度）
-            long lastPlayTime = adoptLastPlayTime(data.data.last_play_cid, cid, data.data.last_play_time);
+            if (data == null || data.data == null) {
+                ProgressDiag.log("wbi/v2", "响应为空或未登录 aid=" + aid + " cid=" + cid);
+                return 0;
+            }
+            long rawLastPlayTime = data.data.last_play_time;
+            long lastPlayTime;
+            String how;
+            if (allowSeasonScoped) {
+                //已由季级状态证明"本集就是本季最近观看的那一集"：last_play_time 此刻在语义上就等于本集位置
+                lastPlayTime = rawLastPlayTime > 0 ? rawLastPlayTime : 0;
+                how = "季级证明后采纳";
+            } else {
+                lastPlayTime = adoptLastPlayTime(data.data.last_play_cid, cid, rawLastPlayTime);
+                how = lastPlayTime > 0 ? "cid配对采纳" : "cid不配对已丢弃";
+            }
+            ProgressDiag.log("wbi/v2", "aid=" + aid + " cid=" + cid + " last_play_cid=" + data.data.last_play_cid
+                    + " last_play_time=" + rawLastPlayTime + " → " + how + "=" + lastPlayTime);
             if (lastPlayTime <= 0)
                 Logu.w("history-last", "未取到本集上次播放进度 aid=" + aid + " cid=" + cid
-                        + "（last_play_cid=" + data.data.last_play_cid + " last_play_time=" + data.data.last_play_time + "）");
+                        + "（last_play_cid=" + data.data.last_play_cid + " last_play_time=" + rawLastPlayTime + "）");
             else Logu.d("history-last", "aid=" + aid + " cid=" + cid + " last_play_time=" + lastPlayTime);
             return lastPlayTime;
         } catch (Exception e) {
+            ProgressDiag.log("wbi/v2", "查询失败: " + e);
             Logu.e("history-last", "获取上次播放进度失败: " + e.getMessage());
             return 0;
         }
     }
 
+    /** 严格配对版本：只有 last_play_cid == cid 才采纳（普通视频/多P视频的既有口径）。 */
+    public static long getLastPlayProgress(long aid, long cid) {
+        return getLastPlayProgress(aid, cid, false);
+    }
+
     /**
-     * 集级续播进度（毫秒，取不到为 0）。三条来源都必须先证明"进度确实属于这一集"：
-     * 1. 季级状态 pgc/view/web/season/user/status：只有 progress.last_ep_id == epid 时才用 last_time；
-     * 2. x/player/wbi/v2：只有 last_play_cid == cid 时才采纳 last_play_time；
-     * 3. 观看记录兜底：按 cid 精确配对（旧的 aid 单键命中会让同番剧不同集互相串）。
-     * 番剧每个 episode 有独立 aid/cid，集身份用 epid(集) + cid(流) 表达。
+     * 集级续播进度（毫秒，取不到为 0）。番剧每个 episode 有独立 aid/cid，集身份用 epid(集) + cid(流) + aid 表达。
+     * 三个来源按"可信度"排序，每一层都必须先证明"这个位置确实属于这一集"：
+     *
+     * 1. 观看记录里**这一集自己的**条目（business=pgc 且 cid/epid/oid 任一命中）——身份与位置在同一条记录里，
+     *    天然不会串，且不需要 WBI，是最可信的来源；
+     * 2. 季级状态 (last_ep_id, last_time)：只有 last_ep_id == epid 时才采纳 last_time；
+     * 3. x/player/wbi/v2 的 last_play_time（服务端按季保存、aid 维度不区分集）：
+     *    只有"last_play_cid == cid"或"季级状态证明本集就是本季最后观看的那一集"时才采纳。
+     *
+     * 三层都证明不了 → 返回 0（从头播）。这是与 1.2.0 的关键差别：1.2.0 直接裸取第 3 层的值，
+     * 于是同一部番剧的每一集都会拿到"本季最后观看的那一集的位置"——那才是集间串进度的根因；
+     * 而上一版修复又把三层都收得过紧（且都被本地 mid 快照卡死），一旦服务端数据不齐就全部归零，
+     * 表现为"每一集都从头播"。这里两边的坑都避开。
      */
     public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId) {
-        if (epid != 0 && seasonId != 0) {
-            long seasonMs = BangumiApi.getSeasonProgressMs(seasonId, epid);
-            if (seasonMs > 0) return seasonMs;
+        ProgressDiag.log("续播查询", "aid=" + aid + " cid=" + cid + " epid=" + epid + " seasonId=" + seasonId
+                + " 登录中=" + NetWorkUtil.isLoggedIn() + " 实时mid=" + NetWorkUtil.getLoginMid()
+                + " 本地mid=" + SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
+
+        //1. 观看记录里这一集自己的条目（最可信）
+        long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
+        if (historyMs > 0) {
+            ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
+            return historyMs;
         }
-        long wbiMs = getLastPlayProgress(aid, cid);
-        if (wbiMs > 0) return wbiMs;
-        long historyMs = HistoryApi.findProgressMsByCid(cid, aid, true);
-        if (historyMs > 0)
-            Logu.w("history-last", "WBI/季级进度不可用，使用观看记录兜底: " + historyMs + "ms cid=" + cid);
-        return historyMs;
+
+        //2. 季级配对：顺带拿到"本季最近观看的是哪一集"，供第 3 层判断能否采纳季级数据
+        BangumiApi.SeasonProgress sp = seasonId != 0 ? BangumiApi.getSeasonProgress(seasonId)
+                : new BangumiApi.SeasonProgress();
+        boolean isSeasonLastEpisode = sp.known && sp.lastEpid != 0 && sp.lastEpid == epid;
+        if (isSeasonLastEpisode && sp.lastProgressMs > 0) {
+            ProgressDiag.log("续播结果", "采用季级状态: " + sp.lastProgressMs + "ms（本集=本季最后观看的那一集）");
+            return sp.lastProgressMs;
+        }
+
+        //3. x/player/wbi/v2：严格配对优先；若季级已证明"本集就是本季最后观看的那一集"，则允许按季级口径采纳
+        long wbiMs = getLastPlayProgress(aid, cid, isSeasonLastEpisode);
+        if (wbiMs > 0) {
+            ProgressDiag.log("续播结果", "采用 wbi/v2: " + wbiMs + "ms（季级证明=" + isSeasonLastEpisode + "）");
+            return wbiMs;
+        }
+
+        ProgressDiag.log("续播结果", "本集无可用续播位置，从头播放（季级 known=" + sp.known
+                + " lastEpid=" + sp.lastEpid + "）");
+        return 0;
     }
 
     /**
@@ -299,6 +357,8 @@ public class PlayerApi {
                 intent.putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("aid", playerData.aid).putExtra("cid", playerData.cid).putExtra("mid", playerData.mid).putExtra("progress", playerData.progress).putExtra("live_mode", playerData.isLive());
                 //番剧维度随播放器携带，播放中才能周期性走心跳接口上报进度（epid=0 即普通视频，无需传 type）
                 intent.putExtra("epid", playerData.epid).putExtra("seasonId", playerData.seasonId).putExtra("seasonType", playerData.seasonType);
+                if (playerData.bvid != null && !playerData.bvid.isEmpty())
+                    intent.putExtra("bvid", playerData.bvid);
                 if (playerData.qnStrList != null && playerData.qnValueList != null) { intent.putExtra("qnStrList", playerData.qnStrList).putExtra("qnValueList", playerData.qnValueList).putExtra("currentQuality", playerData.qn); }
                 if (playerData.pagenames != null && playerData.cids != null && playerData.pagenames.size() > 1) {
                     intent.putStringArrayListExtra("pagenames", playerData.pagenames);

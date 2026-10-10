@@ -395,6 +395,42 @@ public class NetWorkUtil {
         return "";
     }
 
+    /**
+     * 实时登录 mid：优先从实时 Cookie 派生，取不到再退回本地快照。
+     *
+     * 为什么不能直接用本地快照 {@code SharedPreferencesUtil.mid}：它只在"登录成功"那一刻写入，
+     * 之后 Cookie 轮换、多账号切换、换设备恢复备份都会让它与真实登录态错位（甚至为 0）。
+     * 观看进度的读与写都以 mid 为前提，错位时的表现就是"已登录却被判未登录"，而且是静默的：
+     * 读取一律返回 0（续播永远从头开始），上报一律跳过。上报链路早已改成从实时 Cookie 派生
+     * （见仓库说明里的 1.0.2-fix1 一节），读取链路必须用同一口径，
+     * 否则就会出现"写进去了、读却读不到"的错位。
+     */
+    public static long getLoginMid() {
+        String midStr = getInfoFromCookie("DedeUserID",
+                SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+        if (midStr != null && !midStr.isEmpty()) {
+            try {
+                return Long.parseLong(midStr);
+            } catch (NumberFormatException ignored) {
+                //Cookie 形态异常时退回本地快照，不能因为一次解析失败就把整条链路判为未登录
+            }
+        }
+        return SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0);
+    }
+
+    /** 实时 CSRF（bili_jct）：同样优先实时 Cookie，退回本地快照。 */
+    public static String getLoginCsrf() {
+        String csrf = getInfoFromCookie("bili_jct",
+                SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+        if (csrf != null && !csrf.isEmpty()) return csrf;
+        return SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "");
+    }
+
+    /** 是否已登录（以实时 Cookie 为准）。 */
+    public static boolean isLoggedIn() {
+        return getLoginMid() != 0;
+    }
+
     /**POST body 日志脱敏：凭据类参数（表单 key=value 与 JSON "key":"..." 两种形态）一律打码。*/
     private static final Pattern SENSITIVE_PARAM_PATTERN = Pattern.compile(
             "(?i)(csrf|refresh_token|access_key|password|username|tel|sessdata|token|auth_code)(\\s*(?:=|\":\")\\s*)[^&\"]*");

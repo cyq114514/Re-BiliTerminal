@@ -340,12 +340,12 @@ public class BangumiInfoFragment extends Fragment {
 
     /**
      * 上报当前选中集的历史，作用与普通视频详情页(VideoInfoFragment)的历史上报一致：
-     * 让番剧出现在历史记录里并带上服务端记录的上次进度。
-     * 番剧取流接口(pgc/player/web/playurl)不返回 last_play_*，所以进度单独查 x/player/wbi/v2。
+     * 让番剧出现在历史记录里并带上当前进度。
      *
      * 触发时机：定位完成之后（上报的集 = 用户真正看过的集）；
      * 定位流程未启动时（未登录/开关关闭/数据异常）由 initView 直接调用。
-     * 查到的进度为 0 时 reportHistoryPgc 会拒绝发送——避免把本季观看记录覆盖成 0 进度。
+     * 只有在能证明"该进度确实属于这一集"时才上报；查不到就安静跳过——
+     * 详情页并没有真的播放，凭空写一个"别集的位置"会把服务端记录写串（1.2.0 的集间串进度就是这么来的）。
      */
     private void reportEpisodeHistory() {
         Bangumi.Section section = bangumi.sectionList.get(selectedSection);
@@ -356,19 +356,18 @@ public class BangumiInfoFragment extends Fragment {
         //会把这一集上报到别的季的 season_id/sub_type 上
         final long fSeasonId = currentSeasonId;
         final int fSeasonType = currentSeasonType();
+        final String fBvid = episode.bvid;
         CenterThreadPool.run(() -> {
             try {
-                //只上报"确实属于这一集"的进度：getEpisodeProgressMs 会校验集身份（epid/cid 配对）。
-                //以前这里裸取 x/player/wbi/v2 的 last_play_time，读到的是"本季上次看过的那一集"的位置，
-                //按当前选中集的 epid/cid 上报，会把季记录写成"第 N 集 + 别集的位置"，
-                //导致 B 站侧观看记录与续播也跟着串——读不到本集身份时宁可不报。
+                //只上报"确实属于这一集"的进度：getEpisodeProgressMs 三层都会校验集身份。
+                //读不到本集身份时宁可不报——报一个别集的位置比不报更糟
                 long progress = PlayerApi.getEpisodeProgressMs(episode.aid, episode.cid, episode.id, fSeasonId);
                 if (progress <= 0) {
-                    Logu.d("BangumiInfoFragment", "本集无观看进度，跳过高报 epid=" + episode.id);
+                    Logu.d("BangumiInfoFragment", "本集无观看进度，跳过上报 epid=" + episode.id);
                     return;
                 }
                 //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录
-                HistoryApi.reportHistoryPgc(episode.aid, episode.cid, episode.id,
+                HistoryApi.reportHistoryPgc(fBvid, episode.aid, episode.cid, episode.id,
                         fSeasonId,
                         fSeasonType,
                         progress / 1000);
