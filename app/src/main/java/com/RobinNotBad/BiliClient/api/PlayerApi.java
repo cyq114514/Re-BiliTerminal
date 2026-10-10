@@ -52,12 +52,6 @@ public class PlayerApi {
     private static final String PGC_PLAYURL_V2 = "https://api.bilibili.com/pgc/player/web/v2/playurl";
     private static final String PGC_PLAYURL_V1 = "https://api.bilibili.com/pgc/player/web/playurl";
 
-    /**
-     * current_watch_progress 的单位（true=秒，false=毫秒，null=尚未判定）。
-     * 这是服务端字段口径，不是用户数据，只放在内存里做自校准，不落盘、不随账号变化。
-     */
-    private static Boolean pgcProgressUnitSeconds = null;
-
     public static class PlayUrlData {
         @SerializedName("durl") public List<DurlItem> durl;
         @SerializedName("dash") public DashData dash;
@@ -104,10 +98,15 @@ public class PlayerApi {
     /**
      * 服务端保存的番剧观看进度（只有 pgc/player/web/v2/playurl 会返回）。
      *
-     * <p>{@code current_watch_progress}：**本次请求的这一集**自己的续播位置（PiliPlus 直接拿它当起播位置）。
-     * 它必须与 {@code last_ep_id / last_time} 一起看：后者是"本季最近观看的那一集"这一条季级记录，
-     * 若某个版本的服务端把季级位置漏进了 current_watch_progress，就会表现成"不同集互相串进度"
-     * （见 {@link #isSeasonProgressLeak}）。
+     * <p>**单位：这里三个字段全部是毫秒**（诊断实测：本集位置 421 秒时
+     * {@code current_watch_progress=421000}；同一位置在季级状态接口
+     * {@code pgc/view/web/season/user/status} 里是 {@code last_time=421}（秒）——
+     * 两个接口的同名字段单位不同，不能互相套用）。
+     *
+     * <p>{@code current_watch_progress}：**本次请求的这一集**自己的续播位置，PiliPlus 直接拿它当起播位置。
+     * 它确实是按集保存的：诊断里第 16 话一直返回 683000/937000，而同期季级记录已经是第 15 话的 624000/1000
+     * ——即"服务端只留最近一集"的说法只对 {@code last_ep_id/last_time} 成立，
+     * 每集各自的位置服务端都留着，因此不需要任何本地记录。
      */
     public static class WatchProgress {
         @SerializedName("current_watch_progress") public long current_watch_progress;
@@ -402,10 +401,9 @@ public class PlayerApi {
      *
      * <ol>
      *   <li>{@code pgc/player/web/v2/playurl} 的 {@code watch_progress.current_watch_progress}——
-     *       本次请求这一集自己的续播位置，直接采用（PiliPlus 就是这么取 {@code lastPlayTime} 的）；
-     *       用 {@link #isSeasonProgressLeak} 挡住"季级位置漏进本集"的情况；</li>
+     *       本次请求这一集自己的续播位置（**毫秒**），直接采用（PiliPlus 就是这么取 {@code lastPlayTime} 的）；</li>
      *   <li>同一个响应里的 {@code last_ep_id}/{@code last_time}：只有 {@code last_ep_id == 本集 epid}
-     *       时才拿 {@code last_time}(秒) 当本集位置（服务端把两者严格配对）；</li>
+     *       时才拿 {@code last_time}（**毫秒**，注意季级状态接口的同名字段是秒）当本集位置；</li>
      *   <li>季级状态接口 {@code pgc/view/web/season/user/status}（v1 回退或字段缺失时才查）；</li>
      *   <li>观看记录里**这一集自己的**条目（business=pgc 且 cid/epid/oid 全身份命中）。</li>
      * </ol>
@@ -416,34 +414,41 @@ public class PlayerApi {
      * 于是 `last_play_cid == cid` 的严格配对并不能证明"这个位置属于本集"：
      * 打开一集**从没看过**的新番，cid 配对会通过，而 last_play_time 却是**上一次看的那一集**的位置。
      *
-     * <p>四层都证明不了 → 从头播。这正是官方客户端/PiliPlus 的行为：服务端对本季只维护
-     * "最近观看的那一集"这一条位置，看下一集会把上一集覆盖掉，"服务端没有这一集的记录"
-     * 并不等于"这一集没看过"，但本轮明确选择不为它引入任何本地记录（避免记录混乱）。
+     * <p>四层都证明不了 → 从头播（该集确实没有任何观看记录）。
+     *
+     * <p>**单位这件事踩过坑，记在这里**：v6 曾按"两个字段相差 1000 倍即换算"做自校准，
+     * 结果实测里 {@code current} 与 {@code last_time} 本来就是同一个毫秒值（都是 421000），
+     * 被误判成秒再 ×1000，越界丢弃后**每一次续播都变成 0**——表现就是"完全读不到官方客户端已记录的进度"。
+     * 现已确认：这两个字段恒为毫秒，不做任何单位猜测（见 {@link WatchProgress}）。
      */
     public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId,
                                             WatchProgress watchProgress, long durationMs) {
         ProgressDiag.log("续播查询", "aid=" + aid + " cid=" + cid + " epid=" + epid + " seasonId=" + seasonId
-                + " 服务端进度=" + describeWatchProgress(watchProgress)
-                + " 单位已判定=" + (pgcProgressUnitSeconds == null ? "未知" : (pgcProgressUnitSeconds ? "秒" : "毫秒")));
+                + " 服务端进度=" + describeWatchProgress(watchProgress));
 
-        //1. 服务端按集保存的本集进度（PiliPlus 口径）
+        //1. 服务端按集保存的本集进度（PiliPlus 口径，毫秒）
         long adopted = 0;
         String source = null;
         if (watchProgress != null && watchProgress.current_watch_progress > 0) {
-            if (isSeasonProgressLeak(watchProgress, epid)) {
-                ProgressDiag.log("续播结果", "守卫拦下：current_watch_progress=" + watchProgress.current_watch_progress
-                        + " 与季级位置(last_ep_id=" + watchProgress.last_ep_id + " last_time=" + watchProgress.last_time
-                        + ")完全一致且本集不是那一集 → 判定为别集记录漏过来，丢弃");
-            } else {
-                adopted = pgcProgressToMs(watchProgress, epid, durationMs);
-                if (adopted > 0) source = "服务端按集进度 current_watch_progress";
+            adopted = watchProgress.current_watch_progress;
+            source = "服务端按集进度 current_watch_progress";
+            if (watchProgress.last_ep_id != 0 && watchProgress.last_ep_id != epid
+                    && adopted == watchProgress.last_time)
+                //仅提示：两者数值相同只是巧合（本集自己看到的位置恰好等于季级那条记录），按集级采用
+                ProgressDiag.log("续播结果", "注：本集进度与季级位置数值相同（本集 epid=" + epid
+                        + "，季级 last_ep_id=" + watchProgress.last_ep_id + "），仍按集级采用");
+            if (durationMs > 0 && adopted > durationMs) {
+                //位置不可能超过总时长：只可能是异常数据，宁可从头播也不要跳到一个离谱的位置
+                ProgressDiag.log("续播结果", "服务端按集进度 " + adopted + "ms 超过总时长 " + durationMs + "ms，按从头播放处理");
+                adopted = 0;
+                source = null;
             }
         }
 
-        //2. 本集就是"本季最近观看"那一集：同响应的 last_time(秒) 就是本集位置（同一条记录，不会串）
+        //2. 本集就是"本季最近观看"那一集，但集级字段为空：同响应的 last_time（毫秒）就是本集位置
         if (adopted <= 0 && watchProgress != null && epid != 0
                 && watchProgress.last_ep_id == epid && watchProgress.last_time > 0) {
-            adopted = watchProgress.last_time * 1000L;
+            adopted = watchProgress.last_time;
             source = "季级(同响应 last_time)";
         }
 
@@ -483,49 +488,6 @@ public class PlayerApi {
             return wbiMs;
         }
         return 0;
-    }
-
-    /**
-     * 判断 {@code current_watch_progress} 是不是"季级最近观看位置"漏过来的。
-     *
-     * <p>正常语义下它是**本集**的进度；但只要它恰好等于同响应里季级记录的位置
-     * （{@code last_time}，或按另一种单位换算后的同一个值）而 {@code last_ep_id} 又不是本集，
-     * 就说明这一条根本不是本集的记录 —— 采用它必然重现"没看过的 B 集从 A 集位置起播"。
-     */
-    private static boolean isSeasonProgressLeak(WatchProgress wp, long epid) {
-        if (wp.last_ep_id == 0 || wp.last_ep_id == epid) return false;   // 无季级记录 / 本集就是那一集
-        if (wp.last_time <= 0) return false;                             // 没有可比对的季级位置
-        long raw = wp.current_watch_progress;
-        return raw == wp.last_time || raw == wp.last_time * 1000L;
-    }
-
-    /**
-     * 把 {@code current_watch_progress} 换算成毫秒。
-     *
-     * <p>单位以毫秒为准（PiliPlus 直接按毫秒用：{@code Duration(milliseconds: lastPlayTime)}）。
-     * 自校准：当本集就是季级"最近观看"那一集时，{@code current_watch_progress} 与 {@code last_time}
-     * 指同一个位置，两者相差 1000 倍即可反推出真实单位（结果只记在内存里，不落盘）。
-     * 未校准时再用视频时长做一次保护：只有明确超过"秒"的取值范围才按秒换算。
-     */
-    private static long pgcProgressToMs(WatchProgress wp, long epid, long durationMs) {
-        long raw = wp.current_watch_progress;
-        if (raw <= 0) return 0;
-        if (epid != 0 && wp.last_ep_id == epid && wp.last_time > 0) {
-            if (raw == wp.last_time) pgcProgressUnitSeconds = Boolean.TRUE;
-            else if (raw == wp.last_time * 1000L) pgcProgressUnitSeconds = Boolean.FALSE;
-        }
-        long durationSec = durationMs > 0 ? durationMs / 1000L : 0;
-        if (pgcProgressUnitSeconds != null) {
-            long ms = pgcProgressUnitSeconds ? raw * 1000L : raw;
-            ProgressDiag.log("续播单位", "已校准为" + (pgcProgressUnitSeconds ? "秒" : "毫秒")
-                    + "：raw=" + raw + " → " + ms + "ms");
-            return ms;
-        }
-        if (durationSec > 0 && raw > durationSec && raw * 1000L <= durationMs) {
-            ProgressDiag.log("续播单位", "未校准但 raw=" + raw + " 超过时长秒数(" + durationSec + ")，按秒处理");
-            return raw * 1000L;
-        }
-        return raw;
     }
 
     /**
