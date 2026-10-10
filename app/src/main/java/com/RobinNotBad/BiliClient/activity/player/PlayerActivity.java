@@ -1486,15 +1486,20 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
-     * 端到端自检（诊断用，一次播放只做一次）。
+     * 端到端自检（诊断用，一次播放只做一次，实验室里可用"进度上报回读自检"关闭）。
      *
      * 番剧进度上报走心跳接口，而该接口对"未登录/参数不对"的请求同样返回 code:0——
      * 只看返回码无法判断是否真的写进了服务端。这里在播放满 25 秒后回读一次观看记录、
-     * 季级状态与 wbi 接口，把结果写进诊断文件：只要回读能读回刚上报的位置，
+     * 季级状态、v2 集级进度与 wbi 接口，把结果写进诊断文件：只要回读能读回刚上报的位置，
      * 就说明上报真的落库了；读不回来就是"静默失败"，据此才能定位。
+     *
+     * 判定必须把 v2 集级进度算进去（审计 P3-1）：观看记录 cursor 的 pgc 条目是"季级那一条"，
+     * 本季最近看的是别的集时它读不回本集的位置，那是正常现象而不是上报失败——
+     * v2 的 current_watch_progress 才是本集自己的位置。
      */
     private void diagReadbackIfNeeded() {
         if (diagReadbackDone || epid == 0) return;
+        if (!SharedPreferencesUtil.getBoolean("diag_readback", true)) return;
         if (video_now < 25000) return;
         diagReadbackDone = true;
         final long fAid = aid, fCid = cid, fEpid = epid, fSeasonId = seasonId;
@@ -1503,21 +1508,23 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             try {
                 //触发点在播放 25 秒，而周期上报第一次发生在播放 15 秒，
                 //中间隔了 10 秒，足够服务端落库，不需要再 sleep 占着线程池
-                long historyMs = HistoryApi.findEpisodeProgressMs(fCid, fAid, fEpid);
+                //观看记录只扫一页：刚上报的记录一定在第一页（审计 P3-6，把自检成本从最多 8 个请求压到 4 个）
+                long historyMs = HistoryApi.findEpisodeProgressMs(fCid, fAid, fEpid, 1);
                 BangumiApi.SeasonProgress sp = fSeasonId != 0
                         ? BangumiApi.getSeasonProgress(fSeasonId) : new BangumiApi.SeasonProgress();
                 long wbiMs = PlayerApi.getLastPlayProgress(fAid, fCid, true);
-                //服务端对本季只留"最近观看的那一集"一条记录，v6 起不再有本机存档：
-                //这里连 v2 取流接口的 watch_progress 一起回读，才能确认"本集的进度有没有落库、
-                //有没有被下一集挤掉"（current_watch_progress 是本集自己的位置）
+                //v2 取流接口的 watch_progress 是本集自己的位置：它能否读回刚播到的位置，
+                //直接决定下一次打开这一集能不能续播（current_watch_progress 就是续播数据源）
                 PlayerApi.WatchProgress wp = fEpid != 0
                         ? PlayerApi.queryPgcWatchProgress(fAid, fCid, fEpid, fSeasonId) : null;
+                boolean v2Landed = wp != null && wp.current_watch_progress > 0;
                 ProgressDiag.log("回读自检", "epid=" + fEpid + " 本次播放位置=" + playedSec + "s"
                         + " → 观看记录=" + historyMs + "ms"
                         + " / 季级(last_ep_id=" + sp.lastEpid + ", " + sp.lastProgressMs + "ms)"
                         + " / v2进度=" + PlayerApi.describeWatchProgress(wp)
                         + " / wbi=" + wbiMs + "ms"
-                        + (historyMs > 0 || wbiMs > 0 ? "  [上报已落库]" : "  [上报疑似未落库]"));
+                        + (historyMs > 0 || wbiMs > 0 || v2Landed
+                        ? "  [上报已落库]" : "  [上报疑似未落库]"));
             } catch (Exception e) {
                 ProgressDiag.log("回读自检", "失败: " + e);
             }

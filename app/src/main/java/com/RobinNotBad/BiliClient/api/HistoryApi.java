@@ -392,6 +392,16 @@ public class HistoryApi {
      * @return 毫秒；未登录、无记录或进度为 0/-1（已看完）时返回 0
      */
     public static long findEpisodeProgressMs(long cid, long aid, long epid) {
+        return findEpisodeProgressMs(cid, aid, epid, LOCATE_MAX_PAGES);
+    }
+
+    /**
+     * 同上，可指定最多扫描的页数。
+     *
+     * @param maxPages 最多翻多少页观看记录（每页约 20 条）。诊断回读这类"只关心最近几条"的
+     *                 调用传 1 即可——刚上报的记录一定在第一页，没必要为它扫完全部历史。
+     */
+    public static long findEpisodeProgressMs(long cid, long aid, long epid, int maxPages) {
         if (cid == 0 && aid == 0 && epid == 0) return 0;
         //未登录时没有观看记录，直接跳过，避免发无谓请求。
         //判登录态必须用实时 Cookie 派生的 mid：本地快照在换设备/切号/刷新 Cookie 后会错位，
@@ -402,13 +412,14 @@ public class HistoryApi {
         }
         //集身份是否已知：已知就必须靠 cid/epid 证明，绝不用 aid 兜底（见方法注释）
         boolean identityKnown = cid != 0 || epid != 0;
+        final int pageLimit = Math.max(1, Math.min(maxPages, LOCATE_MAX_PAGES));
 
         long viewAt = 0, max = 0;
         String business = "";
         int scanned = 0;
         StringBuilder candidates = new StringBuilder();
         try {
-            for (int page = 1; page <= LOCATE_MAX_PAGES; page++) {
+            for (int page = 1; page <= pageLimit; page++) {
                 String url = "https://api.bilibili.com/x/web-interface/history/cursor?type=all&view_at=" + viewAt
                         + "&business=" + business + "&max=" + max;
                 String json = NetWorkUtil.getJson(url).toString();

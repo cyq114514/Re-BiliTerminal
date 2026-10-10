@@ -73,6 +73,9 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
                         getString(R.string.setting_lab_jsonerr_detailed), String.valueOf(debugBuild)));
                 add(new SettingSection("switch", "详细显示列表报错", "dev_recyclererr_detailed",
                         getString(R.string.setting_lab_recyclererr_detailed), String.valueOf(debugBuild)));
+                add(new SettingSection("switch", "进度上报回读自检", "diag_readback",
+                        "播放番剧满 25 秒后回读一次服务端（观看记录/季级状态/v2集级进度），确认上报真的落库并写入诊断文件。"
+                                + "诊断文件在 Download/ReBiliDiag/ 或 Android/media/ 对应包名目录下。关闭可省下这次回读的请求。", "true"));
             }
         };
 

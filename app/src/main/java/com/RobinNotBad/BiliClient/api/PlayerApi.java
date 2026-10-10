@@ -237,7 +237,8 @@ public class PlayerApi {
      * <p>取流走 {@code pgc/player/web/v2/playurl}（PiliPlus 同款）：只有 v2 的响应里带
      * {@code play_view_business_info.user_status.watch_progress}，那是"这一集自己的观看进度"；
      * 老 v1 接口的 result 里完全没有这些字段，只能靠季级状态兜底。
-     * v2 若取不到 durl（个别内容/接口抖动）自动退回 v1：能播，但本轮拿不到集级进度。
+     * v2 取不到 durl（服务端返回了业务错误/接口形态变化）时回退 v1：能播，但本轮拿不到集级进度；
+     * v2 在网络层失败则直接快速失败——v1 也走同一套网络栈，再试一轮只会把等待翻倍。
      */
     public static void getBangumi(PlayerData playerData) throws IOException, JSONException {
         String session = ToolsUtil.md5(String.valueOf(System.currentTimeMillis() - SystemClock.currentThreadTimeMillis()));
@@ -275,8 +276,14 @@ public class PlayerApi {
                     }
                 }
             }
+        } catch (IOException e) {
+            //网络层失败（超时/断网）时不再回退 v1：getJson 内部自带重试（api_retry_max_times，默认 5 次），
+            //v2 已经把重试额度用完，再对 v1 重复一轮只会把"起播失败"的等待翻倍，而结果必然相同
+            ProgressDiag.log("番剧取流", "v2 网络异常，快速失败不回退 v1: " + e);
+            throw e;
         } catch (Exception e) {
-            ProgressDiag.log("番剧取流", "v2 请求异常，回退 v1: " + e);
+            //响应解析失败（服务端返回了非预期结构）才回退 v1：接口形态可能变化，老接口还能撑一阵
+            ProgressDiag.log("番剧取流", "v2 响应异常，回退 v1: " + e);
         }
         if (stream == null || stream.durl == null || stream.durl.isEmpty()) {
             ProgressDiag.log("番剧取流", "v2 未取到 durl，回退 v1（本轮无集级进度字段）epid=" + playerData.epid);
@@ -466,11 +473,19 @@ public class PlayerApi {
             return adopted;
         }
 
-        //4. 观看记录里这一集自己的条目（全身份命中）
-        long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
-        if (historyMs > 0) {
-            ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
-            return historyMs;
+        //4. 观看记录里这一集自己的条目（全身份命中）。
+        //   只有 v2 没给出集级进度（v1 回退/字段缺失）时才值得扫：v2 响应有效时，
+        //   观看记录里本季的 pgc 条目就是"季级那一条"——它若属于本集，第 1/2 层早就命中了；
+        //   属于别集的话扫描也不可能命中本集（审计 P2-1：第一次看新集时白扫 5 页、白等 2 秒）。
+        if (watchProgress != null) {
+            ProgressDiag.log("续播结果", "v2 已明确本集无记录（current="
+                    + watchProgress.current_watch_progress + "），跳过观看记录扫描");
+        } else {
+            long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
+            if (historyMs > 0) {
+                ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
+                return historyMs;
+            }
         }
 
         //5. 只有投稿视频才回退 wbi/v2：那种场景 last_play_cid 与 last_play_time 是真正的 aid 级配对数据。

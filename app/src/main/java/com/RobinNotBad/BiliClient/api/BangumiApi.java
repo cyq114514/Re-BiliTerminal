@@ -445,7 +445,7 @@ public class BangumiApi {
                     if (progress != null) {
                         meta.lastEpid = progress.optLong("last_ep_id", 0);
                         //last_time 是"上次看到的位置(秒)"，与 last_ep_id 严格配对；这里只是缓存原始值，
-                        //真正当续播位置用之前必须确认 last_ep_id 就是目标集（见 getSeasonProgressMs）
+                        //真正当续播位置用之前必须确认 last_ep_id 就是目标集（见 getSeasonProgress）
                         long lastTimeSec = progress.optLong("last_time", 0);
                         if (lastTimeSec > 0) meta.lastProgressMs = lastTimeSec * 1000L;
                     }
@@ -507,21 +507,6 @@ public class BangumiApi {
             Logu.e("history-last", "季级进度查询失败: " + e.getMessage());
         }
         return sp;
-    }
-
-    /**
-     * 季级观看状态里"指定某一集"的播放进度（毫秒；0 表示该集没有观看记录）。
-     *
-     * user/status 的 progress 是"本季最近观看"这一条：last_time 只属于 last_ep_id 那一集。
-     * 因此必须先校验 last_ep_id == 目标 epid 才能把 last_time 当续播位置，否则会把
-     * "上次看的那一集的位置"当成"这次要播的那一集的位置"——表现就是同番剧不同集串进度。
-     */
-    public static long getSeasonProgressMs(long seasonId, long epid) {
-        if (epid == 0) return 0;
-        SeasonProgress sp = getSeasonProgress(seasonId);
-        if (!sp.known || sp.lastEpid != epid || sp.lastProgressMs <= 0) return 0;
-        Logu.d("history-last", "季级状态命中本集 epid=" + epid + " " + sp.lastProgressMs + "ms");
-        return sp.lastProgressMs;
     }
 
     private static Bangumi.Section buildSection(SectionItem item) {

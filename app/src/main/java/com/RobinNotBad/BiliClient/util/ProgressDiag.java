@@ -28,7 +28,8 @@ import java.util.Locale;
  *  2. {@code Android/media/<包名>/progress-diag.txt} —— 应用专属媒体目录，不需要任何权限就能写，
  *     而且对文件管理器与第三方工具可见（App 自己的下载目录就在这一层）。
  *  3. {@code Android/data/<包名>/files/progress-diag.txt} —— 兜底，永远可写但用户通常取不到。
- * 三处都写；每份文件首行自带自己的绝对路径，取哪一份都不会搞混。
+ * 只写其中一个（按上面的优先级探测出第一个可用的；运行中写失败自动切到下一个），
+ * 文件首行自带自己的绝对路径，取到哪一份都不会搞混。
  *
  * 记录内容：登录态、三个进度来源的原始返回值、心跳上报的完整参数与服务端返回码、
  * 以及播放 25 秒后的一次"回读"（用于确认上报到底有没有落到服务端）。
@@ -48,7 +49,8 @@ public class ProgressDiag {
     private static File[] targets;
     private static String primaryPath = "";
     private static boolean inited = false;
-    private static boolean headerWritten = false;
+    /** 当前正在写的落点下标：写入失败时在 log() 里顺延切换（见 log 的 failover 逻辑） */
+    private static int activeTarget = -1;
 
     private static void init() {
         if (inited) return;
@@ -107,7 +109,14 @@ public class ProgressDiag {
         }
     }
 
-    /** 同时写 logcat 与文件；任何失败都静默忽略。 */
+    /**
+     * 写一条诊断：logcat + 文件，任何失败都静默忽略。
+     *
+     * <p>文件侧只写**一个**落点（审计 P3-3）：播放中每 5 秒就有两条日志，原来"每条日志把三个落点
+     * 各开-写-关一遍"是三倍的文件 I/O；现在优先写 init() 探测出的第一个可用落点，
+     * 写失败（存储被卸载/权限被回收）时自动切换到下一个，并在 logcat 留痕。
+     * 首行落点标识按"文件为空"判断（审计 P3-4）：超过上限被删除重建后，新文件照样带首行。
+     */
     public static void log(String tag, String msg) {
         try {
             Logu.w("进度诊断>" + tag, msg);
@@ -118,18 +127,24 @@ public class ProgressDiag {
             if (targets == null || targets.length == 0) return;
             synchronized (LOCK) {
                 String line = FMT.format(new Date()) + " [" + tag + "] " + msg + "\n";
-                boolean needHeader = !headerWritten;
-                headerWritten = true;
-                for (File file : targets) {
+                if (activeTarget < 0 || activeTarget >= targets.length) activeTarget = 0;
+                for (int attempt = 0; attempt < targets.length; attempt++) {
+                    int idx = (activeTarget + attempt) % targets.length;
+                    File file = targets[idx];
                     try {
                         if (file.length() > MAX_BYTES) //noinspection ResultOfMethodCallIgnored
                             file.delete();
+                        boolean needHeader = file.length() == 0;
                         FileWriter writer = new FileWriter(file, true);
                         //首行记下落点，用户把文件发出来时能确认取的是哪一份
                         if (needHeader) writer.write("==== 进度诊断开始 文件: " + file.getAbsolutePath() + " ====\n");
                         writer.write(line);
                         writer.close();
-                    } catch (Throwable ignored) {
+                        activeTarget = idx;
+                        return;
+                    } catch (Throwable t) {
+                        //当前落点写不进去（SD 卡卸载/权限回收）：换下一个，下一行也从新的开始写
+                        Logu.e("进度诊断", "落点写入失败，切换: " + file.getAbsolutePath());
                     }
                 }
             }

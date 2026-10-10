@@ -567,7 +567,8 @@ public class BangumiInfoFragment extends Fragment {
         //记住离开的这一季的选中位置
         seasonSelection.put(currentSeasonId, new int[]{selectedSection, selectedEpisode});
 
-        currentSeasonId = tab.season_id;        tab.seasonType = meta.seasonType != 0 ? meta.seasonType : (bangumi.info != null ? bangumi.info.type : 0);
+        currentSeasonId = tab.season_id;
+        tab.seasonType = meta.seasonType != 0 ? meta.seasonType : (bangumi.info != null ? bangumi.info.type : 0);
         tab.statusDesc = meta.statusDesc;
 
         bangumi.sectionList = meta.sectionList;

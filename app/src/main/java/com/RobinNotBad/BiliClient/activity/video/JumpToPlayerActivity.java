@@ -45,15 +45,24 @@ public class JumpToPlayerActivity extends BaseActivity {
 
             //外部播放器(小电视/凉腕)不会回传 RESULT_OK，这里用进入播放前拿到的进度兜底，
             //否则番剧走外部播放器时进度会完全丢失（普通视频由详情页上报掩盖了这个问题）
+            //兜底值 == 进入时的续播位置 == 服务端已有的值，写回最多是"原地踏步"不会回拨；
+            //但连进入时的位置都是 0（外部播放器且本集没看过）时就完全没有上报的意义了（审计 P3-5）
             int progress = (code == RESULT_OK && result != null)
                     ? result.getIntExtra("progress", playerData.progress)
                     : playerData.progress;
+            boolean returnedByPlayer = code == RESULT_OK && result != null && result.hasExtra("progress");
             //播放器内可能切换过分P：最终观看的 cid 以播放器回传为准，不能沿用进入时的旧 cid，
             //否则会拿新P的进度去覆盖旧P的记录，把正确的续播位置冲掉
             long finalCid = (code == RESULT_OK && result != null && result.hasExtra("cid"))
                     ? result.getLongExtra("cid", playerData.cid)
                     : playerData.cid;
             Logu.d("进度回调", String.valueOf(progress));
+
+            if (!returnedByPlayer && progress <= 0) {
+                Logu.d("进度回调", "播放器未回传进度且进入时无续播位置，跳过兜底上报");
+                finish();
+                return;
+            }
 
             CenterThreadPool.run(() -> {
                 //登录态一律按实时 Cookie 判定：本地快照 mid 在切号/刷新Cookie 后会错位，

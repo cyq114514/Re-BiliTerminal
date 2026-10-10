@@ -5,8 +5,7 @@ import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,10 +34,13 @@ public class UserLogStore {
     private UserLogStore() {
     }
 
-    /** 存储 key 带 mid：换账号后不会把上一个账号的记录混进来 */
+    /**
+     * 存储 key 带 mid：换账号后不会把上一个账号的记录混进来。
+     * mid 用实时 Cookie 派生（与观看进度的读写同一口径）：本地快照只在"登录成功"那一刻写入，
+     * Cookie 轮换/多账号切换/换设备恢复备份后它会错位，错位时记录就会并进别的账号的桶里。
+     */
     private static String storageKey(String baseKey) {
-        long mid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0);
-        return baseKey + "_" + mid;
+        return baseKey + "_" + NetWorkUtil.getLoginMid();
     }
 
     /** 本地已累积的记录（时间倒序）；没有则返回空数组 */
@@ -88,18 +90,17 @@ public class UserLogStore {
         }
 
         List<JSONObject> list = new ArrayList<>(merged.values());
-        Collections.sort(list, new Comparator<JSONObject>() {
-            @Override
-            public int compare(JSONObject a, JSONObject b) {
-                long ta = parseTime(a.optString(FIELD_TIME, ""));
-                long tb = parseTime(b.optString(FIELD_TIME, ""));
-                //时间倒序；解析失败(0)的条目排在最后
-                return Long.compare(tb, ta);
-            }
-        });
-
+        //时间戳先解析成数值再排序（审计 P4-2）：在比较器里反复解析时间、反复 new SimpleDateFormat
+        //都是 O(n log n) 次开销，2000 条上限时是数千次对象构造；这里一次解析、只比数值
+        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
+        final long[] ts = new long[list.size()];
+        for (int i = 0; i < list.size(); i++) ts[i] = parseTime(fmt, list.get(i).optString(FIELD_TIME, ""));
+        Integer[] order = new Integer[list.size()];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        //时间倒序；解析失败(0)的条目排在最后
+        Arrays.sort(order, (a, b) -> Long.compare(ts[b], ts[a]));
         JSONArray result = new JSONArray();
-        for (int i = 0; i < list.size() && i < MAX_ENTRIES; i++) result.put(list.get(i));
+        for (int i = 0; i < order.length && i < MAX_ENTRIES; i++) result.put(list.get(order[i]));
         try {
             SharedPreferencesUtil.putString(storageKey(baseKey), result.toString());
         } catch (Exception ignored) {
@@ -113,10 +114,11 @@ public class UserLogStore {
                 + item.optString(FIELD_REASON, "");
     }
 
-    private static long parseTime(String time) {
+    /** fmt 由调用方构造并只在单线程内复用（SimpleDateFormat 非线程安全）。 */
+    private static long parseTime(SimpleDateFormat fmt, String time) {
         if (time == null || time.isEmpty()) return 0;
         try {
-            return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA).parse(time).getTime();
+            return fmt.parse(time).getTime();
         } catch (Exception e) {
             return 0;
         }
