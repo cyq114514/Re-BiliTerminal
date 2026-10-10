@@ -2,9 +2,12 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:paddingHorizontal="@dimen/activity_padding_horizontal"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+    android:layout_marginVertical="@dimen/list_margin_vertical"
+    android:background="?attr/biliCardBackground"
+    android:paddingHorizontal="@dimen/activity_padding_horizontal">
 
     <ImageView
         android:id="@+id/replyAvatar"
@@ -129,7 +132,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:background="@drawable/background_grey_cardview"
+        android:background="@drawable/background_card_soft"
         android:gravity="center"
         android:paddingStart="12dp"
         android:paddingTop="5dp"
@@ -148,7 +151,7 @@
         android:layout_marginTop="4dp"
         android:paddingVertical="8dp"
         android:paddingHorizontal="8dp"
-        android:background="@drawable/background_grey_cardview"
+        android:background="@drawable/background_card_soft"
         android:orientation="vertical"
         app:layout_constraintEnd_toEndOf="@+id/replyText"
         app:layout_constraintStart_toStartOf="@+id/replyText"
@@ -196,9 +199,7 @@
         android:layout_marginEnd="9dp"
         android:layout_marginBottom="2dp"
         android:background="@color/overlay_gray"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/repliesCard" />
+        tools:ignore="MissingConstraints"
+        android:visibility="gone" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

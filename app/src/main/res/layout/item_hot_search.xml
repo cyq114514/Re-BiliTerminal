@@ -33,14 +33,14 @@
         android:textSize="16sp"
         android:maxLines="1"
         android:ellipsize="end"
-        android:textColor="?android:textColorPrimary" />
+        android:textColor="@color/textwhite" />
 
     <TextView
         android:id="@+id/heatText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textSize="12sp"
-        android:textColor="?android:textColorSecondary"
+        android:textColor="@color/text_gray"
         android:maxLines="1" />
 
 </LinearLayout>

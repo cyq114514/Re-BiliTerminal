@@ -358,7 +358,15 @@ public class BangumiInfoFragment extends Fragment {
         final int fSeasonType = currentSeasonType();
         CenterThreadPool.run(() -> {
             try {
-                long progress = PlayerApi.getLastPlayProgress(episode.aid, episode.cid);
+                //只上报"确实属于这一集"的进度：getEpisodeProgressMs 会校验集身份（epid/cid 配对）。
+                //以前这里裸取 x/player/wbi/v2 的 last_play_time，读到的是"本季上次看过的那一集"的位置，
+                //按当前选中集的 epid/cid 上报，会把季记录写成"第 N 集 + 别集的位置"，
+                //导致 B 站侧观看记录与续播也跟着串——读不到本集身份时宁可不报。
+                long progress = PlayerApi.getEpisodeProgressMs(episode.aid, episode.cid, episode.id, fSeasonId);
+                if (progress <= 0) {
+                    Logu.d("BangumiInfoFragment", "本集无观看进度，跳过高报 epid=" + episode.id);
+                    return;
+                }
                 //番剧必须走带 epid/sid 的心跳接口，用 history/report 不会被记成番剧记录
                 HistoryApi.reportHistoryPgc(episode.aid, episode.cid, episode.id,
                         fSeasonId,

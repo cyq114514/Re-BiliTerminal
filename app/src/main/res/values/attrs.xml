@@ -4,4 +4,13 @@
     <declare-styleable name="RatioImageView">
         <attr name="coverRatio" format="float" />
     </declare-styleable>
+
+    <!--
+      统一的"卡片底"主题属性：给非 MaterialCardView 的宿主（ConstraintLayout/LinearLayout 行等）用。
+      Theme.BiliClient → @drawable/background_card_gradient_border（新版美学：渐变描边 + 30% 底）
+      ThemeOverlay.BiliClient.Classic → @drawable/background_grey_cardview（旧版：6dp 圆角 + 实底）
+      这样"关闭新版美学"能整体回退，不会再出现"关了新版还是新样式"的半新状态。
+      注意：Theme.NoSwipe 的 parent 是 android:Theme.Black，不继承 Theme.BiliClient，必须单独声明。
+    -->
+    <attr name="biliCardBackground" format="reference" />
 </resources>

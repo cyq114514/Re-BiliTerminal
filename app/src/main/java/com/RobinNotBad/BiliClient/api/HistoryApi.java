@@ -48,6 +48,8 @@ public class HistoryApi {
     public static class HistoryRef {
         @SerializedName("oid")
         public long oid;
+        @SerializedName("cid")
+        public long cid;
         @SerializedName("bvid")
         public String bvid;
         @SerializedName("epid")
@@ -329,17 +331,23 @@ public class HistoryApi {
     }
 
     /**
-     * 从观看记录里取某稿件/剧集最近一次的播放进度（毫秒），作为续播进度的兜底来源。
+     * 从观看记录里取"这一集/这一个分P"最近一次的播放进度（毫秒），作为续播进度的兜底来源。
      *
      * 为什么需要兜底：番剧续播进度走 x/player/wbi/v2，该接口需要 WBI 签名与登录态，
      * 一旦密钥异常/被风控/未登录就静默返回 0，表现为"续播永远从 0 开始"；
      * 而观看记录列表接口不需要 WBI，只要登录过就能拿到 progress（秒），可靠性更高。
      *
-     * @param aid 稿件/剧集 aid（观看记录里的 history.oid）
+     * 为什么不能按 aid 单键命中：番剧同一季不同集的 aid 各不相同，但观看记录里"本季"只维护
+     * 最近一次观看那一条；且 archive 与 pgc 记录可能混在一起。因此优先用 history.cid 精确配对
+     * （cid 是"哪一集/哪一个P"的唯一身份），只有接口没给 cid 时才退化成 aid 配对。
+     *
+     * @param cid     目标分P/剧集的 cid（0 表示未知，退化为 aid 配对）
+     * @param aid     目标稿件/剧集 aid（history.oid）
+     * @param pgcOnly true 时只接受 business=pgc 的记录（番剧续播用；避免被同名投稿视频串数据）
      * @return 毫秒；未登录、无记录或进度为 0/-1（已看完）时返回 0
      */
-    public static long findProgressMsByAid(long aid) {
-        if (aid == 0) return 0;
+    public static long findProgressMsByCid(long cid, long aid, boolean pgcOnly) {
+        if (cid == 0 && aid == 0) return 0;
         //未登录时没有观看记录，直接跳过，避免发无谓请求
         if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0) return 0;
 
@@ -356,7 +364,14 @@ public class HistoryApi {
 
                 for (HistoryItem item : resp.data.list) {
                     if (item == null || item.history == null) continue;
-                    if (item.history.oid != aid) continue;
+                    String itemBusiness = item.history.business != null ? item.history.business : item.business;
+                    if (pgcOnly && !BUSINESS_PGC.equals(itemBusiness)) continue;
+                    //集/分P身份校验：cid 精确配对优先，接口没给 cid 时才退回 aid
+                    if (cid != 0 && item.history.cid != 0) {
+                        if (item.history.cid != cid) continue;
+                    } else if (item.history.oid != aid) {
+                        continue;
+                    }
                     //progress 单位是秒；-1 表示已看完，没有可续播的位置
                     if (item.progress > 0) return item.progress * 1000L;
                 }

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 搜索输入框底：与卡片同一套 token（10dp 圆角 / 0.5dp 描边 / 卡片底），不再用 2dp 灰描边 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#80242424" />
+    <solid android:color="@color/card_bg_new" />
     <stroke
-        android:width="2dp"
-        android:color="#cc808080" />
-    <corners android:radius="@dimen/card_round" />
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
 </shape>

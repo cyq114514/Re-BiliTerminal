@@ -1195,6 +1195,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 SharedPreferencesUtil.putBoolean("pref_switch_danmaku", isDanmakuVisible);
             });
             btn_danmaku.performClick();
+            //按钮图标与真实状态对齐：mDanmakuView 尚未就绪时上面的点击回调会在第一行提前 return，
+            //图标会停在 XML 默认的"弹幕关"上，与实际是否显示弹幕不一致
+            btn_danmaku.setImageResource(isDanmakuVisible ? R.mipmap.danmakuon : R.mipmap.danmakuoff);
 
             btn_danmaku.setVisibility(View.VISIBLE);
         } else {
@@ -2593,6 +2596,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         else
             btn_rotate.setVisibility(View.GONE);
 
+        //弹幕按钮的可见性必须和旋转按钮一样在 initUI 就定下来：原来它拖到 onPrepared 才下发，
+        //观感就是"刚进页面按钮还在、开播瞬间凭空少一个"，也让"设置里关掉了"这种正常状态
+        //表现得像 bug。默认值与原逻辑一致（true）
+        btn_danmaku.setVisibility(SharedPreferencesUtil.getBoolean("player_ui_showDanmakuBtn", true)
+                ? View.VISIBLE : View.GONE);
+
         screen_round = SharedPreferencesUtil.getBoolean("player_ui_round", false);
         if (screen_round) {
             int padding = (int) (screen_width * 0.03);
@@ -2608,6 +2617,29 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             bottom_buttons.setPadding(padding, 0, padding, padding);
 
             right_control.setPadding(0, 0, padding, 0);
+
+            //右侧按钮列在圆屏上要保证"整列都落在可视圆内"：
+            //原实现用 layout_below/layout_above 让它被上下横条精确夹取，高度吃紧时最后一个按钮会被裁掉
+            //（顶栏在圆屏下要变两行、底栏要加下内边距，余量只剩十几像素）。改成自适应高度 + 垂直居中，
+            //既不受上下横条挤压，也自然落在圆盘最宽的中段；同时给可横向滚动的菜单行加宽度上限，
+            //避免它把整列一起顶出屏幕右缘
+            try {
+                RelativeLayout.LayoutParams rcParams = (RelativeLayout.LayoutParams) right_control.getLayoutParams();
+                rcParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                rcParams.addRule(RelativeLayout.CENTER_VERTICAL);
+                rcParams.removeRule(RelativeLayout.BELOW);
+                rcParams.removeRule(RelativeLayout.ABOVE);
+                right_control.setLayoutParams(rcParams);
+                right_control.setClipChildren(false);
+
+                int columnWidth = ToolsUtil.dp2px(28f) + padding;
+                int maxRowWidth = Math.max(screen_width - columnWidth - ToolsUtil.dp2px(8f), ToolsUtil.dp2px(56f));
+                ViewGroup.LayoutParams rowParams = right_second.getLayoutParams();
+                rowParams.width = maxRowWidth;
+                right_second.setLayoutParams(rowParams);
+            } catch (Throwable e) {
+                Logu.e("round", "右侧按钮列圆屏布局调整失败: " + e.getMessage());
+            }
 
             RelativeLayout.LayoutParams danmakuParams = (RelativeLayout.LayoutParams) mDanmakuView.getLayoutParams();
             danmakuParams.setMargins(0, padding * 3, 0, padding * 3);
@@ -2985,7 +3017,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 // 退出听视频模式
                 text_speed.setVisibility(View.VISIBLE);
                 updateDebugButtonVisibility();
-                btn_danmaku.setVisibility(View.VISIBLE);
+                //与 initUI/onPrepared 同一口径：用户关掉"显示弹幕按钮"时，退出听视频模式也不能把它放回来
+                btn_danmaku.setVisibility(SharedPreferencesUtil.getBoolean("player_ui_showDanmakuBtn", true)
+                        ? View.VISIBLE : View.GONE);
                 layout_video.setVisibility(View.VISIBLE);
                 layout_audio_only.setVisibility(View.GONE);
                 if (mDanmakuView != null && isDanmakuVisible) {

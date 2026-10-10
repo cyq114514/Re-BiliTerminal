@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  搜索页的历史记录/热搜/建议浮层面板的底板。
+  以前是三套语言里的"最旧"一套（#CD000000 + 2dp #77808080 + 6dp 圆角），
+  盖在氛围背景上就是"板中板"，与新版卡片语言（0.5dp #363636 描边 + 10dp 圆角 + 半透明底）割裂。
+  这里收敛到与卡片同一套 token；想整体回退旧观感请改 ThemeOverlay.BiliClient.Classic 的卡片底。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#cd000000" />
+    <solid android:color="@color/card_bg_nested" />
     <stroke
-        android:width="2dp"
-        android:color="#77808080" />
-    <corners android:radius="@dimen/card_round" />
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
 </shape>

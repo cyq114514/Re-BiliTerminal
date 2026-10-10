@@ -4,6 +4,7 @@ import com.RobinNotBad.BiliClient.model.ApiResponse;
 import com.RobinNotBad.BiliClient.model.Bangumi;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
@@ -397,6 +398,7 @@ public class BangumiApi {
         public int seasonType;      //季类型（心跳上报 sub_type；0 表示未取到，调用方回退 info.type）
         public String statusDesc;   //该季的选集状态文案（new_ep.desc，如"已完结, 全12话"）
         public long lastEpid;       //该季上次观看的 epid（未登录/无记录为 0）
+        public long lastProgressMs; //该季上次观看位置（毫秒，未登录/无记录为 0；只属于 lastEpid 那一集）
     }
 
     /**
@@ -436,13 +438,48 @@ public class BangumiApi {
                 if (statusRoot.optInt("code") == 0) {
                     JSONObject statusResult = statusRoot.optJSONObject("result");
                     JSONObject progress = statusResult != null ? statusResult.optJSONObject("progress") : null;
-                    if (progress != null) meta.lastEpid = progress.optLong("last_ep_id", 0);
+                    if (progress != null) {
+                        meta.lastEpid = progress.optLong("last_ep_id", 0);
+                        //last_time 是"上次看到的位置(秒)"，与 last_ep_id 严格配对；这里只是缓存原始值，
+                        //真正当续播位置用之前必须确认 last_ep_id 就是目标集（见 getSeasonProgressMs）
+                        long lastTimeSec = progress.optLong("last_time", 0);
+                        if (lastTimeSec > 0) meta.lastProgressMs = lastTimeSec * 1000L;
+                    }
                 }
             } catch (Exception e) {
                 //进度查询失败不影响切季，仅没有"上次看到"定位
             }
         }
         return meta;
+    }
+
+    /**
+     * 季级观看状态里"指定某一集"的播放进度（毫秒；0 表示该集没有观看记录）。
+     *
+     * user/status 的 progress 是"本季最近观看"这一条：last_time 只属于 last_ep_id 那一集。
+     * 因此必须先校验 last_ep_id == 目标 epid 才能把 last_time 当续播位置，否则会把
+     * "上次看的那一集的位置"当成"这次要播的那一集的位置"——表现就是同番剧不同集串进度。
+     */
+    public static long getSeasonProgressMs(long seasonId, long epid) {
+        if (seasonId == 0 || epid == 0) return 0;
+        //未登录时没有观看记录，直接跳过，避免发无谓请求
+        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0) return 0;
+        try {
+            String statusJson = NetWorkUtil.getJson("https://api.bilibili.com/pgc/view/web/season/user/status?season_id=" + seasonId).toString();
+            JSONObject statusRoot = new JSONObject(statusJson);
+            if (statusRoot.optInt("code") != 0) return 0;
+            JSONObject statusResult = statusRoot.optJSONObject("result");
+            JSONObject progress = statusResult != null ? statusResult.optJSONObject("progress") : null;
+            if (progress == null) return 0;
+            if (progress.optLong("last_ep_id", 0) != epid) return 0;
+            long lastTimeSec = progress.optLong("last_time", 0);
+            if (lastTimeSec <= 0) return 0;
+            Logu.d("history-last", "季级状态命中本集 epid=" + epid + " last_time=" + lastTimeSec + "s");
+            return lastTimeSec * 1000L;
+        } catch (Exception e) {
+            Logu.e("history-last", "季级进度查询失败: " + e.getMessage());
+            return 0;
+        }
     }
 
     private static Bangumi.Section buildSection(SectionItem item) {

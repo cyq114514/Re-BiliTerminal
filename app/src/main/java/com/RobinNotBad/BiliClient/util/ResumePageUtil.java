@@ -29,6 +29,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ResumePageUtil {
 
     private static final String KEY_RESUME_STACK = "resume_page_stack";
+    /**
+     * 冷启动恢复链重建页面时携带的标记 extra。
+     * 部分页面（搜索）的可见状态不在 Intent 里，只能凭"这次是恢复"来决定是否重放自己的状态，
+     * 普通新开页面收到这个 extra 也只会忽略，不影响行为。
+     */
+    public static final String EXTRA_RESUME_RESTORE = "_resume_restore";
     //栈深上限：深页面不会无限层叠（用户空间→视频详情→再点UP主→…），限制启动期 startActivity 次数
     private static final int MAX_DEPTH = 6;
 
@@ -129,6 +135,8 @@ public class ResumePageUtil {
                 if (!intent.getComponent().getPackageName().equals(BiliTerminal.context.getPackageName())) continue;
                 BiliTerminal.context.getPackageManager().getActivityInfo(intent.getComponent(), 0);
                 intent.setFlags(0); //不信任序列化进来的 flag，从 Splash 所在任务正常入栈即可
+                //标记"这是恢复出来的页面"：搜索等页面据此重放自己的内存态（结果列表不持久化）
+                intent.putExtra(EXTRA_RESUME_RESTORE, true);
                 intents.add(intent);
             } catch (Exception e) {
                 e.printStackTrace();

@@ -33,6 +33,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.JsonUtil;
 import com.RobinNotBad.BiliClient.util.LinkUrlUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
@@ -66,6 +67,13 @@ public class SearchActivity extends InstanceActivity {
     private int suggestionGeneration;
     private String defaultSearchContent;
     private boolean defaultSearchContentEnabled;
+
+    //搜索结果只存在于内存（Fragment 的列表 + Adapter），页面被系统回收重建时必然丢失；
+    //关键词本身有两条持久化路径：EditText 的 freezesText（savedInstanceState）与搜索历史（SP）。
+    //这里再单独记一个"最后一次真正执行过的搜索词"，供冷启动恢复链重建本页时重放搜索。
+    private static final String PREF_LAST_KEYWORD = "search_last_keyword";
+    private static final String STATE_KEYWORD = "state_search_keyword";
+    private static final String STATE_PAGE = "state_search_page";
 
     boolean tutorial_show;
     String classname;
@@ -118,18 +126,20 @@ public class SearchActivity extends InstanceActivity {
 
             keywordInput.setOnFocusChangeListener((view, b) -> {
                 if (b) {
-                    // 获得焦点时，根据输入内容决定显示历史还是建议
+                    // 获得焦点时，根据输入内容决定显示历史/热搜还是建议。
+                    // 关键词非空时绝不能回退到"历史记录卡"：历史卡/建议卡在布局里与 ViewPager 同位叠放
+                    // （activity_search.xml:21-52），背景 #cd000000 完全不透明，一旦显示就会把搜索结果
+                    // 整个盖住——这正是"搜完点一下输入框、或切后台回来就看不到结果、只看到搜索记录"的根因。
                     String keyword = keywordInput.getText().toString();
-                    if (keyword.isEmpty() || !suggestionsEnabled || searchSuggestions.isEmpty()) {
-                        historyRecyclerview.setVisibility(View.VISIBLE);
-                        if (keyword.isEmpty() && !hotSearchList.isEmpty()) {
-                            showHotSearch();
-                        } else {
-                            suggestionsRecyclerview.setVisibility(View.GONE);
-                        }
-                    } else {
+                    if (keyword.isEmpty()) {
+                        showKeywordPanel();
+                    } else if (!searchSuggestions.isEmpty()) {
                         historyRecyclerview.setVisibility(View.GONE);
                         suggestionsRecyclerview.setVisibility(View.VISIBLE);
+                    } else {
+                        // 关键词非空但没有建议：两张卡片都不许盖在结果上，等用户继续输入再出建议
+                        historyRecyclerview.setVisibility(View.GONE);
+                        suggestionsRecyclerview.setVisibility(View.GONE);
                     }
                 } else {
                     // 失去焦点时隐藏所有列表
@@ -274,12 +284,7 @@ public class SearchActivity extends InstanceActivity {
                             // 输入为空时显示历史记录与热搜词
                             runOnUiThread(() -> {
                                 if (keywordInput.hasFocus()) {
-                                    historyRecyclerview.setVisibility(View.VISIBLE);
-                                    if (!hotSearchList.isEmpty()) {
-                                        showHotSearch();
-                                    } else {
-                                        suggestionsRecyclerview.setVisibility(View.GONE);
-                                    }
+                                    showKeywordPanel();
                                 }
                             });
                         } else {
@@ -324,7 +329,56 @@ public class SearchActivity extends InstanceActivity {
                 keywordInput.setText(getIntent().getStringExtra("keyword"));
                 MsgUtil.showMsg("可点击标题栏返回详情页");
             }
+
+            //结果列表不持久化：页面重建（系统回收后返回）或冷启动恢复链重建本页时，
+            //关键词和历史记录还在、结果却一定是空的。这里重放一次上次的搜索，
+            //避免用户看到"搜索记录在、结果没了，还要再进一次搜索页"。
+            restoreLastSearch(savedInstanceState);
         });
+    }
+
+    /**
+     * 恢复上次的搜索：进程内重建走 savedInstanceState，冷启动恢复链（ResumePageUtil）走 SP。
+     * 只在"确实是恢复场景"时重放——普通新开搜索页不应该自动搜上一次的词。
+     */
+    private void restoreLastSearch(Bundle savedInstanceState) {
+        String restoreKeyword = null;
+        if (savedInstanceState != null) {
+            restoreKeyword = savedInstanceState.getString(STATE_KEYWORD, "");
+            int restorePage = savedInstanceState.getInt(STATE_PAGE, 0);
+            if (restorePage > 0 && restorePage < vpfAdapter.getCount())
+                viewPager.setCurrentItem(restorePage, false);
+        } else if (getIntent() != null
+                && getIntent().getBooleanExtra(ResumePageUtil.EXTRA_RESUME_RESTORE, false)) {
+            restoreKeyword = SharedPreferencesUtil.getString(PREF_LAST_KEYWORD, "");
+        }
+        if (restoreKeyword == null || restoreKeyword.isEmpty()) return;
+        final String keywordToRestore = restoreKeyword;
+        keywordInput.setText(keywordToRestore);
+        //等 ViewPager 把各 tab 的 Fragment 实例化完再重放，否则 update()/refresh() 会落到空引用上
+        viewPager.post(() -> {
+            if (isDestroyed() || isFinishing()) return;
+            searchKeyword(keywordToRestore);
+        });
+    }
+
+    /**
+     * 当前 tab 是否已经有结果。用于"同一个词再搜一次"的去重判断：
+     * 只有结果确实还在时才允许跳过搜索，否则（结果被清空/页面刚重建）点了搜索会毫无反应。
+     */
+    private boolean currentResultsPresent() {
+        if (vpfAdapter == null || viewPager == null) return false;
+        SearchFragment fragment = (SearchFragment) vpfAdapter.getFragment(viewPager.getCurrentItem());
+        if (fragment == null || fragment.recyclerView == null) return false;
+        return fragment.recyclerView.getAdapter() != null
+                && fragment.recyclerView.getAdapter().getItemCount() > 0;
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (keywordInput != null) outState.putString(STATE_KEYWORD, keywordInput.getText().toString());
+        if (viewPager != null) outState.putInt(STATE_PAGE, viewPager.getCurrentItem());
     }
 
     /**输入框为空时把热搜词装进建议列表，卡片首行带"热搜"标题；此时历史卡片让位隐藏
@@ -338,6 +392,20 @@ public class SearchActivity extends InstanceActivity {
         if (!hotSearchList.isEmpty()) {
             historyRecyclerview.setVisibility(View.GONE);
             suggestionsRecyclerview.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * 输入框为空时的浮层选择：有热搜词就用热搜卡，否则用历史记录卡。
+     * 两张卡与结果区同位叠放，任何时刻都只能有一张可见（且只有关键词为空时才允许出现），
+     * 否则不透明底板会把下面的搜索结果盖掉。
+     */
+    private void showKeywordPanel() {
+        if (!hotSearchList.isEmpty()) {
+            showHotSearch();
+        } else {
+            historyRecyclerview.setVisibility(View.VISIBLE);
+            suggestionsRecyclerview.setVisibility(View.GONE);
         }
     }
 
@@ -392,7 +460,7 @@ public class SearchActivity extends InstanceActivity {
                 }
             }
             
-            if (Objects.equals(lastKeyword, str)) {
+            if (Objects.equals(lastKeyword, str) && currentResultsPresent()) {
                 runOnUiThread(() -> {
                     keywordInput.clearFocus();
                     historyRecyclerview.setVisibility(View.GONE);
@@ -400,6 +468,8 @@ public class SearchActivity extends InstanceActivity {
             } else {
                 refreshing = true;
                 lastKeyword = str;
+                //记住最后一次真正执行的搜索词：页面被系统回收重建、或冷启动恢复链重建本页时按它重放搜索
+                SharedPreferencesUtil.putString(PREF_LAST_KEYWORD, str);
 
                 // 搜索记录
                 runOnUiThread(() -> {
@@ -438,7 +508,9 @@ public class SearchActivity extends InstanceActivity {
                 }
 
                 try {
-                    for (int i = 0; i < 4; i++) {
+                    //必须覆盖全部 tab：以前写死 i < 4，1.2.0 新增番剧 tab 后共 5 个，
+                    //直播 tab 永远拿不到关键词，在那个 tab 下搜索必然没结果
+                    for (int i = 0; i < vpfAdapter.getCount(); i++) {
                         SearchFragment fragment = (SearchFragment) vpfAdapter.getFragment(i);
                         if (fragment != null)
                             fragment.update(str);

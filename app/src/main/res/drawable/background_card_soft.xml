@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  嵌套/次级卡片底（评论行的 UP主点赞条、楼中楼卡片等非 MaterialCardView 宿主用）。
+  与主卡片同语言：10dp 圆角 + 0.5dp #363636 描边，底色略实（card_bg_nested）以便在卡片之上分层。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/card_bg_nested" />
+    <stroke
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
+</shape>

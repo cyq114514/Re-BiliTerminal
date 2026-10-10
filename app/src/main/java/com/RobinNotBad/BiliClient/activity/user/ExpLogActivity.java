@@ -14,11 +14,18 @@ import com.RobinNotBad.BiliClient.api.ExpLogApi;
 import com.RobinNotBad.BiliClient.model.ExpLog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.UserLogStore;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class ExpLogActivity extends BaseActivity {
+
+    //本地累积的存储前缀（实际 key 还会带上 mid，见 UserLogStore）
+    private static final String STORE_KEY = "exp_log_history";
 
     private RecyclerView recyclerView;
     private SwipeRefreshLayout swipeRefreshLayout;
@@ -44,15 +51,24 @@ public class ExpLogActivity extends BaseActivity {
 
         CenterThreadPool.run(() -> {
             try {
-                logList = ExpLogApi.getExpLog();
+                List<ExpLog> fresh = ExpLogApi.getExpLog();
+                //接口只返回最近一周（社区文档），没有分页参数，所以用本地累积补历史：
+                //每次打开把新记录并入本地并去重，越用越全
+                JSONArray merged = UserLogStore.merge(STORE_KEY, toJson(fresh));
+                List<ExpLog> show = fromJson(merged);
+                final boolean localHistoryMerged = show.size() > fresh.size();
 
                 runOnUiThread(() -> {
-                    if (logList.isEmpty()) {
+                    if (show.isEmpty()) {
                         MsgUtil.showMsg("暂无经验变化记录");
                         findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
                     } else {
+                        logList.clear();
+                        logList.addAll(show);
                         adapter = new ExpLogAdapter(this, logList);
                         recyclerView.setAdapter(adapter);
+                        if (localHistoryMerged)
+                            MsgUtil.showMsgLong("已合并本机累积的历史记录\n（接口仅提供最近一周，更早记录由本机累积）");
                     }
                     swipeRefreshLayout.setRefreshing(false);
                 });
@@ -60,11 +76,48 @@ public class ExpLogActivity extends BaseActivity {
                 runOnUiThread(() -> {
                     MsgUtil.showMsg("加载失败：" + e.getMessage());
                     swipeRefreshLayout.setRefreshing(false);
-                    findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
+                    //网络失败时本地累积仍然可用，别让页面变成一片空白
+                    List<ExpLog> show = fromJson(UserLogStore.load(STORE_KEY));
+                    if (!show.isEmpty()) {
+                        logList.clear();
+                        logList.addAll(show);
+                        adapter = new ExpLogAdapter(this, logList);
+                        recyclerView.setAdapter(adapter);
+                    } else {
+                        findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
+                    }
                 });
                 e.printStackTrace();
             }
         });
     }
-}
 
+    private static JSONArray toJson(List<ExpLog> list) {
+        JSONArray array = new JSONArray();
+        if (list == null) return array;
+        for (ExpLog log : list) {
+            if (log == null) continue;
+            JSONObject item = new JSONObject();
+            try {
+                item.put("time", log.time);
+                item.put("delta", log.delta);
+                item.put("reason", log.reason);
+            } catch (Exception e) {
+                continue;
+            }
+            array.put(item);
+        }
+        return array;
+    }
+
+    private static List<ExpLog> fromJson(JSONArray array) {
+        List<ExpLog> list = new ArrayList<>();
+        if (array == null) return list;
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject item = array.optJSONObject(i);
+            if (item == null) continue;
+            list.add(new ExpLog(item.optInt("delta", 0), item.optString("time", ""), item.optString("reason", "")));
+        }
+        return list;
+    }
+}

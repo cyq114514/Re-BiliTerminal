@@ -72,8 +72,10 @@ public class PlayerApi {
         @SerializedName("subtitle") public SubtitleInner subtitle;
         @SerializedName("interaction") public InteractionData interaction;
         @SerializedName("view_points") public List<ViewPointData> view_points;
-        //x/player/wbi/v2 同时返回续播进度，与字幕是同一个响应体
+        //x/player/wbi/v2 同时返回续播进度，与字幕是同一个响应体。
+        //last_play_time 只属于 last_play_cid 那一集/那一P，必须成对使用（见 getLastPlayProgress）
         @SerializedName("last_play_time") public long last_play_time;
+        @SerializedName("last_play_cid") public long last_play_cid;
     }
     public static class SubtitleInner {
         @SerializedName("subtitles") public List<SubtitleItem> subtitles;
@@ -190,15 +192,16 @@ public class PlayerApi {
             throw new JSONException("获取番剧播放地址失败");
         playerData.videoUrl = result.result.durl.get(0).url;
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
-        //番剧取流接口(pgc/player/web/playurl)的 result 不返回 last_play_*，续播进度必须单独查询
+        //番剧取流接口(pgc/player/web/playurl)的 result 不返回 last_play_*，续播进度必须单独查询。
+        //必须走集级校验：服务端"本季最近观看"是按季(kid=ssid)维护的，直接采用会把上次看的那一集
+        //的位置塞给本次要播的这一集，表现就是"同一部番剧不同集互相串进度"（详见 getEpisodeProgressMs）
         playerData.cidHistory = playerData.cid;
-        long lastProgress = getLastPlayProgress(playerData.aid, playerData.cid);
-        if (lastProgress <= 0) {
-            //WBI 接口（密钥/风控/未登录）取不到时兜底走观看记录列表，否则续播会永远从 0 开始
-            lastProgress = HistoryApi.findProgressMsByAid(playerData.aid);
-            if (lastProgress > 0)
-                Logu.w("history-last", "WBI 进度不可用，使用观看记录兜底: " + lastProgress + "ms");
-        }
+        long lastProgress = getEpisodeProgressMs(playerData.aid, playerData.cid, playerData.epid, playerData.seasonId);
+        if (lastProgress > 0)
+            Logu.d("history-last", "番剧续播命中 epid=" + playerData.epid + " " + lastProgress + "ms");
+        else
+            Logu.w("history-last", "番剧未取到本集续播进度，从头播放 epid=" + playerData.epid
+                    + " aid=" + playerData.aid + " cid=" + playerData.cid);
         playerData.progress = normalizeProgress(lastProgress, result.result.timelength);
         if (result.result.accept_description != null && result.result.accept_quality != null) {
             playerData.qnStrList = result.result.accept_description.toArray(new String[0]);
@@ -218,15 +221,38 @@ public class PlayerApi {
             String json = NetWorkUtil.getJson(ConfInfoApi.signWBI("https://api.bilibili.com/x/player/wbi/v2?aid=" + aid + "&cid=" + cid)).toString();
             SubtitleLinkData data = GsonUtil.fromJson(json, SubtitleLinkData.class);
             if (data == null || data.data == null) return 0;
-            long lastPlayTime = data.data.last_play_time;
+            //last_play_time 只属于 last_play_cid 那一集/那一P：配对不成立就必须丢弃，
+            //直接采用会把"上一次播的那一集"的位置当成"这一集"的续播位置（集间串进度）
+            long lastPlayTime = adoptLastPlayTime(data.data.last_play_cid, cid, data.data.last_play_time);
             if (lastPlayTime <= 0)
-                Logu.w("history-last", "未取到上次播放进度 aid=" + aid + " cid=" + cid + "（未登录或服务端无记录）");
+                Logu.w("history-last", "未取到本集上次播放进度 aid=" + aid + " cid=" + cid
+                        + "（last_play_cid=" + data.data.last_play_cid + " last_play_time=" + data.data.last_play_time + "）");
             else Logu.d("history-last", "aid=" + aid + " cid=" + cid + " last_play_time=" + lastPlayTime);
             return lastPlayTime;
         } catch (Exception e) {
             Logu.e("history-last", "获取上次播放进度失败: " + e.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * 集级续播进度（毫秒，取不到为 0）。三条来源都必须先证明"进度确实属于这一集"：
+     * 1. 季级状态 pgc/view/web/season/user/status：只有 progress.last_ep_id == epid 时才用 last_time；
+     * 2. x/player/wbi/v2：只有 last_play_cid == cid 时才采纳 last_play_time；
+     * 3. 观看记录兜底：按 cid 精确配对（旧的 aid 单键命中会让同番剧不同集互相串）。
+     * 番剧每个 episode 有独立 aid/cid，集身份用 epid(集) + cid(流) 表达。
+     */
+    public static long getEpisodeProgressMs(long aid, long cid, long epid, long seasonId) {
+        if (epid != 0 && seasonId != 0) {
+            long seasonMs = BangumiApi.getSeasonProgressMs(seasonId, epid);
+            if (seasonMs > 0) return seasonMs;
+        }
+        long wbiMs = getLastPlayProgress(aid, cid);
+        if (wbiMs > 0) return wbiMs;
+        long historyMs = HistoryApi.findProgressMsByCid(cid, aid, true);
+        if (historyMs > 0)
+            Logu.w("history-last", "WBI/季级进度不可用，使用观看记录兜底: " + historyMs + "ms cid=" + cid);
+        return historyMs;
     }
 
     /**
