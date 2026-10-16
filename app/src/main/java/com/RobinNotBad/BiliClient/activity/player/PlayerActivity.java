@@ -127,6 +127,11 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.WebSocket;
 import okio.BufferedSink;
+import com.RobinNotBad.BiliClient.model.ClipInfo;
+import com.RobinNotBad.BiliClient.util.DanmakuTimestampUtil;
+import com.RobinNotBad.BiliClient.util.SegmentSkipController;
+import com.RobinNotBad.BiliClient.util.SegmentSkipMode;
+import master.flame.danmaku.ui.widget.DanmakuTouchHelper;
 import okio.Okio;
 import okio.Sink;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -190,10 +195,65 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private long seasonId = 0;
     private int seasonType = 0;
     private String bvid = "";
+
+    //番剧片头/片尾跳过：片段随取流结果经 Intent 进入，档位来自设置项。
+    //判定挂在既有的 250ms 进度 tick 上（见 progressChange），不新增定时器、不新增网络请求
+    private SegmentSkipController clipSkipController = null;
+    private View clipSkipCard;
+    private TextView clipSkipText;
+    //「仅显示」档位下已经提示过的片段结束位置，避免每个 tick 都弹一次
+    //（volatile：写它的进度 tick 与换清晰度/换P后新建的 Timer 不是同一个线程）
+    private volatile long clipHintShownForMs = -1;
+    //跳过按钮当前是否已显示：只有状态变化时才更新 UI，避免每 250ms 都往主线程投任务
+    private volatile boolean clipCardShown = false;
+
+    //空降弹幕：最近一次弹幕命中回调解析出的目标位置（-1 表示这次没有可跳转的时间点）
+    private long danmakuHitTargetMs = -1;
+
+    //「新版弹幕获取失败」提示只弹一次：downdanmu() 会在每次 onPrepared 上重跑
+    //（换P/换清晰度/重试都会触发），每次都弹就变成"一直弹窗"
+    private boolean danmakuFallbackTipShown = false;
+
+    /**
+     * 空降弹幕的样式：琥珀金 + 「[跳]」前缀 + 字号放大 15%。
+     * 目的是让含时间点的弹幕一眼能从普通弹幕里分出来——否则用户根本不知道该点哪一条。
+     * 颜色选琥珀金而不是应用主题粉：弹幕要压在视频画面上，需要与常见画面色都拉开对比。
+     */
+    private static final BiliProtobufDanmakuParser.TimestampHighlighter AIRBORNE_HIGHLIGHTER =
+            new BiliProtobufDanmakuParser.TimestampHighlighter() {
+                @Override
+                public boolean isTimestamp(String text) {
+                    return DanmakuTimestampUtil.hasTimestamp(text);
+                }
+
+                @Override
+                public int color() {
+                    return 0xFFFFD24D;
+                }
+
+                @Override
+                public String prefix() {
+                    //用纯文本前缀而不是 emoji/箭头符号：minSdk 19 的老设备上 emoji 有渲染成方块的风险
+                    return "[跳]";
+                }
+
+                @Override
+                public float sizeScale() {
+                    return 1.15f;
+                }
+            };
     //周期上报节流：记录上次上报的视频位置，推进超过阈值才再报，避免 250ms tick 打爆接口
     private long lastReportedProgressMs = -1;
     //5 秒与 PiliPlus 一致（它按播放位置每 +5s 发一次心跳），服务端记录更接近"退出那一刻"
     private static final long PROGRESS_REPORT_INTERVAL_MS = 5000;
+    /**
+     * 番剧进度的最小上报位置（秒）。低于它的位置没有续播价值，写上去只会把服务端已有记录覆盖掉。
+     *
+     * <p>这条守卫来自真机诊断日志：攻壳 SAC（整季共享 aid）续播失败 → 从头播 → 用户很快退出 →
+     * 上报 progress=1 把观看记录里原本 691s 的那条覆盖成了 1s，之后连"回落到观看记录"这条
+     * 兜底路径也一起失效，形成不可自愈的循环。不拦的话，任何一次"打开即退出"都会破坏记录。
+     */
+    private static final long MIN_PGC_REPORT_SECONDS = 5;
     //兜底上报（onPause/onStop/onDestroy）去重：记录已上报的秒数，避免三连发写同一个位置
     private long lastReportedProgressSec = -1;
     //未登录只提示一次，否则每隔一个上报周期刷一条日志
@@ -304,6 +364,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         seasonType = intent.getIntExtra("seasonType", 0);
         bvid = intent.getStringExtra("bvid");
         if (bvid == null) bvid = "";
+
+        //片头/片尾片段（取不到就是 null，跳过能力整体不生效）。档位只读一次，
+        //播放页中途改设置不生效，避免一次播放内行为前后不一致
+        java.util.ArrayList<ClipInfo> clipList = intent.getParcelableArrayListExtra("clipInfoList");
+        //按「下标」读，与设置页写入的下标同源；默认档位统一取自 SegmentSkipMode.DEFAULT
+        SegmentSkipMode clipMode = SegmentSkipMode.fromIndex(
+                SharedPreferencesUtil.getInt(SegmentSkipController.KEY_MODE, SegmentSkipMode.defaultIndex()));
+        clipSkipController = new SegmentSkipController(clipList, clipMode);
+        Logu.d("clip-skip", "片段数=" + (clipList != null ? clipList.size() : 0) + " 档位=" + clipMode.label);
 
         progress_history = intent.getIntExtra("progress", 0);
         Logu.d("history", String.valueOf(progress_history));
@@ -497,6 +566,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         btn_auto_next = findViewById(R.id.auto_next_btn);
         btn_quality = findViewById(R.id.button_quality);
         btn_viewpoint = findViewById(R.id.viewpoint_btn);
+        clipSkipCard = findViewById(R.id.clip_skip_card);
+        clipSkipText = findViewById(R.id.clip_skip_text);
+        //手动跳过档位用：点了才跳，不自动干预播放
+        if (clipSkipCard != null) clipSkipCard.setOnClickListener(v -> {
+            if (clipSkipController == null) return;
+            long target = clipSkipController.skipNow(video_now);
+            if (target > 0) {
+                seekToPosition(target);
+                Logu.w("clip-skip", "手动跳过至 " + target + "ms");
+            }
+        });
         seekbar_progress = findViewById(R.id.videoprogress);
         loading_text0 = findViewById(R.id.loading_text0);
         loading_text1 = findViewById(R.id.loading_text1);
@@ -594,6 +674,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
                 // Logu.v("gesture", event.getEventTime() + "");
                 scaleGestureDetector.onTouchEvent(event);
+
+                //空降弹幕：干净的单击命中含时间点的弹幕时跳转，并吞掉这次单击（不切控制层）
+                if (action == MotionEvent.ACTION_UP && !gesture_moved && !gesture_scaled
+                        && tryAirborneDanmaku(event)) {
+                    gesture_click_disabled = true;
+                    return false;
+                }
                 boolean gesture_scaling = scaleGestureListener.scaling;
 
                 if (!gesture_scaled && gesture_scaling)
@@ -684,6 +771,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             layout_control.setOnTouchListener((view, motionEvent) -> {
                 if (doubleTapSeekEnabled && doubleTapGestureDetector != null) {
                     doubleTapGestureDetector.onTouchEvent(motionEvent);
+                }
+                //空降弹幕：同上，这里是不允许缩放时的分支
+                if (motionEvent.getAction() == MotionEvent.ACTION_UP && !gesture_moved && !gesture_scaled
+                        && tryAirborneDanmaku(motionEvent)) {
+                    gesture_click_disabled = true;
+                    return false;
                 }
                 if (motionEvent.getAction() == MotionEvent.ACTION_UP && onLongClick) {
                     onLongClick = false;
@@ -1406,6 +1499,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         video_now_last = video_now;
                         maybeReportProgress();
                         diagReadbackIfNeeded();
+                        maybeSkipClipSegment(video_now);
                         syncDanmakuIfDrifted(video_now);
                         float curr_sec = video_now / 1000f;
                         runOnUiThread(() -> {
@@ -1437,6 +1531,46 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
         };
         progressTimer.schedule(task, 0, 250);
+    }
+
+    /**
+     * 番剧片头/片尾跳过判定，挂在既有的 250ms 进度 tick 上（<b>不新增定时器</b>）。
+     *
+     * <p>片段数据来自取流响应里的 {@code clip_info_list}（B 站官方下发，随响应一次返回），
+     * 因此<b>零新增网络请求</b>，也不依赖任何第三方服务。
+     *
+     * <p>所有 seek 与 UI 更新都 post 到主线程执行，与其他 seek 调用点保持一致。
+     * 跳过目标位置由 {@link SegmentSkipController} 按档位决定，控制器自带冷却
+     * （seek 需要时间才到位，期间 tick 仍会读到区间内旧位置，不冷却会连续 seek 造成抖动）。
+     */
+    private void maybeSkipClipSegment(int positionMs) {
+        final SegmentSkipController controller = clipSkipController;
+        if (controller == null || !controller.isEnabled() || isLiveMode) return;
+        //总时长要等 onPrepared 之后才知道，这里每次 tick 同步一次（幂等、无额外开销）；
+        //控制器用它剔除"结束位置已经超出片长"的脏片段，避免跳过去直接把播放推到结尾
+        if (video_all > 0) controller.setDurationMs(video_all);
+
+        final long target = controller.onTick(positionMs);
+        final ClipInfo manual = controller.manualButtonSegment(positionMs);
+        final ClipInfo hint = controller.showOnlyHint(positionMs);
+        final boolean hintNow = hint != null && hint.endMs() != clipHintShownForMs;
+        if (hintNow) clipHintShownForMs = hint.endMs();
+
+        final boolean wantCard = manual != null;
+        //状态没变化、也没有跳转与提示时直接返回：不给主线程投无意义的任务
+        if (wantCard == clipCardShown && target <= 0 && !hintNow) return;
+        clipCardShown = wantCard;
+
+        runOnUiThread(() -> {
+            if (clipSkipCard != null) clipSkipCard.setVisibility(wantCard ? View.VISIBLE : View.GONE);
+            if (wantCard && manual != null && clipSkipText != null)
+                clipSkipText.setText("跳过" + manual.displayName());
+            if (hintNow && hint != null) MsgUtil.showMsg("即将进入" + hint.displayName() + "（仅显示，不自动跳过）");
+            if (target > 0) {
+                seekToPosition(target);
+                Logu.w("clip-skip", "自动跳过至 " + target + "ms");
+            }
+        });
     }
 
     /**
@@ -1499,10 +1633,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      */
     private void diagReadbackIfNeeded() {
         if (diagReadbackDone || epid == 0) return;
-        if (!SharedPreferencesUtil.getBoolean("diag_readback", true)) return;
+        //默认关：与设置页开关的默认值保持一致（原来这里是 true，导致设置页显示"关闭"
+        //但回读自检实际在跑，白付 4 个额外请求）
+        if (!SharedPreferencesUtil.getBoolean("diag_readback", false)) return;
         if (video_now < 25000) return;
         diagReadbackDone = true;
         final long fAid = aid, fCid = cid, fEpid = epid, fSeasonId = seasonId;
+        final int fSeasonType = seasonType;   //回读必须与取流用同一 season_type，否则非番剧分区会假阴性
         final long playedSec = video_now / 1000;
         CenterThreadPool.run(() -> {
             try {
@@ -1516,7 +1653,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 //v2 取流接口的 watch_progress 是本集自己的位置：它能否读回刚播到的位置，
                 //直接决定下一次打开这一集能不能续播（current_watch_progress 就是续播数据源）
                 PlayerApi.WatchProgress wp = fEpid != 0
-                        ? PlayerApi.queryPgcWatchProgress(fAid, fCid, fEpid, fSeasonId) : null;
+                        ? PlayerApi.queryPgcWatchProgress(fAid, fCid, fEpid, fSeasonId, fSeasonType) : null;
                 boolean v2Landed = wp != null && wp.current_watch_progress > 0;
                 ProgressDiag.log("回读自检", "epid=" + fEpid + " 本次播放位置=" + playedSec + "s"
                         + " → 观看记录=" + historyMs + "ms"
@@ -1536,8 +1673,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * 避免"静默没上报"这种在设备上完全无从排查的故障。
      */
     private boolean canReportProgress() {
-        if (aid == 0 || cid == 0) {
-            Logu.e("进度上报", "跳过：aid/cid 缺失 aid=" + aid + " cid=" + cid);
+        if (cid == 0) {
+            Logu.e("进度上报", "跳过：cid 缺失 cid=0");
+            return false;
+        }
+        //aid 缺失不再一票否决：番剧走的是带 epid/sid 的心跳接口，aid 只是附带字段，
+        //只有"既没有 aid 也没有 epid"时才真的无从定位这条稿件
+        if (aid == 0 && epid == 0) {
+            Logu.e("进度上报", "跳过：aid/epid 均缺失（aid=0 epid=0 cid=" + cid + "）");
             return false;
         }
         //登录态一律以实时 Cookie 为准（本地快照 mid 会因切号/刷新 Cookie 而错位）
@@ -1553,6 +1696,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     private void sendProgressReport(long progressSec, String reason) {
+        //番剧：过小的位置不上报，避免把服务端已有的较大进度覆盖成"刚开头"。
+        //只拦"有值但过小"的情况：PROGRESS_FINISHED(-1) 与 0 仍走各自原有的分支
+        if (epid != 0 && progressSec > 0 && progressSec < MIN_PGC_REPORT_SECONDS) {
+            Logu.w("进度上报", "跳过：番剧位置过小 progress=" + progressSec
+                    + "s（避免覆盖服务端已有记录）");
+            return;
+        }
         final long fAid = aid, fCid = cid, fEpid = epid, fSeasonId = seasonId;
         final int fSeasonType = seasonType;
         final String fBvid = bvid;
@@ -1773,7 +1923,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     bufferedSink.close();
                 }
             }
-            streamDanmaku(danmakuFile.toString(), null);
+            //同 downdanmuNew：这个方法也在后台线程跑，streamDanmaku 必须回主线程
+            runOnUiThread(() -> {
+                try {
+                    streamDanmaku(danmakuFile.toString(), null);
+                } catch (Exception t) {
+                    Logu.e("旧版弹幕", "渲染弹幕失败: " + t);
+                }
+            });
         } catch (Exception e) {
             runOnUiThread(() -> MsgUtil.err(e));
         }
@@ -1799,7 +1956,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 List<DmSegMobileReply> cached = readDanmakuCache(cacheFile);
                 if (cached != null && !cached.isEmpty()) {
                     Logu.d("弹幕缓存", "命中磁盘缓存：" + cached.size() + " 段");
-                    streamDanmaku(null, cached);
+                    streamDanmakuOnUi(cached);
                     return;
                 }
             }
@@ -1818,13 +1975,39 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             Logu.d("新版弹幕", "成功获取 " + downloaded.parsed.size() + " 个弹幕分段");
 
-            streamDanmaku(null, downloaded.parsed);
+            streamDanmakuOnUi(downloaded.parsed);
         } catch (Exception e) {
-            e.printStackTrace();
             Logu.e("新版弹幕", "获取失败: " + e.getMessage() + "，回退到旧版接口");
-            runOnUiThread(() -> MsgUtil.toast("新版弹幕获取失败，使用旧版接口"));
+            //只提示一次（见字段注释）：否则换P/换清晰度/重试都会再弹一遍，看起来像"一直弹窗"
+            if (!danmakuFallbackTipShown) {
+                danmakuFallbackTipShown = true;
+                runOnUiThread(() -> MsgUtil.toast("新版弹幕获取失败，已改用旧版接口"));
+            }
             CenterThreadPool.run(() -> downdanmuOld());
         }
+    }
+
+    /**
+     * 回主线程渲染弹幕。
+     *
+     * <p>downdanmuNew/readDanmakuCache 都在后台线程跑（网络与磁盘 IO），而 streamDanmaku 会直接
+     * 操作 DanmakuView。原来直接调用会抛
+     * {@code Only the original thread that created a view hierarchy can touch its views}，
+     * 被上层的 catch 当成"弹幕获取失败"→ 弹提示 + 白回退一次 XML 下载——而弹幕其实已经拿到了。
+     * 这是"一直弹窗显示切回旧版弹幕"的真正原因，与接口本身无关。
+     *
+     * <p>这里再包一层 try/catch：切到主线程后抛出的异常不再能被 downdanmuNew 的 catch 捕获，
+     * 必须就地兜住，否则会冒到主线程导致崩溃。
+     */
+    private void streamDanmakuOnUi(final List<DmSegMobileReply> segments) {
+        runOnUiThread(() -> {
+            try {
+                streamDanmaku(null, segments);
+            } catch (Exception t) {
+                //只吞 Exception：Error 上抛，避免把 OOM/StackOverflow 伪装成"弹幕渲染失败"
+                Logu.e("新版弹幕", "渲染弹幕失败: " + t);
+            }
+        });
     }
 
     /**
@@ -1927,6 +2110,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             BiliProtobufDanmakuParser parser = new BiliProtobufDanmakuParser();
             parser.sharedPreferences = SharedPreferencesUtil.getSharedPreferences();
             parser.setDanmakuSegments(protobufSegments);
+            //空降弹幕醒目标识：关掉「空降弹幕」开关时置 null，弹幕按服务端原样渲染
+            parser.timestampHighlighter = SharedPreferencesUtil.getBoolean("player_danmaku_airborne", true)
+                    ? AIRBORNE_HIGHLIGHTER : null;
             return parser;
         }
 
@@ -2013,6 +2199,70 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         });
         mDanmakuView.enableDanmakuDrawingCache(true);
         mDanmakuView.prepare(mParser, mContext);
+
+        //空降弹幕：登记点击回调。DFM 早就暴露了它，本应用此前从未注册过。
+        //这里只记录命中弹幕里的时间点，真正的跳转由 tryAirborneDanmaku 在 control_layout 的
+        //触摸链路里触发（原因见该方法注释：弹幕层被控制层盖住，收不到触摸事件）
+        mDanmakuView.setOnDanmakuClickListener(new IDanmakuView.OnDanmakuClickListener() {
+            @Override
+            public void onDanmakuClick(BaseDanmaku latest) {
+                danmakuHitTargetMs = (latest == null || latest.text == null)
+                        ? -1 : DanmakuTimestampUtil.parseTimestampMs(latest.text.toString());
+            }
+
+            @Override
+            public void onDanmakuClick(master.flame.danmaku.danmaku.model.IDanmakus danmakus) {
+                //DFM 的触摸分发走的是单条重载（见 DanmakuTouchHelper.onTouchEvent），这里无需处理
+            }
+        });
+    }
+
+    /**
+     * 空降弹幕：把触摸事件旁路喂给 DFM 的命中检测，点到含时间点的弹幕就跳过去。
+     *
+     * <p>为什么不用 DFM 官方推荐的 {@code setOnDanmakuClickListener} 直接收点击：
+     * 本布局里 sv_danmaku 位于 control_layout 之下，触摸永远先落在 control_layout 上，
+     * 弹幕层根本收不到点击事件。{@link DanmakuTouchHelper#onTouchEvent} 是 public 且
+     * <b>恒返回 false（不消费事件）</b>，所以可以从现有的 control_layout 触摸链路里旁路调用它：
+     * 既不影响原有手势，又能拿到弹幕自己的命中结果与现成的矩形命中算法。
+     *
+     * @return 是否命中了一条带时间点的弹幕（调用方应据此吞掉这次单击）
+     */
+    private boolean tryAirborneDanmaku(MotionEvent event) {
+        if (event == null || mDanmakuView == null || isLiveMode) return false;
+        if (!SharedPreferencesUtil.getBoolean("player_danmaku_airborne", true)) return false;
+
+        danmakuHitTargetMs = -1;
+        try {
+            //坐标必须换算到弹幕层自己的坐标系：两者原点会因父容器/边距不同而错位
+            int[] danmakuPos = new int[2];
+            int[] controlPos = new int[2];
+            //IDanmakuView 只是接口，屏幕坐标要经 View 取（实现类 DanmakuView 本身就是 View）
+            ((View) mDanmakuView).getLocationOnScreen(danmakuPos);
+            layout_control.getLocationOnScreen(controlPos);
+            MotionEvent copy = MotionEvent.obtain(event);
+            try {
+                copy.offsetLocation(controlPos[0] - danmakuPos[0], controlPos[1] - danmakuPos[1]);
+                DanmakuTouchHelper.instance(mDanmakuView).onTouchEvent(copy);
+            } finally {
+                //必须放在 finally：命中检测内部抛异常时这条分支也要回收，
+                //否则每次异常都漏一个 MotionEvent（obtain 池空时要重新分配）
+                copy.recycle();
+            }
+        } catch (Exception e) {
+            //命中检测纯属增强能力，任何异常都不该影响播放。
+            //这里只吞 Exception：Error（OOM/StackOverflow）应当继续上抛，吞掉只会掩盖真实故障
+            Logu.e("danmaku-airborne", "弹幕命中检测失败：" + e);
+            return false;
+        }
+
+        long target = danmakuHitTargetMs;
+        danmakuHitTargetMs = -1;
+        //点在空白处或弹幕里没有时间点时静默返回：随机点一下就弹提示会很吵
+        if (target <= 0) return false;
+        seekToPosition(target);
+        MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((int) (target / 1000)));
+        return true;
     }
 
     public void addDanmaku(String text, int color) {
@@ -2674,6 +2924,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             text_online.setPadding(0, 0, padding * 3, 0);
             text_progress.setPadding(padding * 3, 0, 0, 0);
+
+            //「手动跳过」按钮同样要落在可视圆内：它是该档位下唯一的跳过入口，
+            //漏掉它就会掉进圆角外的触控死角（其余控件都在这里做过内缩）
+            View clipCard = findViewById(R.id.clip_skip_card);
+            if (clipCard != null && clipCard.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+                RelativeLayout.LayoutParams clipParams = (RelativeLayout.LayoutParams) clipCard.getLayoutParams();
+                clipParams.rightMargin = padding * 3;
+                clipParams.bottomMargin = padding * 2;
+                clipCard.setLayoutParams(clipParams);
+            }
 
             bottom_buttons.setPadding(padding, 0, padding, padding);
 

@@ -90,21 +90,60 @@ public class DanmakuApi {
     }
 
     /**
+     * 无签名通道本次运行内已被证明不可用时置位。
+     *
+     * <p>弹幕是逐段串行拉的（1 小时视频约 11 段），如果不记住失败，每段都要先白试一次
+     * 再回退，等于把请求数与等待时间翻倍。
+     */
+    private static volatile boolean plainSegUnavailable = false;
+
+    /** 无签名端点（PiliPlus 的 webDanmaku 口径）。实测真机可用且稳定，作主通道 */
+    private static final String SEG_URL_PLAIN = "https://api.bilibili.com/x/v2/dm/web/seg.so";
+    /** WBI 签名端点，作回退通道 */
+    private static final String SEG_URL_WBI = "https://api.bilibili.com/x/v2/dm/wbi/web/seg.so";
+
+    /**
      * 获取单个分段的原始 protobuf 字节（不解析），供磁盘缓存直接落盘复用。
+     *
+     * <p>两条 protobuf 通道，返回的数据相同，只有前缀与签名方式不同：
+     * <ol>
+     *   <li>{@code /x/v2/dm/web/seg.so}（<b>不需要签名</b>）—— 主通道。这条就是 B站 文档与
+     *       PiliPlus 的 {@code webDanmaku} 用的那个端点；真机日志实测稳定返回 protobuf。</li>
+     *   <li>{@code /x/v2/dm/wbi/web/seg.so}（WBI 签名）—— 回退通道。签名键过期、风控或参数
+     *       不被接受时它会整段失败。</li>
+     * </ol>
+     * 两条 URL 的前缀不同（{@code wbi} 段是签名端点的固有部分），早先的实现把两条写成了同一个
+     * 地址，等于"回退通道"并不存在。
      */
     public static byte[] getVideoDanmakuSegmentBytes(long aid, long cid, int segmentIndex)
             throws IOException, JSONException {
-        String url = "https://api.bilibili.com/x/v2/dm/wbi/web/seg.so?type=1" +
-                "&oid=" + cid +
-                "&pid=" + aid +
-                "&segment_index=" + segmentIndex;
+        String args = "?type=1&oid=" + cid + "&pid=" + aid + "&segment_index=" + segmentIndex;
+        if (!plainSegUnavailable) {
+            try {
+                return fetchSeg(SEG_URL_PLAIN + args, segmentIndex, "无签名");
+            } catch (Exception e) {
+                //只在第一次失败时打日志：后续分段直接走回退通道，不再逐段刷屏
+                plainSegUnavailable = true;
+                Logu.w("新版弹幕API", "无签名通道不可用（" + e.getMessage() + "），本次运行改用 WBI 通道");
+            }
+        }
+        return fetchSeg(ConfInfoApi.signWBI(SEG_URL_WBI + args), segmentIndex, "WBI");
+    }
 
-        // 使用 WBI 签名
-        url = ConfInfoApi.signWBI(url);
-
-        // 发送请求获取 protobuf 数据
+    private static byte[] fetchSeg(String url, int segmentIndex, String channel) throws IOException {
         Response response = NetWorkUtil.get(url, NetWorkUtil.webHeaders);
-        return Objects.requireNonNull(response.body()).bytes();
+        byte[] data = Objects.requireNonNull(response.body()).bytes();
+        if (data.length == 0) {
+            //空响应是"这个分段之后没有弹幕了"的正常表示，上层据此停止翻段。
+            //这里若当成错误，会把正常结束变成异常，还会白试后面的每一个分段并把通道标记为不可用
+            return data;
+        }
+        //真正的错误体是 JSON（以 '{'=0x7B 开头）。直接当 protobuf 解析只会得到空分段，
+        //被上层误判成"这个视频没有弹幕"并静默回退，故障现象会变得非常难查——这里显式判掉
+        if (data[0] == '{') {
+            throw new IOException(channel + " 通道分段 " + segmentIndex + " 返回 JSON 而非 protobuf");
+        }
+        return data;
     }
 
     /**

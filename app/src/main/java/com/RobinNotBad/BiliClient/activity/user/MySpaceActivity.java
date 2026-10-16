@@ -18,6 +18,7 @@ import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.bumptech.glide.Glide;
@@ -162,6 +163,9 @@ public class MySpaceActivity extends InstanceActivity {
                                 SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf);
                                 SharedPreferencesUtil.removeValue(SharedPreferencesUtil.refresh_token);
                                 SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookie_refresh);
+                                //本地凭证已清空，全局请求头必须一起重建，
+                                //否则后续请求还带着已登出的 Cookie 头（残留会话头）
+                                NetWorkUtil.refreshHeaders();
                                 MsgUtil.showMsg("账号已退出");
                                 Intent intent = new Intent(this, LoginActivity.class);
                                 startActivity(intent);

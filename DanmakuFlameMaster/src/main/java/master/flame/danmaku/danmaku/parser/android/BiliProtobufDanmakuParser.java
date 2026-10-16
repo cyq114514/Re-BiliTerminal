@@ -21,6 +21,30 @@ import master.flame.danmaku.danmaku.util.DanmakuUtils;
  */
 public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
 
+    /**
+     * 「空降弹幕」（含可跳转时间点的弹幕）的样式钩子。
+     *
+     * <p>为什么做成外部注入而不是在本模块里直接判断：时间戳解析与开关都在 app 侧
+     * （{@code util/DanmakuTimestampUtil} + SharedPreferences），本模块是被 app 依赖的
+     * 底层库，不能反向依赖 app。由调用方赋值即可，不需要时置 null。
+     */
+    public interface TimestampHighlighter {
+        /** 文本是否含可跳转的时间点 */
+        boolean isTimestamp(String text);
+
+        /** 命中时的文字颜色（含 alpha） */
+        int color();
+
+        /** 命中时给文本加的前缀标识，空串表示不加 */
+        String prefix();
+
+        /** 命中时的字号放大倍数，1.0f 表示不变 */
+        float sizeScale();
+    }
+
+    /** 由 app 侧注入；null 表示不标记 */
+    public TimestampHighlighter timestampHighlighter;
+
     private float mDispScaleX;
     private float mDispScaleY;
     private List<?> mDanmakuSegments; // 存储 DmSegMobileReply 列表
@@ -104,13 +128,30 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
             if (item != null) {
                 item.time = progress;
 
-                DanmakuUtils.fillText(item, content);
+                String displayContent = content;
+                int displayColor = color | 0xFF000000;
+                int displayShadow = displayColor <= Color.BLACK ? Color.WHITE : Color.BLACK;
+                float sizeScale = 1f;
+
+                //空降弹幕：含时间点的弹幕用高亮色 + 前缀标识区分出来，
+                //否则用户根本不知道哪条能点（时间点解析与开关由 app 侧注入）
+                TimestampHighlighter highlighter = timestampHighlighter;
+                if (highlighter != null && highlighter.isTimestamp(content)) {
+                    displayColor = highlighter.color();
+                    //高亮色偏亮，阴影固定用黑色保证在浅色画面上也能看清
+                    displayShadow = Color.BLACK;
+                    sizeScale = highlighter.sizeScale();
+                    String prefix = highlighter.prefix();
+                    if (prefix != null && !prefix.isEmpty()) displayContent = prefix + content;
+                }
+
+                DanmakuUtils.fillText(item, displayContent);
                 item.index = index;
 
-                item.textSize = fontsize * (mDispDensity - 0.6f);
+                item.textSize = fontsize * (mDispDensity - 0.6f) * sizeScale;
 
-                item.textColor = color | 0xFF000000;
-                item.textShadowColor = (color | 0xFF000000) <= Color.BLACK ? Color.WHITE : Color.BLACK;
+                item.textColor = displayColor;
+                item.textShadowColor = displayShadow;
 
                 item.setTimer(mTimer);
             }

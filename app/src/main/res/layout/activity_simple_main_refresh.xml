@@ -18,12 +18,34 @@
             android:layout_alignParentLeft="true"
             android:layout_marginVertical="3dp"
             android:layout_marginStart="8dp"
+            android:layout_marginEnd="52dp"
             android:layout_toStartOf="@id/timeText"
             android:layout_toLeftOf="@id/timeText"
-            android:lines="1"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:text="@string/pagename_default"
             android:textStyle="bold"
             app:drawableStartCompat="@drawable/arrow_down" />
+        <!-- marginEnd 给下面的「刷新」按钮留出固定宽度：标题与按钮都用 layout_toStartOf="@id/timeText"
+             定位，不给标题留白的话长标题会被按钮压住（标题的截断只按 timeText 的位置计算） -->
+
+        <!-- 一键刷新：与下拉刷新等价，并把列表滚回顶部。
+             默认隐藏，只在该页面注册过刷新回调（setOnRefreshListener）后才显示，避免出现点了没反应的死按钮 -->
+        <TextView
+            android:id="@+id/btn_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_toStartOf="@id/timeText"
+            android:layout_toLeftOf="@id/timeText"
+            android:background="?android:attr/selectableItemBackground"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="刷新"
+            android:textSize="13sp"
+            android:visibility="gone" />
 
         <com.RobinNotBad.BiliClient.ui.widget.TextClock
             android:id="@+id/timeText"

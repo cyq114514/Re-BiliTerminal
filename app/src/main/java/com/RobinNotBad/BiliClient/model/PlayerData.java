@@ -38,6 +38,9 @@ public class PlayerData implements Parcelable {
     public long seasonId = 0;  //番剧 ssid（season_id）
     public int seasonType = 0; //剧集副类型，取值同 season_type：1番剧/2电影/3纪录片/4国创/5电视剧/7综艺
     public String bvid = "";   //剧集 bvid（心跳上报的第二种稿件标识；取不到为空串）
+    //片头/片尾片段（取流响应里的 clip_info_list）。属于派生数据：每次取流都会重新填充，
+    //因此不参与 Parcel 序列化，只在本进程内从"取流"传递到"进播放器"这一步
+    public java.util.List<ClipInfo> clipInfoList;
 
     public PlayerData() {
     }
@@ -68,7 +71,11 @@ public class PlayerData implements Parcelable {
         epid = in.readLong();
         seasonId = in.readLong();
         seasonType = in.readInt();
-        bvid = in.readString();
+        //bvid 是心跳上报的第二身份字段，必须保持"非 null 空串"的默认语义：
+        //Parcel.readString() 在写入侧为 null 时会读回 null，直接把字段默认值 "" 破坏掉，
+        //真机日志里表现为 [开播续播] bvid=null、上报体缺 bvid
+        String rawBvid = in.readString();
+        bvid = rawBvid != null ? rawBvid : "";
         // dashData不序列化，下载时会重新获取
     }
 
@@ -111,7 +118,9 @@ public class PlayerData implements Parcelable {
         dest.writeLong(epid);
         dest.writeLong(seasonId);
         dest.writeInt(seasonType);
-        dest.writeString(bvid);
+        //写入侧兜 null：调用方可能把取不到的 bvid 直接赋成 null，
+        //写 null 会让读取侧拿到 null（见构造器里的说明）
+        dest.writeString(bvid != null ? bvid : "");
         // dashData不序列化，下载时会重新获取
     }
 

@@ -529,7 +529,8 @@ public class BangumiApi {
         episode.id = ep.id;
         episode.aid = ep.aid;
         episode.cid = ep.cid;
-        episode.bvid = ep.bvid;
+        //接口缺 bvid 时字段是 null：统一转成空串，避免 null 一路流进 PlayerData 与上报体
+        episode.bvid = ep.bvid != null ? ep.bvid : "";
         episode.cover = ep.cover;
         episode.badge = ep.badge;
         episode.title = ep.title;

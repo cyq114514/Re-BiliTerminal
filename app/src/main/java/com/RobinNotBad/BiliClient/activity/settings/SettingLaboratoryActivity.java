@@ -3,12 +3,12 @@ package com.RobinNotBad.BiliClient.activity.settings;
 import android.annotation.SuppressLint;
 import android.os.Bundle;
 
-import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter;
 import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.util.FileUtil;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import java.util.ArrayList;
@@ -21,8 +21,6 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setPageName("实验室");
-
-        boolean debugBuild = BiliTerminal.isDebugBuild();
 
         final List<SettingSection> sectionList = new ArrayList<>() {
             {
@@ -65,14 +63,32 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
                         getString(R.string.setting_lab_api_retry_max_times), "5"));
 
                 add(new SettingSection("title", "调试", "", "", ""));
+                //以下调试开关一律默认关闭，且与是否 debug 构建无关：
+                //它们会改变应用行为、产生额外请求或本地落盘，普通用户误开只会带来困扰
                 add(new SettingSection("switch", "允许Logu.v", "dev_logv", getString(R.string.setting_lab_logv),
-                        String.valueOf(debugBuild)));
-                add(new SettingSection("switch", "允许Logu.d", "dev_logd", "", String.valueOf(debugBuild)));
-                add(new SettingSection("switch", "允许Logu.i", "dev_logi", "", String.valueOf(debugBuild)));
-                add(new SettingSection("switch", "详细显示数据解析报错", "dev_jsonerr_detailed",
-                        getString(R.string.setting_lab_jsonerr_detailed), String.valueOf(debugBuild)));
-                add(new SettingSection("switch", "详细显示列表报错", "dev_recyclererr_detailed",
-                        getString(R.string.setting_lab_recyclererr_detailed), String.valueOf(debugBuild)));
+                        "false"));
+                add(new SettingSection("switch", "允许Logu.d", "dev_logd", "", "false"));
+                add(new SettingSection("switch", "允许Logu.i", "dev_logi", "", "false"));
+                //把上面三个开关放出来的日志同时写进文件。
+                //存在意义：logcat 在 Android 4.1+ 只能用电脑经 adb 取，第三方应用读不到别的应用的日志；
+                //目标设备是手表/低配机，用户手上不一定有电脑。文件与番剧进度诊断同目录，取一次就够。
+                //用 switch_warn：打开与关闭都要先确认（打开是"别乱开"，关闭是"会删掉本地日志"）
+                add(new SettingSection("switch_warn", "调试日志落文件", Logu.KEY_FILE_LOG,
+                        "日志同时写入 Download/ReBiliDiag/app-log.txt（该目录不可写时退到 "
+                                + "Android/media/<包名>/app-log.txt）。超过 1MB 自动重建，只保留最近一段。"
+                                + "开关切换会立即生效，无需重启应用。",
+                        "false",
+                        new String[]{
+                                "这是开发者用来排查问题的调试开关，普通使用请保持关闭。\n\n"
+                                        + "打开后：应用的运行日志会被持续写入本地文件"
+                                        + "（Download/ReBiliDiag/app-log.txt），"
+                                        + "文件对文件管理器与其他应用可见。\n\n"
+                                        + "确定要打开吗？",
+                                "关闭后会【立即删除】本地已写入的日志文件（app-log.txt），"
+                                        + "已抓到的日志无法恢复。\n\n"
+                                        + "如果还需要这份日志，请先把它复制或发送出去，再回来关闭。\n\n"
+                                        + "确定要关闭吗？"
+                        }));
                 //番剧进度诊断默认关闭：它会额外请求服务端并在设备上写诊断文件，
                 //普通使用没必要承担这份开销与痕迹；排查番剧进度问题时才打开
                 add(new SettingSection("switch", "番剧进度诊断", "diag_readback",

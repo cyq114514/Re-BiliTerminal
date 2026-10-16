@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.activity.base;
 
 import android.os.Bundle;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -65,6 +66,25 @@ public class RefreshMainActivity extends InstanceActivity {
             }
         });
         ImageAutoLoadScrollListener.install(recyclerView);
+
+        //顶栏一键刷新按钮：与下拉刷新等价，另外把列表滚回顶部。
+        //用户诉求原文：推荐流往下翻多了没有想看的内容，得先点别的入口再切回首页才有新内容
+        refreshButton = findViewById(R.id.btn_refresh);
+        if (refreshButton != null) refreshButton.setOnClickListener(v -> triggerRefresh());
+    }
+
+    private View refreshButton;
+    private SwipeRefreshLayout.OnRefreshListener refreshListener;
+
+    /**
+     * 一键刷新：先把列表滚回顶部，再触发与下拉刷新完全相同的回调。
+     * 页面没注册刷新回调时按钮不会显示（见 setOnRefreshListener），因此不存在点了没反应的死按钮。
+     */
+    public void triggerRefresh() {
+        if (refreshListener == null) return;
+        if (recyclerView != null) recyclerView.scrollToPosition(0);
+        swipeRefreshLayout.setRefreshing(true);
+        refreshListener.onRefresh();
     }
 
     public void setAdapter(RecyclerView.Adapter<?> adapter) {
@@ -72,8 +92,11 @@ public class RefreshMainActivity extends InstanceActivity {
     }
 
     public void setOnRefreshListener(SwipeRefreshLayout.OnRefreshListener listener) {
+        refreshListener = listener;
         swipeRefreshLayout.setOnRefreshListener(listener);
         swipeRefreshLayout.setEnabled(true);
+        //注册了刷新回调才露出按钮：没注册的页面点了不会有任何反应
+        if (refreshButton != null) refreshButton.setVisibility(View.VISIBLE);
     }
 
     public void setRefreshing(boolean bool) {

@@ -69,51 +69,100 @@ public class CookieRefreshApi {
         }
     }
 
-    public static boolean refreshCookie(String RefreshCsrf) throws JSONException, IOException {
+    /**
+     * 刷新 Cookie。
+     *
+     * <p>返回 {@link CookieRefreshResult} 而不是 boolean：调用方需要区分「瞬时失败」与
+     * 「服务端判定失效」——前者必须保留本地凭证等待重试，后者才应该清理登录态。
+     *
+     * <p>本方法不再向外抛 JSONException/IOException：所有异常都归类为可重试结果，
+     * 避免调用方把「网络抖动」误当成「登录失效」（这正是掉登录问题的放大器之一）。
+     */
+    public static CookieRefreshResult refreshCookie(String RefreshCsrf) {
         //必须的参数不能为空
-        if (Objects.equals(RefreshCsrf, "")) return false;
-        if (Objects.equals(SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), ""))
-            return false;
+        if (Objects.equals(RefreshCsrf, "")) return CookieRefreshResult.NO_REFRESH_CSRF;
+        String refreshToken = SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "");
+        if (Objects.equals(refreshToken, "")) return CookieRefreshResult.NO_REFRESH_TOKEN;
 
         String cookies_old = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
 
         //请求一个新的cookie
         String url = "https://passport.bilibili.com/x/passport-login/web/cookie/refresh";
-        String args = "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")) + "&refresh_csrf=" + RefreshCsrf + "&source=main_web&refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "");
-        Response response = NetWorkUtil.post(url, args, NetWorkUtil.webHeaders);
-        JSONObject result = new JSONObject(Objects.requireNonNull(response.body()).string());
-        if (result.getInt("code") == 0) {
-            String refreshToken_new = result.getJSONObject("data").getString("refresh_token");
-            //不打印 refresh_token（长期登录凭证）
-
-            String cookies_new = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
-            //不打印新 Cookie（登录凭证）
-
-
-            //使老的Cookie失效
-            int confirmCode = new JSONObject(Objects.requireNonNull(NetWorkUtil.post("https://passport.bilibili.com/x/passport-login/web/confirm/refresh", "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new) + "&refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), NetWorkUtil.webHeaders).body()).string()).getInt("code");
-            if (confirmCode != 0) { //必须要等确认更新Cookie成功，不然就无法完成Cookie的刷新
-                Logu.e("Cookie刷新失败", "确认刷新时返回:" + confirmCode);
-                SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies_old);
-                return false;
-            }
-            SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, refreshToken_new);
-            //DedeUserID 理论上不因刷新而变；新 Cookie 缺失该字段时 parseLong 会抛 NFE 并中断刷新（此时 refresh_token 已更新，状态不一致），改为沿用本地已知的 mid
-            long mid_new;
-            try {
-                mid_new = Long.parseLong(NetWorkUtil.getInfoFromCookie("DedeUserID", cookies_new));
-            } catch (NumberFormatException e) {
-                mid_new = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L);
-            }
-            SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, mid_new);
-            SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new));
-            Logu.v("Cookie刷新成功");
-            NetWorkUtil.refreshHeaders();
-            return true;
-        } else {
-            Logu.e("Cookie刷新失败", "刷新时返回:" + result.getInt("code"));
-            return false;
+        String args = "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", cookies_old)
+                + "&refresh_csrf=" + RefreshCsrf
+                + "&source=main_web"
+                + "&refresh_token=" + refreshToken;
+        JSONObject result;
+        try {
+            Response response = NetWorkUtil.post(url, args, NetWorkUtil.webHeaders);
+            result = new JSONObject(Objects.requireNonNull(response.body()).string());
+        } catch (Exception e) {
+            //网络层失败属瞬时故障：保留全部凭证，下次再试
+            Logu.e("Cookie刷新失败", "刷新请求异常（按可重试处理，保留凭证）");
+            return CookieRefreshResult.NETWORK_ERROR;
         }
+        int refreshCode = result.optInt("code", -1);
+        if (refreshCode != 0) {
+            Logu.e("Cookie刷新失败", "刷新时返回:" + refreshCode);
+            //只有服务端明确否定凭证本身才判为失效；风控(-412)/限流(-509)/服务端错误等都属于可重试
+            if (refreshCode == -101 || refreshCode == -111)
+                return CookieRefreshResult.REFRESH_REJECTED;
+            return CookieRefreshResult.REFRESH_RETRYABLE;
+        }
+
+        JSONObject data = result.optJSONObject("data");
+        String refreshToken_new = data != null ? data.optString("refresh_token", "") : "";
+        //不打印 refresh_token（长期登录凭证）
+
+        String cookies_new = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
+        //不打印新 Cookie（登录凭证）
+
+        //使老的Cookie失效。此处必须用「新的 bili_jct + 旧的 refresh_token」：
+        //新 token 要到下面 putString 才写入，所以这里读到的仍是旧值，与官方流程一致
+        int confirmCode;
+        try {
+            confirmCode = new JSONObject(Objects.requireNonNull(NetWorkUtil.post(
+                    "https://passport.bilibili.com/x/passport-login/web/confirm/refresh",
+                    "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new)
+                            + "&refresh_token=" + refreshToken,
+                    NetWorkUtil.webHeaders).body()).string()).optInt("code", -1);
+        } catch (Exception e) {
+            //确认请求本身失败：旧凭证很可能仍然有效，按可重试处理并回滚，不当成失效
+            Logu.e("Cookie刷新失败", "确认刷新请求异常（按可重试处理）");
+            rollbackCookies(cookies_old);
+            return CookieRefreshResult.CONFIRM_FAILED;
+        }
+        if (confirmCode != 0) { //必须要等确认更新Cookie成功，不然就无法完成Cookie的刷新
+            Logu.e("Cookie刷新失败", "确认刷新时返回:" + confirmCode);
+            rollbackCookies(cookies_old);
+            return CookieRefreshResult.CONFIRM_FAILED;
+        }
+        if (!refreshToken_new.isEmpty())
+            SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, refreshToken_new);
+        //DedeUserID 理论上不因刷新而变；新 Cookie 缺失该字段时 parseLong 会抛 NFE 并中断刷新（此时 refresh_token 已更新，状态不一致），改为沿用本地已知的 mid
+        long mid_new;
+        try {
+            mid_new = Long.parseLong(NetWorkUtil.getInfoFromCookie("DedeUserID", cookies_new));
+        } catch (NumberFormatException e) {
+            mid_new = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L);
+        }
+        SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, mid_new);
+        SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new));
+        Logu.v("Cookie刷新成功");
+        NetWorkUtil.refreshHeaders();
+        return CookieRefreshResult.OK;
+    }
+
+    /**
+     * 把 Cookie 回滚到刷新前的串。
+     * 内存请求头必须一起回滚：只改持久层会让 webHeaders 里的 Cookie 仍是新值，
+     * 之后任何 Set-Cookie 合并都会基于错误的基线，登出/切号时状态更乱。
+     */
+    private static void rollbackCookies(String cookiesOld) {
+        synchronized (CookieRefreshApi.class) {
+            SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookiesOld);
+        }
+        NetWorkUtil.updateWebHeaders();
     }
 
     public static String base16Encode(byte[] src) {

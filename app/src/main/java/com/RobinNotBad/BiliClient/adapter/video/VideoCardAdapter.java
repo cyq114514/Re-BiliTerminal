@@ -75,6 +75,9 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
                                 PlayerData data = new PlayerData(PlayerData.TYPE_BANGUMI);
                                 data.aid = ep.episode.aid;
                                 data.cid = ep.episode.cid;
+                                //bvid 必须带上：番剧心跳是被服务端按 bvid 认稿件的，
+                                //过去这条入口不设 bvid，从观看记录进播放器时上报体里 aid/bvid 只有一个有效
+                                data.bvid = ep.episode.bvid != null ? ep.episode.bvid : "";
                                 data.title = videoCard.title;
                                 data.mid = SharedPreferencesUtil.getLong("mid", 0);
                                 data.epid = videoCard.epid;

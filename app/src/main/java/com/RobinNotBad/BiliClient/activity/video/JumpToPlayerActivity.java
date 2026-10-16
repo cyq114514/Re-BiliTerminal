@@ -64,10 +64,24 @@ public class JumpToPlayerActivity extends BaseActivity {
                 return;
             }
 
+            //内置播放器回传了 progress，就说明它退出时已经自己上报过（force=true 的退出上报）。
+            //这里再报一次是纯粹的重复请求——真机诊断日志里表现为同一秒出现两条参数完全相同、
+            //只有 bvid 不同的上报。更严重的是：看完时播放器上报的是 -1（已看完），
+            //补报会把播放位置再写回去，把"看完"标记冲掉。
+            //只有外部播放器不回传 RESULT_OK／播放器未上报的情况才需要这个兜底。
+            if (returnedByPlayer) {
+                Logu.d("进度回调", "内置播放器已自行上报，跳过兜底补报");
+                finish();
+                return;
+            }
+
             CenterThreadPool.run(() -> {
                 //登录态一律按实时 Cookie 判定：本地快照 mid 在切号/刷新Cookie 后会错位，
                 //过去这里用 playerData.mid != 0 做门槛，错位时会把整条退出上报静默跳过
-                if (!playerData.isLive() && !playerData.isLocal() && NetWorkUtil.isLoggedIn() && playerData.aid != 0) try {
+                //aid 缺失但 epid 存在时仍应上报：番剧走带 epid/sid 的心跳接口，aid 只是附带字段，
+                //用 aid != 0 做硬门槛会把这类剧集的退出补报整条静默跳过（连日志都没有）
+                boolean hasIdentity = playerData.aid != 0 || playerData.epid != 0;
+                if (!playerData.isLive() && !playerData.isLocal() && NetWorkUtil.isLoggedIn() && hasIdentity) try {
                     //番剧必须走带 epid/sid 的心跳接口，否则观看记录不会按番剧维度落库——进度等于没上报
                     if (playerData.isBangumi() && playerData.epid != 0)
                         HistoryApi.reportHistoryPgc(playerData.bvid, playerData.aid, finalCid, playerData.epid,

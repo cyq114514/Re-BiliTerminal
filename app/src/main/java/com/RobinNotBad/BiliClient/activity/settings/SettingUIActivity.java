@@ -6,10 +6,16 @@ import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.TextView;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.util.BackgroundManager;
+import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -18,6 +24,28 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 public class SettingUIActivity extends BaseActivity {
 
     private EditText uiScaleInput, uiPaddingH, uiPaddingV, density_input;
+    private EditText bgDimInput;
+    private SwitchMaterial bgSwitch;
+    private TextView bgImageState;
+
+    //相册选图：minSdk 19 下 GetContent 契约内部走 ACTION_GET_CONTENT，
+    //不做 Uri 持久化授权（老设备上不可靠），拿到后立刻复制并压缩进私有目录
+    private final ActivityResultLauncher<String> bgImagePicker =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri == null) return;
+                MsgUtil.showMsg("正在处理图片…");
+                //用 ApplicationContext：解码+写盘是耗时操作，不持有 Activity 引用
+                CenterThreadPool.run(() -> {
+                    final boolean ok = BackgroundManager.importImage(getApplicationContext(), uri);
+                    runOnUiThread(() -> {
+                        if (ok) SharedPreferencesUtil.putBoolean(BackgroundManager.KEY_ENABLE, true);
+                        if (bgSwitch != null) bgSwitch.setChecked(ok);
+                        updateBgImageState();
+                        MsgUtil.showMsg(ok ? "背景图已设置\n返回其他页面即可看到效果"
+                                : "图片处理失败，换一张再试试");
+                    });
+                });
+            });
 
     @SuppressLint({"MissingInflatedId", "SetTextI18n", "InflateParams"})
     @Override
@@ -77,6 +105,27 @@ public class SettingUIActivity extends BaseActivity {
                 }
             });
 
+            bgSwitch = findViewById(R.id.switch_bg_image);
+            bgSwitch.setChecked(BackgroundManager.isEnabled());
+            bgSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                SharedPreferencesUtil.putBoolean(BackgroundManager.KEY_ENABLE, isChecked);
+                updateBgImageState();
+            });
+
+            bgDimInput = findViewById(R.id.bg_image_dim);
+            bgDimInput.setText(String.valueOf(BackgroundManager.getDim()));
+
+            bgImageState = findViewById(R.id.bg_image_state);
+            updateBgImageState();
+
+            findViewById(R.id.btn_bg_pick).setOnClickListener(view -> bgImagePicker.launch("image/*"));
+            findViewById(R.id.btn_bg_clear).setOnClickListener(view -> {
+                BackgroundManager.clear(SettingUIActivity.this);
+                bgSwitch.setChecked(false);
+                updateBgImageState();
+                MsgUtil.showMsg("已清除背景图\n返回其他页面即可看到效果");
+            });
+
             findViewById(R.id.preview).setOnClickListener(view -> {
                 save();
                 Intent intent = new Intent();
@@ -97,6 +146,10 @@ public class SettingUIActivity extends BaseActivity {
                 round.setChecked(false);
                 SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
                 newUi.setChecked(true);
+                //背景图本身不清除（那是用户自己的图片资产），只把暗度恢复默认
+                SharedPreferencesUtil.putInt(BackgroundManager.KEY_DIM, 30);
+                if (bgDimInput != null) bgDimInput.setText("30");
+                updateBgImageState();
                 MsgUtil.showMsg("恢复完成");
             });
 
@@ -151,6 +204,21 @@ public class SettingUIActivity extends BaseActivity {
             }
         }
 
+        //暗度夹到 0-100：与上面几个输入项同一套宽容口径，越界不报错只是不保存
+        if (bgDimInput != null && !bgDimInput.getText().toString().isEmpty()) {
+            try {
+                int dim = Integer.parseInt(bgDimInput.getText().toString());
+                SharedPreferencesUtil.putInt(BackgroundManager.KEY_DIM, Math.max(0, Math.min(100, dim)));
+            } catch (NumberFormatException e) {
+                Logu.i("bg_dim", "非法输入已忽略：" + bgDimInput.getText().toString());
+            }
+        }
+    }
+
+    /** 刷新背景设置的状态文案：让用户能区分"没启用"和"启用了但还没选图" */
+    private void updateBgImageState() {
+        if (bgImageState == null) return;
+        bgImageState.setText(BackgroundManager.describeState(this));
     }
 
     @Override

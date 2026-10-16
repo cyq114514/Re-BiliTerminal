@@ -13,11 +13,13 @@ import android.widget.RadioButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.HashMap;
@@ -36,6 +38,10 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             put("divider", -1);
             put("title", -2);
             put("switch", 0);
+            //带警告的开关：复用 SwitchHolder，只是在切换时先弹确认。
+            //必须登记进 typeMap —— getItemViewType 直接对 get() 的结果拆箱，
+            //未登记的类型会返回 null 并在这里 NPE
+            put("switch_warn", 0);
             put("choose", 1);
             put("input_int", 2);
             put("input_float", 3);
@@ -134,11 +140,48 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 desc.setVisibility(View.VISIBLE);
             }
             switchMaterial.setText(settingSection.name);
+            final String[] warn = warnMessages(settingSection);
             switchMaterial.setOnCheckedChangeListener(null);
             switchMaterial.setChecked(SharedPreferencesUtil.getBoolean(settingSection.id,
                     Boolean.parseBoolean(settingSection.defaultValue)));
-            switchMaterial.setOnCheckedChangeListener(
-                    (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, isChecked));
+            switchMaterial.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                if (warn == null) {
+                    SharedPreferencesUtil.putBoolean(settingSection.id, isChecked);
+                    return;
+                }
+                showWarnConfirm(settingSection, isChecked, isChecked ? warn[0] : warn[1]);
+            });
+        }
+
+        /**
+         * 「带警告的开关」（type = {@code switch_warn}）：切换前先弹确认，用户取消则不落库。
+         *
+         * <p>提示文案借 {@link SettingSection#extra} 携带：{@code [0]=打开时的警告}、
+         * {@code [1]=关闭时的警告}——两者语义不同（打开是"别乱开"，关闭是"会删掉本地日志"），
+         * 不能只给一句通用文案。
+         */
+        private static String[] warnMessages(SettingSection settingSection) {
+            if (!"switch_warn".equals(settingSection.type)) return null;
+            if (!(settingSection.extra instanceof String[])) return null;
+            String[] arr = (String[]) settingSection.extra;
+            return arr.length >= 2 ? arr : null;
+        }
+
+        private void showWarnConfirm(SettingSection settingSection, boolean target, String message) {
+            new AlertDialog.Builder(itemView.getContext())
+                    .setTitle(settingSection.name)
+                    .setMessage(message == null ? "" : message)
+                    .setPositiveButton("确定", (dialog, which) ->
+                            SharedPreferencesUtil.putBoolean(settingSection.id, target))
+                    .setNegativeButton("取消", null)
+                    .setOnDismissListener(dialog -> {
+                        boolean stored = SharedPreferencesUtil.getBoolean(settingSection.id,
+                                Boolean.parseBoolean(settingSection.defaultValue));
+                        //取消（或返回/点外部关闭）时数据没变，按数据重新渲染一遍把开关拨回去；
+                        //走 bind 而不是直接 setChecked，是为了避免重复维护"摘监听→拨回→装监听"这套顺序
+                        if (stored != target) bind(settingSection);
+                    })
+                    .show();
         }
     }
 
@@ -164,7 +207,27 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 desc.setVisibility(View.VISIBLE);
             }
             name.setText(settingSection.name);
+
+            //动态按钮的清理必须在**每次** bind 的最前面做，对所有选项数都生效。
+            //
+            //这里曾有过一个 P0：清理原先只在多选项路径（bindMulti）里做，而两选项与多选项
+            //共用同一个 holder（typeMap 里都是 0/1，落到同一个 ChooseHolder）。滚动复用时
+            //holder 会从"5 选项项"被拿去绑"2 选项项"，那条路径不清理 → 残留的
+            //MaterialRadioButton 带着上一次的文案与勾选，**闭包里捕获的还是上一次的
+            //settingSection**，点一下就会 putInt(旧 key, 旧 index)，静默改写另一个设置项。
+            //放在早退之前：extra 异常（null/空）时也要清干净，否则同样会留下残留按钮。
+            clearDynamicOptions();
+
             String[] strings = (String[]) settingSection.extra;
+            if (strings == null || strings.length == 0) return;
+
+            if (strings.length > 2) {
+                bindMulti(settingSection, strings);
+                return;
+            }
+
+            //两选项沿用历史的 boolean 存储（chocola=true / vanilla=false）：
+            //既有设置项（显示方式/解码方式/音频输出）已按 boolean 存过值，改语义会把它们读错
             chocola.setText(strings[0]);
             vanilla.setText(strings[1]);
 
@@ -179,6 +242,70 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                     (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, isChecked)); // 有些选项的true和false不能改了，所以交换
             vanilla.setOnCheckedChangeListener(
                     (buttonView, isChecked) -> SharedPreferencesUtil.putBoolean(settingSection.id, !isChecked));
+        }
+
+        /**
+         * 清掉上一次 bind 动态加进来的选项按钮，布局里静态的那两个（chocola/vanilla）保留。
+         *
+         * <p>不能整体 removeAllViews：静态按钮是这个 holder 唯一的承载，被摘掉之后
+         * 再用于两选项的项时就再也显示不出来了。
+         */
+        private void clearDynamicOptions() {
+            //getParent() 返回的是 ViewParent 接口，不能直接当成 View 用
+            if (!(chocola.getParent() instanceof ViewGroup)) return;
+            ViewGroup group = (ViewGroup) chocola.getParent();
+            for (int i = group.getChildCount() - 1; i >= 0; i--) {
+                View child = group.getChildAt(i);
+                if (child != chocola && child != vanilla) group.removeViewAt(i);
+            }
+        }
+
+        /**
+         * 三个及以上选项：用 int 存**选项下标**（{@code defaultValue} 即默认下标）。
+         *
+         * <p>与两选项的 boolean 路径完全独立，各自 key 不重叠，因此互不影响。
+         * 读侧必须同样按下标解读（见 {@code SegmentSkipMode.fromIndex}）——枚举成员声明顺序
+         * 一旦变动，下标语义就变，不能按枚举里的 value 字段反查。
+         */
+        private void bindMulti(SettingSection settingSection, String[] strings) {
+            ViewGroup group = (ViewGroup) chocola.getParent();
+            //动态按钮已由 bind() 统一清理（含两选项与 extra 异常两条路径），此处不再重复
+
+            int current;
+            try {
+                current = Integer.parseInt(settingSection.defaultValue);
+            } catch (NumberFormatException e) {
+                current = 0;
+            }
+            current = SharedPreferencesUtil.getInt(settingSection.id, current);
+            if (current < 0 || current >= strings.length) current = 0;
+
+            chocola.setOnCheckedChangeListener(null);
+            vanilla.setOnCheckedChangeListener(null);
+            chocola.setText(strings[0]);
+            vanilla.setText(strings[1]);
+            chocola.setChecked(current == 0);
+            vanilla.setChecked(current == 1);
+
+            chocola.setOnCheckedChangeListener((v, checked) -> {
+                if (checked) SharedPreferencesUtil.putInt(settingSection.id, 0);
+            });
+            vanilla.setOnCheckedChangeListener((v, checked) -> {
+                if (checked) SharedPreferencesUtil.putInt(settingSection.id, 1);
+            });
+
+            for (int i = 2; i < strings.length; i++) {
+                MaterialRadioButton btn = new MaterialRadioButton(group.getContext());
+                btn.setText(strings[i]);
+                btn.setTextColor(desc.getCurrentTextColor());
+                btn.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, chocola.getTextSize());
+                btn.setChecked(i == current);
+                final int index = i;
+                btn.setOnCheckedChangeListener((v, checked) -> {
+                    if (checked) SharedPreferencesUtil.putInt(settingSection.id, index);
+                });
+                group.addView(btn);
+            }
         }
     }
 

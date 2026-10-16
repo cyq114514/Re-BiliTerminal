@@ -7,6 +7,8 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter;
 import com.RobinNotBad.BiliClient.model.SettingSection;
+import com.RobinNotBad.BiliClient.util.SegmentSkipController;
+import com.RobinNotBad.BiliClient.util.SegmentSkipMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +49,17 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
 
                 add(new SettingSection("divider", "", "", "", ""));
 
+                //片头/片尾时间点由 B 站官方接口随取流一起下发（clip_info_list），不依赖第三方服务
+                //默认档位取自 SegmentSkipMode.DEFAULT（当前是「手动跳过」），
+                //defaultValue 与读侧共用同一个来源，避免两处漂移
+                add(new SettingSection("choose", "番剧片头/片尾跳过", SegmentSkipController.KEY_MODE,
+                        "只对番剧生效。总是跳过会直接跳到片段结束；跳过一次在你手动拖回去后不再跳；"
+                                + "手动跳过会在片段区间内显示一个跳过按钮；仅显示只提示不跳",
+                        String.valueOf(SegmentSkipMode.defaultIndex()),
+                        SegmentSkipMode.labels()));
+
+                add(new SettingSection("divider", "", "", "", ""));
+
                 add(new SettingSection("choose", "显示方式", "player_display",
                         getString(R.string.desc_display),
                         String.valueOf(Build.VERSION.SDK_INT < 26),
@@ -70,6 +83,9 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                         getString(R.string.desc_danmaku_force_r2l), "false"));
                 add(new SettingSection("switch", "显示直播弹幕发送者", "player_danmaku_showsender",
                         getString(R.string.desc_danmaku_showsender), "true"));
+                //空降弹幕：点击带时间点的弹幕直接跳到该位置
+                add(new SettingSection("switch", "空降弹幕", "player_danmaku_airborne",
+                        "点击弹幕里带时间点的内容（如「空降05:30」）可直接跳到该位置", "true"));
                 add(new SettingSection("input_int", "弹幕最大行数", "player_danmaku_maxline", "", "15"));
                 add(new SettingSection("input_float", "弹幕字号大小", "player_danmaku_size", "", "0.7"));
                 add(new SettingSection("input_float", "弹幕不透明度", "player_danmaku_transparency", "",

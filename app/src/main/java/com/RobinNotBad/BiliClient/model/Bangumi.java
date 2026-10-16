@@ -102,7 +102,8 @@ public class Bangumi {
             PlayerData data = new PlayerData(PlayerData.TYPE_BANGUMI);
             data.aid = aid;
             data.cid = cid;
-            data.bvid = bvid;
+            //接口不返回 bvid 时字段是 null，不能让 null 污染 PlayerData（见其 Parcel 说明）
+            data.bvid = bvid != null ? bvid : "";
             data.title = title;
             //mid 只作兜底：上报/读取都以实时 Cookie 派生为准（见 NetWorkUtil.getLoginMid）
             data.mid = SharedPreferencesUtil.getLong("mid", 0);

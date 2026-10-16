@@ -20,6 +20,7 @@
             android:textSize="14sp" />
 
         <RadioGroup
+            android:id="@+id/setting_choose_group"
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 

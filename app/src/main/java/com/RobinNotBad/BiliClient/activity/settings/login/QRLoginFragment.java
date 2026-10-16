@@ -19,15 +19,11 @@ import androidx.fragment.app.Fragment;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.SplashActivity;
-import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.api.CookiesApi;
 import com.RobinNotBad.BiliClient.api.LoginApi;
-import com.RobinNotBad.BiliClient.util.AccountManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
-import com.RobinNotBad.BiliClient.util.NetWorkUtil;
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.google.android.material.card.MaterialCardView;
 
 import org.json.JSONException;
@@ -217,33 +213,15 @@ public class QRLoginFragment extends Fragment {
                         case 0:
                             this.cancel();
                             CenterThreadPool.runOnUiThread(() -> scanStat.setText("正在处理登录……"));
-                            String cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
 
-                            SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, Long.parseLong(NetWorkUtil.getInfoFromCookie("DedeUserID", cookies)));
-                            SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies));
-                            SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, loginJson.getJSONObject("data").getString("refresh_token"));
-
-                            SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.cookie_refresh, true);
-
-                            //不再打印 Cookie 与 refresh_token：原生 Log 不受日志开关控制，release 也会输出，
-                            //会被任何能读 logcat 的环境（USB 调试的电脑、旧 ROM 上的其他应用）抓走登录态
-                            InstanceActivity instance = BiliTerminal.getInstanceActivityOnTop();
-                            if (instance != null && !instance.isDestroyed()) instance.finish();
-
-                            NetWorkUtil.refreshHeaders();
-
-                            LoginApi.requestSSOs();
-                            if (loginJson.getJSONObject("data").has("url")) {
-                                //跨域登出通知（SSO）：响应体用不到，但必须关闭连接
-                                try (Response ssoResponse = NetWorkUtil.get(loginJson.getJSONObject("data").optString("url"))) {
-                                } catch (Throwable ignored) {
-                                }
-                            }
-
-                            //多账号：凭证全部落盘后快照进账号列表（内部有网络请求，丢到线程池避免拖慢跳转）
-                            CenterThreadPool.run(AccountManager::saveCurrentAccount);
-
-                            startActivity(new Intent(requireContext(), SplashActivity.class));
+                            //统一走登录收尾：refresh_token 的双结构兜底、字符串 "null" 过滤、
+                            //换号残留清理、主线程跳转都在 LoginApi.finishLogin 里，扫码不再自己写一份。
+                            //修复前这份自写逻辑只认 data.refresh_token 且用 getString，
+                            //一旦在写 refresh_token 那一步抛异常，前面写入的 mid/csrf 已经生效，
+                            //就留下「看着已登录、其实没有续期凭据」的半登录态，Cookie 到期即掉登录。
+                            //（不再打印 Cookie 与 refresh_token：原生 Log 不受日志开关控制，release 也会输出）
+                            LoginApi.finishLogin(isAdded() ? requireContext() : BiliTerminal.context,
+                                    loginJson.optJSONObject("data"));
 
                             if (isAdded()) requireActivity().finish();
                             break;

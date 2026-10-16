@@ -1,8 +1,11 @@
 package com.RobinNotBad.BiliClient.api;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
@@ -10,6 +13,7 @@ import com.RobinNotBad.BiliClient.activity.SplashActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.util.AccountManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.QRCodeUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -147,18 +151,26 @@ public class LoginApi {
 
     /**
      * 登录成功后的统一收尾：从已落盘的Cookies提取身份信息、保存凭证、刷新全局请求头并回到启动页。
-     * 与扫码登录(QRLoginFragment)使用同一套落盘逻辑。
      *
-     * @param context   跳转用的上下文
+     * <p>扫码登录与密码/短信登录都走这一个出口。修复前扫码路径自己写了一整套落盘逻辑，
+     * 两边口径不一致：扫码只认 {@code data.refresh_token}、且用 getString（字段缺失会抛异常、
+     * 值为 JSON null 时会写入字符串 "null"），一旦在写 refresh_token 那一步失败，
+     * 前面写入的 mid/csrf 已经生效，就留下「看着已登录、其实没有续期凭据」的半登录态，
+     * 此后每次刷新检查都会因凭据为空而静默跳过，Cookie 到期即掉登录。
+     *
+     * @param context   跳转用的上下文（可在任意线程调用，跳转会切回主线程）
      * @param loginData 登录接口返回的 data 对象，可为 null
      */
     public static void finishLogin(Context context, JSONObject loginData) {
-        String cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
+        long previousMid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0);
 
+        String cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
         String midStr = NetWorkUtil.getInfoFromCookie("DedeUserID", cookies);
+        long loggedInMid = previousMid;
         if (!TextUtils.isEmpty(midStr)) {
             try {
-                SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, Long.parseLong(midStr));
+                loggedInMid = Long.parseLong(midStr);
+                SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, loggedInMid);
             } catch (NumberFormatException ignored) {
                 //Cookie里的DedeUserID异常时不覆盖原有mid，避免写入脏数据
             }
@@ -166,14 +178,18 @@ public class LoginApi {
         SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies));
 
         //refresh_token 存在新旧两种返回结构，两种都要兜住
-        String refreshToken = "";
-        if (loginData != null) {
-            JSONObject tokenInfo = loginData.optJSONObject("token_info");
-            if (tokenInfo != null) refreshToken = tokenInfo.optString("refresh_token", "");
-            if (TextUtils.isEmpty(refreshToken)) refreshToken = loginData.optString("refresh_token", "");
-        }
-        if (!TextUtils.isEmpty(refreshToken))
+        String refreshToken = extractRefreshToken(loginData);
+        if (!TextUtils.isEmpty(refreshToken)) {
             SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, refreshToken);
+        } else if (previousMid != 0 && loggedInMid != previousMid) {
+            //换号登录却没拿到新 token：本地残留的是上一个账号的凭据，
+            //留着会拿它去给错误的账号续期，必须清掉
+            SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, "");
+            Logu.e("login", "换号登录未携带 refresh_token，已清空旧账号残留凭据");
+        } else {
+            //只记事实不记凭证内容：自动续期能力将不可用，由 CookieRefresher 负责提示用户
+            Logu.e("login", "登录响应未携带 refresh_token，自动续期将不可用");
+        }
 
         SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.cookie_refresh, true);
         SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.setup, true);
@@ -199,7 +215,40 @@ public class LoginApi {
         //多账号：凭证全部落盘后快照进账号列表（内部有网络请求，丢到线程池避免拖慢跳转）
         CenterThreadPool.run(AccountManager::saveCurrentAccount);
 
-        context.startActivity(new Intent(context, SplashActivity.class));
+        startSplash(context);
+    }
+
+    /**
+     * 取出登录响应里的 refresh_token，兼容 {@code data.refresh_token}（扫码）与
+     * {@code data.token_info.refresh_token}（密码/短信）两种结构。
+     *
+     * <p>不能用 optString 的默认值来兜 JSON null：org.json 的 optString 遇到 JSONObject.NULL
+     * 会返回字符串 "null"，会被当成有效凭据写进本地，让后续的 isEmpty() 守卫失效。
+     */
+    private static String extractRefreshToken(JSONObject loginData) {
+        if (loginData == null) return "";
+        String token = "";
+        JSONObject tokenInfo = loginData.optJSONObject("token_info");
+        if (tokenInfo != null) token = tokenInfo.optString("refresh_token", "");
+        if (isBlankToken(token)) token = loginData.optString("refresh_token", "");
+        return isBlankToken(token) ? "" : token;
+    }
+
+    private static boolean isBlankToken(String token) {
+        return TextUtils.isEmpty(token) || "null".equals(token);
+    }
+
+    /** 跳回启动页。调用方可能在轮询线程等非 UI 线程上，必须切回主线程再 startActivity。 */
+    private static void startSplash(Context context) {
+        if (context == null) return;
+        Intent intent = new Intent(context, SplashActivity.class);
+        //非 Activity 上下文必须带 NEW_TASK，否则直接抛 AndroidRuntimeException
+        if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            context.startActivity(intent);
+        } else {
+            new Handler(Looper.getMainLooper()).post(() -> context.startActivity(intent));
+        }
     }
 
 }

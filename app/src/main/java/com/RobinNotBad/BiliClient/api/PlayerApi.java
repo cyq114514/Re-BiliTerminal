@@ -13,6 +13,7 @@ import com.RobinNotBad.BiliClient.activity.player.PlayerActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity;
 import com.RobinNotBad.BiliClient.model.ApiResponse;
+import com.RobinNotBad.BiliClient.model.ClipInfo;
 import com.RobinNotBad.BiliClient.model.DashAudioStream;
 import com.RobinNotBad.BiliClient.model.DashData;
 import com.RobinNotBad.BiliClient.model.DashVideoStream;
@@ -60,6 +61,9 @@ public class PlayerApi {
         @SerializedName("timelength") public long timelength;
         @SerializedName("accept_description") public List<String> accept_description;
         @SerializedName("accept_quality") public List<Integer> accept_quality;
+        //官方下发的片头/片尾片段（实测路径 result.video_info.clip_info_list）。
+        //v1/v2 的流信息都是这个模型，因此两条路径都能拿到，不需要额外请求
+        @SerializedName("clip_info_list") public List<ClipInfo> clip_info_list;
     }
 
     public static class DurlItem {
@@ -103,10 +107,17 @@ public class PlayerApi {
      * {@code pgc/view/web/season/user/status} 里是 {@code last_time=421}（秒）——
      * 两个接口的同名字段单位不同，不能互相套用）。
      *
-     * <p>{@code current_watch_progress}：**本次请求的这一集**自己的续播位置，PiliPlus 直接拿它当起播位置。
-     * 它确实是按集保存的：诊断里第 16 话一直返回 683000/937000，而同期季级记录已经是第 15 话的 624000/1000
-     * ——即"服务端只留最近一集"的说法只对 {@code last_ep_id/last_time} 成立，
-     * 每集各自的位置服务端都留着，因此不需要任何本地记录。
+     * <p><b>{@code current_watch_progress} 的"集级"语义只在"每集有独立 aid"的番剧上成立。</b>
+     * 早期注释曾据 season 1178（CLANNAD，每集 aid 各不相同）断言"服务端按集保存、不需要本地记录"，
+     * 该结论对 season 1564（攻壳 SAC，**整季共享 aid=135433**）不成立——真机日志场景：
+     * 打开 ep28960 返回 {@code current=687000}；打开 ep28961 后返回 {@code current=0, last_ep_id=28960}；
+     * 再打开 ep28960 时变成 {@code current=0, last_ep_id=28961}
+     * ——即这类番剧的 {@code current_watch_progress} 实际是"本季最近一集"的位置，切集后先前那集会被清零。
+     *
+     * <p>因此判断"本集有没有记录"不能只看 {@code watchProgress != null}，
+     * 必须配合 {@code last_ep_id == 本集 epid} 才成立（见 {@link #getEpisodeProgressMs}）。
+     * 对这类番剧，唯一可靠的按集数据源是观看记录 {@code x/web-interface/history/cursor}，
+     * 其条目带 epid/cid，能精确区分同季的不同集。
      */
     public static class WatchProgress {
         @SerializedName("current_watch_progress") public long current_watch_progress;
@@ -242,9 +253,14 @@ public class PlayerApi {
      */
     public static void getBangumi(PlayerData playerData) throws IOException, JSONException {
         String session = ToolsUtil.md5(String.valueOf(System.currentTimeMillis() - SystemClock.currentThreadTimeMillis()));
+        //season_type 用调用方带来的真实值：硬编码 1 在「国创/电视剧/综艺」等分区会让服务端
+        //按错误的剧集类型取流，可能干脆不返回 play_view_business_info.user_status.watch_progress，
+        //集级续播的第 1 层会直接失效。没有真实值时仍兜底为 1（番剧），与修复前行为一致
+        int realSeasonType = playerData.seasonType != 0 ? playerData.seasonType : 1;
         NetWorkUtil.FormData params = new NetWorkUtil.FormData().setUrlParam(true)
                 .put("aid", playerData.aid).put("cid", playerData.cid).put("fnval", 1).put("fnver", 0)
-                .put("qn", playerData.qn).put("season_type", 1).put("session", session).put("platform", "pc");
+                .put("qn", playerData.qn).put("season_type", realSeasonType)
+                .put("session", session).put("platform", "pc");
         //番剧进度是按集(ep_id)保存的，请求必须带上目标集；season_id 用于兜底查季级状态
         if (playerData.epid != 0) params.put("ep_id", playerData.epid);
         if (playerData.seasonId != 0) params.put("season_id", playerData.seasonId);
@@ -303,6 +319,8 @@ public class PlayerApi {
         playerData.videoUrl = stream.durl.get(0).url;
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
         playerData.cidHistory = playerData.cid;
+        //片头/片尾片段：随取流响应一起下发，直接交给播放器做跳过判定（派生的展示数据，取不到就是 null）
+        playerData.clipInfoList = stream.clip_info_list;
         ProgressDiag.log("服务端进度", "epid=" + playerData.epid + "/服务端=" + confirmedEpid
                 + " v2 watch_progress=" + describeWatchProgress(watchProgress)
                 + " timelength=" + stream.timelength);
@@ -334,11 +352,21 @@ public class PlayerApi {
 
     /** 只回读 v2 取流接口的 watch_progress（诊断用：确认本集进度有没有真的落库，不参与播放决策）。 */
     public static WatchProgress queryPgcWatchProgress(long aid, long cid, long epid, long seasonId) {
+        return queryPgcWatchProgress(aid, cid, epid, seasonId, 0);
+    }
+
+    /**
+     * 同上，可指定真实 season_type。
+     * 回读必须与取流用同一组参数，否则在非番剧分区（国创/电视剧/综艺）上会出现
+     * "取流拿得到进度、自检却说没落库"的假阴性。
+     */
+    public static WatchProgress queryPgcWatchProgress(long aid, long cid, long epid, long seasonId, int seasonType) {
         try {
             String session = ToolsUtil.md5(String.valueOf(System.currentTimeMillis() - SystemClock.currentThreadTimeMillis()));
             NetWorkUtil.FormData params = new NetWorkUtil.FormData().setUrlParam(true)
                     .put("aid", aid).put("cid", cid).put("fnval", 1).put("fnver", 0).put("qn", 32)
-                    .put("season_type", 1).put("session", session).put("platform", "pc");
+                    .put("season_type", seasonType != 0 ? seasonType : 1)
+                    .put("session", session).put("platform", "pc");
             if (epid != 0) params.put("ep_id", epid);
             if (seasonId != 0) params.put("season_id", seasonId);
             PgcPlayUrlResult v2 = GsonUtil.fromJson(
@@ -474,13 +502,25 @@ public class PlayerApi {
         }
 
         //4. 观看记录里这一集自己的条目（全身份命中）。
-        //   只有 v2 没给出集级进度（v1 回退/字段缺失）时才值得扫：v2 响应有效时，
-        //   观看记录里本季的 pgc 条目就是"季级那一条"——它若属于本集，第 1/2 层早就命中了；
-        //   属于别集的话扫描也不可能命中本集（审计 P2-1：第一次看新集时白扫 5 页、白等 2 秒）。
-        if (watchProgress != null) {
-            ProgressDiag.log("续播结果", "v2 已明确本集无记录（current="
-                    + watchProgress.current_watch_progress + "），跳过观看记录扫描");
+        //
+        //   关键修复：不能用「v2 返回了 watch_progress 对象」当作「本集已有记录」。
+        //   真机诊断日志（season 1564 整季共享 aid=135433）证实：服务端对这类番剧的
+        //   current_watch_progress 语义是「本季最近观看的那一集」，切到别的集后先前那集会被清零——
+        //   此时 watch_progress 对象仍然存在（只是 current=0、last_ep_id 指向别的集），
+        //   若据此跳过扫描，就把唯一按 epid/cid 分集的观看记录源丢掉了，
+        //   表现为「只有最近一集能续播、其它集一律从头播」。
+        //
+        //   真正的「本集无记录」只在「本集就是本季最近一集、服务端仍说没有位置」时成立。
+        //   注意第 1 层因位置越界被丢弃（adopted 归零）时 current 仍 > 0，这里同样不该跳过扫描。
+        boolean serverConfirmsNoRecordForThisEp = watchProgress != null
+                && watchProgress.current_watch_progress <= 0
+                && epid != 0
+                && watchProgress.last_ep_id == epid;
+        if (serverConfirmsNoRecordForThisEp) {
+            ProgressDiag.log("续播结果", "服务端确认本集无记录（本集即最近一集且 current=0），跳过观看记录扫描");
         } else {
+            //扫描只在第 1/2/3 层全部未命中时才会走到，页数上限沿用 LOCATE_MAX_PAGES；
+            //命中的记录通常就在第一页（刚上报的那条一定在最前），深度扫描只在"很久没看这一集"时发生
             long historyMs = HistoryApi.findEpisodeProgressMs(cid, aid, epid);
             if (historyMs > 0) {
                 ProgressDiag.log("续播结果", "采用观看记录: " + historyMs + "ms");
@@ -551,6 +591,11 @@ public class PlayerApi {
                 intent.putExtra("epid", playerData.epid).putExtra("seasonId", playerData.seasonId).putExtra("seasonType", playerData.seasonType);
                 if (playerData.bvid != null && !playerData.bvid.isEmpty())
                     intent.putExtra("bvid", playerData.bvid);
+                //片头/片尾片段随取流结果一起带进播放器。
+                //只对内置播放器传：外部播放器有自己的跳过能力，也无从读取本应用的参数
+                if (playerData.clipInfoList != null && !playerData.clipInfoList.isEmpty())
+                    intent.putParcelableArrayListExtra("clipInfoList",
+                            new ArrayList<>(playerData.clipInfoList));
                 if (playerData.qnStrList != null && playerData.qnValueList != null) { intent.putExtra("qnStrList", playerData.qnStrList).putExtra("qnValueList", playerData.qnValueList).putExtra("currentQuality", playerData.qn); }
                 if (playerData.pagenames != null && playerData.cids != null && playerData.pagenames.size() > 1) {
                     intent.putStringArrayListExtra("pagenames", playerData.pagenames);

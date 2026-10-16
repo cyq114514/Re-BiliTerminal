@@ -33,6 +33,7 @@ import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
+import com.RobinNotBad.BiliClient.util.BackgroundManager;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -146,8 +147,11 @@ public class BaseActivity extends AppCompatActivity {
     }
 
     private void installAmbient() {
-        if (!ambientEnabled()) return;
         ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        //自定义背景底图优先：装上了就不再叠氛围层，
+        //否则用户自己的图会被那层粉色氛围整体染色，等于白设
+        if (BackgroundManager.install(this, decor)) return;
+        if (!ambientEnabled()) return;
         if (decor.getChildAt(0) instanceof AmbientBackground) return;
         ambientBackground = new AmbientBackground(this);
         ambientBackground.setMode(SharedPreferencesUtil.getBoolean("player_ui_round", false)
@@ -217,6 +221,19 @@ public class BaseActivity extends AppCompatActivity {
                         pnParams.bottomMargin = (int) (window_height * 0.01);
                         pagename.setLayoutParams(pnParams);
                         pagename.setPadding(0, 0, ToolsUtil.dp2px(5), 0);
+
+                        //顶栏上的「刷新」按钮也必须重排：它原本靠 layout_toStartOf="@id/timeText" 定位，
+                        //而圆屏下时钟被居中，按钮会跟着落到屏幕中间、正好压住同样居中的标题。
+                        //圆屏下标题左右各留 18% 内边距（上面的 paddingH），那片区域是空的，
+                        //把按钮对齐到父容器左侧并垂直居中即可既落在可视圆内、又不遮字
+                        View btnRefresh = findViewById(R.id.btn_refresh);
+                        if (btnRefresh != null) {
+                            RelativeLayout.LayoutParams brParams = new RelativeLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                            brParams.addRule(RelativeLayout.ALIGN_PARENT_START);
+                            brParams.addRule(RelativeLayout.CENTER_VERTICAL);
+                            btnRefresh.setLayoutParams(brParams);
+                        }
                         Logu.d("round", "ok");
                     }
                 } catch (Throwable e) {

@@ -267,6 +267,11 @@ public class UserInfoApi {
         String json = NetWorkUtil.getJson(url).toString();
         ApiResponse<MyInfoData> resp = GsonUtil.fromJson(json,
                 new com.google.gson.reflect.TypeToken<ApiResponse<MyInfoData>>(){}.getType());
+        if (resp != null && resp.code == -101) {
+            //服务端明确回「账号未登录」：这是登录态可能已失效的权威信号，
+            //顺手触发一次带自节流的续期尝试（只尝试续期，不会因此清空本地凭证）
+            CookieRefresher.notifyAuthFailure("space/myinfo");
+        }
         if (resp == null || !resp.isSuccess() || resp.data == null)
             return new UserInfo(0, "加载失败", "", "", 0, 0, 0, false, "", 0, "", 0);
 

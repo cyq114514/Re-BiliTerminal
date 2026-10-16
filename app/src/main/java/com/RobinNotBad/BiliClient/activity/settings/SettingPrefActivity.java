@@ -7,6 +7,7 @@ import android.util.Log;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter;
+import com.RobinNotBad.BiliClient.api.RecommendApi;
 import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
@@ -34,6 +35,9 @@ public class SettingPrefActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "默认搜索内容", SharedPreferencesUtil.SEARCH_DEFAULT_CONTENT_ENABLE,
                         getString(R.string.desc_search_default_content_enable), "false"));
                 add(new SettingSection("switch", "识别链接", "link_enable", getString(R.string.desc_link_enable), "true"));
+                //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换
+                add(new SettingSection("switch", "首页使用app端推荐", RecommendApi.KEY_APP_RECOMMEND,
+                        "若web端推荐不太符合预期，可尝试切换至app端推荐", "false"));
                 add(new SettingSection("switch", "新动态数量检查", SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE,
                         getString(R.string.desc_dynamic_update_check_enable), "true"));
                 add(new SettingSection("switch", "消息数量检查", SharedPreferencesUtil.MESSAGE_UPDATE_CHECK_ENABLE,

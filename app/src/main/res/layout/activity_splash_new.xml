@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  新版美学（new_ui_design）下使用的开屏页。
+
+  与旧版 activity_splash.xml 的差别只在视觉：旧版是纯黑 + 一行文字；这里换成
+  黑底 + 粉色氛围光晕（直接复用页面内的 AmbientBackground，方屏径向光晕 / 圆屏装饰圆环），
+  加载期间做 alpha 呼吸，与列表页首次加载时的观感一致。
+
+  两个布局共用同一个 @id/splashText，因此 SplashActivity 的打字机逻辑完全不需要分支。
+  内容整体垂直居中，保证圆屏设备上不会落到可视圆之外。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bgblack">
+
+    <com.RobinNotBad.BiliClient.ui.widget.AmbientBackground
+        android:id="@+id/splash_ambient"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp">
+
+        <ImageView
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:contentDescription="@string/app_name"
+            android:src="@mipmap/icon" />
+
+        <!-- 新版美学的点睛：图标与文字之间一条 2dp 的粉色短线 -->
+        <View
+            android:layout_width="28dp"
+            android:layout_height="2dp"
+            android:layout_marginTop="16dp"
+            android:background="@color/bili_pink" />
+
+        <!-- 打字机效果的欢迎语；minLines=2 保证文字逐字出现时整体布局不跳动 -->
+        <TextView
+            android:id="@+id/splashText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:minLines="2"
+            android:text="@string/pagename_splash"
+            android:textColor="@color/textwhite"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+</RelativeLayout>

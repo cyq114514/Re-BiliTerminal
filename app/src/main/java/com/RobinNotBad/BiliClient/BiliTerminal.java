@@ -20,6 +20,7 @@ import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
 import com.RobinNotBad.BiliClient.api.MessageApi;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.CookieRefresher;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -99,10 +100,22 @@ public class BiliTerminal extends Application {
                 }
             });
 
-            boolean debugBuild = isDebugBuild();
-            Logu.LOGV_ENABLED = SharedPreferencesUtil.getBoolean("dev_logv", debugBuild);
-            Logu.LOGD_ENABLED = SharedPreferencesUtil.getBoolean("dev_logd", debugBuild);
-            Logu.LOGI_ENABLED = SharedPreferencesUtil.getBoolean("dev_logi", debugBuild);
+            //调试日志一律默认关闭，且与是否 debug 构建无关：它们会改变应用行为或产生额外落盘
+            Logu.LOGV_ENABLED = SharedPreferencesUtil.getBoolean("dev_logv", false);
+            Logu.LOGD_ENABLED = SharedPreferencesUtil.getBoolean("dev_logd", false);
+            Logu.LOGI_ENABLED = SharedPreferencesUtil.getBoolean("dev_logi", false);
+
+            //日志落文件：开上面三个开关的用户多半没有 adb（logcat 只能用电脑取），
+            //所以额外给一个直接落在 Download/ReBiliDiag/ 的日志文件。
+            //开关为关闭时这里会顺手清掉历史日志文件（"关掉开关即清理"的不变式由 Logu 保证）
+            Logu.setFileLoggingEnabled(SharedPreferencesUtil.getBoolean(Logu.KEY_FILE_LOG, false));
+            //注册设置项监听，让开关切换立即生效（SharedPreferences 只持弱引用，强引用在 Logu 内部）
+            Logu.registerPreferenceListener();
+
+            //登录续期：进程存活期间按小时检查一次 Cookie 是否需要刷新。
+            //修复前刷新只在启动页触发一次，App 常驻不重启就会错过续期窗口，Cookie 到期即掉登录。
+            //未登录时内部会直接返回，开在这里是安全的。
+            CookieRefresher.startPeriodicCheck();
 
             if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE, true) && SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) != 0) {
                 CenterThreadPool.run(() -> {

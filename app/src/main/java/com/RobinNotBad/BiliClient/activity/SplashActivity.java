@@ -17,17 +17,16 @@ import com.RobinNotBad.BiliClient.activity.settings.setup.SetupUIActivity;
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.api.AppInfoApi;
-import com.RobinNotBad.BiliClient.api.CookieRefreshApi;
 import com.RobinNotBad.BiliClient.api.CookiesApi;
-import com.RobinNotBad.BiliClient.util.AccountManager;
+import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.CookieRefresher;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.List;
@@ -56,10 +55,26 @@ public class SplashActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setTheme(R.style.Theme_BiliClient);
-        setContentView(R.layout.activity_splash);
+
+        //开屏页跟随「新版美学设计」总开关（与页面内氛围背景同一口径）：
+        //新版用黑底 + 粉色氛围光晕 + 图标 + 粉色短线，旧版保持原来的纯黑 + 文字。
+        //两个布局共用 @id/splashText，所以下面的打字机逻辑无需分支
+        boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
+        setContentView(newUi ? R.layout.activity_splash_new : R.layout.activity_splash);
         Log.e("debug", "进入应用");
 
         splashTextView = findViewById(R.id.splashText);
+
+        if (newUi) {
+            //方屏用顶部径向光晕、圆屏用双装饰圆环（与页面内 installAmbient 的选择口径一致），
+            //加载期间做 alpha 呼吸，和列表页初始加载的观感对齐
+            AmbientBackground ambient = findViewById(R.id.splash_ambient);
+            if (ambient != null) {
+                ambient.setMode(SharedPreferencesUtil.getBoolean("player_ui_round", false)
+                        ? AmbientBackground.MODE_ROUND : AmbientBackground.MODE_RADIAL);
+                ambient.setBreathing(true);
+            }
+        }
         splashText = SharedPreferencesUtil.getString("ui_splashtext", "欢迎使用\nRe：哔哩终端");
 
         splashTimer = new Timer();
@@ -213,44 +228,15 @@ public class SplashActivity extends Activity {
         }, 100);
     }
 
-    private void checkCookieRefresh() throws IOException {
-        JSONObject cookieInfo;
-        try {
-            cookieInfo = CookieRefreshApi.cookieInfo();
-        } catch (JSONException e) {
-            //解析失败大概率是服务端临时故障（code!=0 时 data 也可能缺失），
-            //绝不能因此清空本地登录态——真正确认“已过期”会走下面 refreshCookie() 返回 false 的分支
-            Log.e("Cookies", "cookieInfo 解析失败，跳过本次刷新检查");
-            return;
-        }
-        try {
-            if (cookieInfo.optBoolean("refresh")) {
-                Log.e("Cookies", "需要刷新");
-                if (!Objects.equals(SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), "")) {
-                    String correspondPath = CookieRefreshApi.getCorrespondPath(cookieInfo.getLong("timestamp"));
-                    String refreshCsrf = CookieRefreshApi.getRefreshCsrf(correspondPath);
-                    if (CookieRefreshApi.refreshCookie(refreshCsrf)) {
-                        MsgUtil.showMsg("Cookies已刷新");
-                        //多账号：刷新后的 cookie 同步回账号列表快照，否则切走再切回会拿到旧凭证
-                        CenterThreadPool.run(AccountManager::saveCurrentAccount);
-                    } else {
-                        MsgUtil.showMsgLong("登录信息过期，请重新登录！");
-                        resetLogin();
-                    }
-                }
-            }
-        } catch (JSONException e) {
-            //刷新流程内的解析异常只放弃本次刷新，不清登录态
-            Log.e("Cookies", "刷新流程解析异常，跳过本次刷新");
-        }
-    }
-
-    private void resetLogin() {
-        SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, 0L);
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, "");
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, "");
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, "");
-        NetWorkUtil.refreshHeaders();
+    /**
+     * 启动时的刷新检查。
+     *
+     * <p>调度与失败分流全部收敛到 {@link CookieRefresher}：force=true 保持与修复前一致的行为
+     * （每次启动都查一次），但「刷新失败」不再清空本地凭证——只有服务端明确否定凭证时才清理。
+     * 修复前这里是 refreshCookie() 返回 false 就直接 resetLogin()，一次网络抖动即等于登出。
+     */
+    private void checkCookieRefresh() {
+        CookieRefresher.check(true);
     }
 
     @SuppressLint("SetTextI18n")

@@ -1,6 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+  冷启动首帧（系统预览窗口）的底：SplashActivity 在 manifest 里用的是
+  Theme.BiliClient.Splash，其 windowBackground 就是这个 drawable。
+
+  原来只有「纯黑 + 图标」，与进入应用后的粉色氛围背景（AmbientBackground）是两套观感，
+  冷启动会明显感到"黑一下再变粉"。这里补一枚与页面内 MODE_RADIAL 同位置、同色值的
+  粉色径向光晕（中心 50%/14%，半径 75%p，alpha 0x59 → 0x00），让首帧就落在同一套视觉语言里。
+
+  注意：这个 drawable 是**首帧**用的，在 onCreate 之前由系统绘制，
+  无法按设置项切换（预览窗口由 manifest 主题决定），所以它对新旧 UI 都会生效。
+-->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/bgblack" />
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:centerX="50%"
+                android:centerY="14%"
+                android:endColor="#00FE679A"
+                android:gradientRadius="75%p"
+                android:startColor="#59FE679A"
+                android:type="radial" />
+        </shape>
+    </item>
     <item
         android:width="64dp"
         android:height="64dp"
