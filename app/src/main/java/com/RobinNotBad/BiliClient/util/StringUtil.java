@@ -182,8 +182,22 @@ public class StringUtil {
         }
     }
 
+    /**
+     * 长按复制用的监听器：不捕获任何外部实例（视图由回调参数给出，文本在点击时现取），
+     * 因此可以做成静态单例，省掉每次绑定都 new 一个监听器的分配——
+     * 列表滚动时每次 bind 都会走到这里。
+     */
+    private static final View.OnLongClickListener COPY_LONG_CLICK_LISTENER = view -> {
+        if (!(view instanceof TextView)) return false;
+        Intent intent = new Intent(view.getContext(), CopyTextActivity.class);
+        intent.putExtra("content", ((TextView) view).getText().toString());
+        view.getContext().startActivity(intent);
+        return true;
+    };
+
     public static void setCopy(TextView textView) {
-        setCopy(textView, null); //直接传getText()会导致文本变化后点击不了
+        if (!SharedPreferencesUtil.getBoolean("copy_enable", true)) return;
+        textView.setOnLongClickListener(COPY_LONG_CLICK_LISTENER);
     }
 
     public static void setCopy(TextView... textViews) {
@@ -247,6 +261,20 @@ public class StringUtil {
             textView.setText(spannableString);
             textView.setOnTouchListener(CLICKABLE_SPAN_TOUCH_LISTENER);
         }
+    }
+
+    /**
+     * 把**已经加好链接 span** 的富文本装到 TextView 上。
+     *
+     * <p>与 {@link #setLink(TextView...)} 的区别：span 已经在后台线程算好了（见
+     * {@code OpusParagraph#linkedContent()}），这里只做"装上去"这件 View 层的事，
+     * 不在主线程跑那 4 个正则。正文列表每次绑定的开销就只剩 setText。
+     */
+    public static void applyLinkedText(TextView textView, CharSequence linked) {
+        if (textView == null || linked == null) return;
+        if (TextUtils.isEmpty(linked)) return;
+        textView.setText(linked);
+        textView.setOnTouchListener(CLICKABLE_SPAN_TOUCH_LISTENER);
     }
 
     public static void setSingleAt(SpannableStringBuilder spannableString, String atName, long atMid) {

@@ -21,44 +21,61 @@ import okhttp3.Response;
 API是自己扒的
  */
 public class ArticleApi {
+    /**
+     * 获取专栏详情（正文为 HTML）。
+     *
+     * <p>字段一律用 {@code opt*} 读取并逐项兜底：本方法此前用 {@code get*}，缺字段直接抛
+     * {@code JSONException}。旧调用链会把它吞掉，所以一直没暴露；现在它是专栏详情页的**主路径**，
+     * 一个可选字段缺失就会让整篇专栏打不开，必须改成"缺什么就当空"。
+     *
+     * @param id cvid
+     * @return 解析结果；接口明确失败（code!=0 或无 data）时返回 null，由调用方回退到网页抓取
+     */
     public static ArticleInfo getArticle(long id) throws JSONException, IOException {
         String url = "https://api.bilibili.com/x/article/view?";
         url += "id=" + id + "&gaia_source=main_web&web_location=333.976";
         JSONObject result = NetWorkUtil.getJson(ConfInfoApi.signWBI(url));
-        if (!result.has("data")) return null;
-        JSONObject data = result.getJSONObject("data");
+        if (result.optInt("code", -1) != 0) return null;
+        JSONObject data = result.optJSONObject("data");
+        if (data == null) return null;
 
         ArticleInfo articleInfo = new ArticleInfo();
         articleInfo.id = id;
-        articleInfo.title = data.getString("title");
-        articleInfo.summary = data.getString("summary");
-        articleInfo.banner = data.getString("banner_url");
-        articleInfo.ctime = data.getLong("ctime");
+        articleInfo.title = data.optString("title", "");
+        articleInfo.summary = data.optString("summary", "");
+        articleInfo.banner = data.optString("banner_url", "");
+        articleInfo.ctime = data.optLong("ctime", 0);
+        articleInfo.content = data.optString("content", "");
+        articleInfo.keywords = data.optString("keywords", "");
+        articleInfo.wordCount = data.optInt("words", 0);
 
-        JSONObject author = data.getJSONObject("author");
-        UserInfo upInfo = new UserInfo();
-        upInfo.mid = author.getLong("mid");
-        upInfo.name = author.getString("name");
-        upInfo.avatar = author.getString("face");
-        upInfo.fans = author.getInt("fans");
-        upInfo.level = author.getInt("level");
-        articleInfo.upInfo = upInfo;
+        JSONObject author = data.optJSONObject("author");
+        if (author != null) {
+            UserInfo upInfo = new UserInfo();
+            upInfo.mid = author.optLong("mid", 0);
+            upInfo.name = author.optString("name", "");
+            upInfo.avatar = author.optString("face", "");
+            upInfo.fans = author.optInt("fans", 0);
+            upInfo.level = author.optInt("level", 0);
+            articleInfo.upInfo = upInfo;
+        }
 
-        JSONObject jsonStats = data.getJSONObject("stats");
-        Stats stats = new Stats();
-        stats.view = jsonStats.getInt("view");
-        stats.favorite = jsonStats.getInt("favorite");
-        stats.like = jsonStats.getInt("like");
-        stats.reply = jsonStats.getInt("reply");
-        stats.share = jsonStats.getInt("share");
-        stats.coin = jsonStats.getInt("coin");
-        stats.liked = data.getBoolean("is_like");
-
-        articleInfo.stats = stats;
-
-        articleInfo.wordCount = data.getInt("words");
-        articleInfo.content = data.getString("content");
-        articleInfo.keywords = data.getString("keywords");
+        JSONObject jsonStats = data.optJSONObject("stats");
+        if (jsonStats != null) {
+            Stats stats = new Stats();
+            stats.view = jsonStats.optInt("view", 0);
+            stats.favorite = jsonStats.optInt("favorite", 0);
+            stats.like = jsonStats.optInt("like", 0);
+            stats.reply = jsonStats.optInt("reply", 0);
+            stats.share = jsonStats.optInt("share", 0);
+            stats.coin = jsonStats.optInt("coin", 0);
+            //is_like 的形态不确定：旧实现按 boolean 读（getBoolean），而同类接口里也有回 0/1 的，
+            //所以两种都认。读不出来时保持 false —— 那只是"未点赞"的初始态，用户点一下就会自校正
+            Object isLike = data.opt("is_like");
+            if (isLike instanceof Boolean) stats.liked = (Boolean) isLike;
+            else if (isLike instanceof Number) stats.liked = ((Number) isLike).intValue() == 1;
+            articleInfo.stats = stats;
+        }
         return articleInfo;
     }
 

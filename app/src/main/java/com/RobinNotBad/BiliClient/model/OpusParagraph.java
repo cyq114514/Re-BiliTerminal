@@ -46,6 +46,32 @@ public class OpusParagraph {
     public OpusParagraph() {
     }
 
+    /**
+     * 已加好链接 span 的富文本缓存。
+     *
+     * <p>绑定阶段原来每次都调 {@code StringUtil.setLink(textView)}——它会跑 4 个正则扫描整段
+     * 文本（URL / BV / AV / CV）再重建 Spannable，全在主线程。而段落文本在解析之后就固定不变了，
+     * 滚动时反复绑定同一段落等于在主线程反复做同一件纯 CPU 的事，直接表现为滑动卡顿。
+     *
+     * <p>这里把结果算一次存下来：解析阶段（后台）预热，绑定阶段只做 setText。
+     * volatile：解析在后台线程、绑定在主线程。
+     */
+    private volatile CharSequence linkedContent;
+
+    /**
+     * 取"已加好链接 span"的富文本；首次调用时计算并缓存。
+     * 非文本段落（图片等）返回 null，调用方回退到 {@link #content}。
+     */
+    public CharSequence linkedContent() {
+        CharSequence cached = linkedContent;
+        if (cached != null) return cached;
+        if (!(content instanceof CharSequence)) return null;
+        SpannableStringBuilder builder = new SpannableStringBuilder((CharSequence) content);
+        StringUtil.setLink(builder);
+        linkedContent = builder;
+        return builder;
+    }
+
     public OpusParagraph(JSONObject para) throws JSONException {
         this.type = para.optInt("para_type");
         this.align = para.optInt("align");

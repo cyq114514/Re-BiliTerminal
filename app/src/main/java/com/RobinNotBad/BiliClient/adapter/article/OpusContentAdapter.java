@@ -353,9 +353,17 @@ public class OpusContentAdapter extends RecyclerView.Adapter<OpusContentAdapter.
                 if (realPosition >= 0 && realPosition < paragraphs.length && paragraphs[realPosition].content != null) {
                     TextView textView = holder.itemView.findViewById(R.id.textView);
                     if (paragraphs[realPosition].content instanceof CharSequence) {
-                        textView.setText((CharSequence) paragraphs[realPosition].content);
+                        //链接 span 已在解析阶段（后台线程）算好并缓存在段落上，这里只负责"装上去"：
+                        //原来每次绑定都调 StringUtil.setLink(textView)——4 个正则扫全文 + 重建
+                        //Spannable + 再 setText 一次，全在主线程，是滑动卡顿的直接来源
+                        CharSequence linked = paragraphs[realPosition].linkedContent();
+                        if (linked != null) {
+                            StringUtil.applyLinkedText(textView, linked);
+                        } else {
+                            //拿不到预计算结果（非文本内容）时退回原始文本，只是没有链接 span
+                            textView.setText((CharSequence) paragraphs[realPosition].content);
+                        }
                         StringUtil.setCopy(textView);
-                        StringUtil.setLink(textView);
                     }
                 }
                 break;

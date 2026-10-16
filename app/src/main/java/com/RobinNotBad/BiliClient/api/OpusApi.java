@@ -16,6 +16,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.RobinNotBad.BiliClient.model.ArticleInfo;
+import com.RobinNotBad.BiliClient.util.ArticleHtmlParser;
+import com.RobinNotBad.BiliClient.util.EmoteUtil;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -44,6 +48,23 @@ public class OpusApi {
             } catch (Exception apiError) {
                 // 接口异常（网络/WBI失败等）时退回网页抓取兜底，保证可用性
                 Logu.w("OpusApi", "opus/detail failed, fallback to html scrape: " + apiError.getMessage());
+            }
+        }
+
+        //专栏（cv）：优先走 /x/article/view 单次 API 直取（PiliPlus 的 articleView 口径）。
+        //
+        //老路是抓 www.bilibili.com/read/cv{id} 的整页 SSR HTML 再手抠 JSON：页面体积大、
+        //还有多级 301 要循环跟跳，而且 HTML 响应会命中 NetWorkUtil 对 doctype 的重试判定，
+        //一份正文要付「整页下载 + 最多 5 次重试」的代价——这是专栏打开慢的元凶，
+        //与图文动态修复前是同一条路（详见 docs/更新日志.md 里"cv 专栏路径不变"那句）。
+        //
+        //失败（接口报错/正文转不出段落）则原样落到下面的网页抓取兜底，最坏情况不比改造前差，
+        //与动态那条「API 优先、HTML 兜底」的口径一致。
+        if (id <= 100000000) {
+            try {
+                if (fetchArticleFromApi(opus, id)) return finishOpus(opus);
+            } catch (Exception articleError) {
+                Logu.w("OpusApi", "x/article/view failed, fallback to html scrape: " + articleError.getMessage());
             }
         }
 
@@ -153,7 +174,17 @@ public class OpusApi {
                     JSONObject moduleContent = module.optJSONObject("module_content");
                     if (moduleContent != null) {
                         JSONArray paragraphs = moduleContent.optJSONArray("paragraphs");
-                        if (paragraphs != null) opus.paragraphs = analyzeParagraphs(paragraphs);
+                        if (paragraphs != null) {
+                            //整篇正文的表情加载共用一个时间预算：replaceSingle 是串行同步取图的，
+                            //k 个未缓存表情的最坏耗时是 k × 单个超时（3s），弱网下几十秒都转不出来。
+                            //预算用尽后保留文本、不再等网络——代价从"整篇卡住"降为"少数表情没变成图"
+                            EmoteUtil.beginBatch();
+                            try {
+                                opus.paragraphs = analyzeParagraphs(paragraphs);
+                            } finally {
+                                EmoteUtil.endBatch();
+                            }
+                        }
                     }
                     break;
                 case "MODULE_TYPE_STAT":
@@ -191,6 +222,38 @@ public class OpusApi {
         return true;
     }
 
+    /**
+     * 通过 {@code /x/article/view} 获取专栏详情（PiliPlus 的 articleView 口径）。
+     *
+     * <p>返回 false 表示"这个接口给不出可用正文"（已失效专栏、正文为空、或 HTML 转不出段落），
+     * 由调用方回退到网页抓取——**回退是这条路径的安全边界，不是可选项**。
+     *
+     * <p>注意这里**不动 {@code opus.type}**：改造前 cv 专栏经网页抓取路径出来时 type 就是
+     * {@code TYPE_DYNAMIC}（{@code getOpus} 开头的赋值，网页路径从不改它），
+     * 详情页的行为是按这个值定的，擅自改成 {@code TYPE_ARTICLE} 会引入与本次目标无关的回归。
+     *
+     * @param cvid 专栏号（cv 号）
+     */
+    private static boolean fetchArticleFromApi(Opus opus, long cvid) throws IOException, JSONException {
+        ArticleInfo article = ArticleApi.getArticle(cvid);
+        if (article == null) return false;
+
+        OpusParagraph[] paragraphs = ArticleHtmlParser.parse(article.content);
+        //转不出正文就当失败：宁可回退多花一秒，也不要给用户一个空白专栏页
+        if (paragraphs.length == 0) return false;
+
+        opus.id = cvid;
+        opus.title = article.title != null ? article.title : "";
+        opus.upInfo = article.upInfo;
+        opus.stats = article.stats;
+        opus.paragraphs = paragraphs;
+        //专栏的评论区挂在 cvid 上（comment_type=12 即专栏这一类）
+        opus.commentId = cvid;
+        opus.commentType = 12;
+        Logu.d("OpusApi", "专栏走 API 直取：cvid=" + cvid + " 段落数=" + paragraphs.length);
+        return true;
+    }
+
     private static Opus finishOpus(Opus opus) {
         if (opus.upInfo == null) opus.upInfo = new UserInfo();
         if (opus.stats == null) opus.stats = new Stats();
@@ -205,6 +268,9 @@ public class OpusApi {
             JSONObject paragraphJson = jsonArray.getJSONObject(i);
             OpusParagraph paragraph = new OpusParagraph(paragraphJson);
             paragraphs[i] = paragraph;
+            //链接 span 的 4 个正则在这里（后台线程）算一次并缓存进段落，
+            //避免每段落每次绑定都在主线程重算（原来 OpusContentAdapter 每次 bind 都跑 setLink）
+            paragraph.linkedContent();
         }
         return paragraphs;
     }

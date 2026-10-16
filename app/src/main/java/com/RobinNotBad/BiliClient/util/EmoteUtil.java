@@ -26,8 +26,33 @@ import java.util.concurrent.TimeoutException;
 public class EmoteUtil {
     //单个表情的同步加载上限：评论解析线程会阻塞在这里，弱网下无界等待会把加载链路彻底卡死
     private static final long LOAD_TIMEOUT_SECONDS = 3L;
+    /**
+     * 单批解析（一篇正文/一页评论）里表情加载的**总时间预算**。
+     *
+     * <p>只收紧单个表情的超时是不够的：{@link #replaceSingle} 是串行的，
+     * k 个未缓存表情的最坏耗时仍然是 k × 单个超时。图文正文里表情动辄十几个，
+     * 弱网下就是几十秒的解析阻塞——这才是"图文/专栏打开慢"里最不可控的一块。
+     *
+     * <p>预算用尽后不再为剩余表情等网络，直接保留文本。用户看到的是
+     * "少数表情没变成图"，而不是"整篇文章转不出来"，两者代价差一个数量级。
+     */
+    private static final long BATCH_BUDGET_MS = 5000L;
+    /** 当前批次的截止时间戳；未开启预算窗口时为 null（此时只受单个表情超时约束） */
+    private static final ThreadLocal<Long> BATCH_DEADLINE = new ThreadLocal<>();
     //进程级 Drawable 复用：同一表情在一屏评论里可能出现多次，不去重的话每条评论都要重新解码
     private static final LruCache<String, Drawable> EMOTE_DRAWABLE_CACHE = new LruCache<>(96);
+
+    /**
+     * 开启一个表情加载预算窗口。批量解析正文/评论前调用，必须在 finally 里配对
+     * {@link #endBatch()}（内部是 ThreadLocal，不清理会残留到线程池的下一个任务上）。
+     */
+    public static void beginBatch() {
+        BATCH_DEADLINE.set(System.currentTimeMillis() + BATCH_BUDGET_MS);
+    }
+
+    public static void endBatch() {
+        BATCH_DEADLINE.remove();
+    }
 
     public static SpannableStringBuilder textReplaceEmote(String text, JSONArray emote, float scale, Context context) throws JSONException, InterruptedException {
         SpannableStringBuilder result = new SpannableStringBuilder(text);
@@ -111,6 +136,10 @@ public class EmoteUtil {
         String cacheKey = url + "|" + sizePx;
         Drawable cached = EMOTE_DRAWABLE_CACHE.get(cacheKey);
         if (cached != null) return cached;
+
+        //预算窗口内：一旦超时就不再为剩余表情等网络（命中缓存的走不到这里，不受影响）
+        Long deadline = BATCH_DEADLINE.get();
+        if (deadline != null && System.currentTimeMillis() >= deadline) return null;
 
         FutureTarget<Drawable> target = null;
         try {

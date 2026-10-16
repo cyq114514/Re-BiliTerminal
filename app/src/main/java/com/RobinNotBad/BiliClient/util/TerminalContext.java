@@ -310,7 +310,11 @@ public class TerminalContext {
     }
 
     public LiveData<Result<Opus>> getOpusById(long id) {
-        String key = ContentType.Dynamic.getTypeCode() + "_" + id;
+        //key 必须与写入侧（fetchOpus 用 ContentType.Opus）一致。
+        //这里原来写成 ContentType.Dynamic，于是本方法**永远读不到缓存**：
+        //详情页的 Activity 与 Fragment 各自调一次，就是两次完整的「请求 + 解析」，
+        //而且写给 Opus 的那份缓存谁都不读、白占内存（leaveDetailPage 才统一清）。
+        String key = ContentType.Opus.getTypeCode() + "_" + id;
         Object obj = contentLruCache.get(key);
         if (obj instanceof Opus) {
             return new MutableLiveData<>(Result.success((Opus) obj));
