@@ -68,6 +68,13 @@
   .tab { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-size: 13px; color: var(--text-dim); }
   .tab.active { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
 
+  /* 按时间统计崩溃数量的筛选按钮：按钮上直接带该区间的条数 */
+  .ranges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .range { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text-dim); font-size: 12px; }
+  .range:hover { border-color: var(--accent); color: var(--text); }
+  .range.active { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
+  .range .n { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin-left: 6px; color: var(--accent-2); }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--text-dim); font-weight: 500; font-size: 12px; white-space: nowrap; }
@@ -140,14 +147,26 @@
 
     <div class="stats">
       <div class="stat"><div class="k">今日崩溃</div><div class="v warn" id="statToday">—</div></div>
-      <div class="stat"><div class="k">影响设备</div><div class="v" id="statDevices">—</div></div>
-      <div class="stat"><div class="k">记录总数</div><div class="v" id="statTotal">—</div></div>
+      <div class="stat"><div class="k">近 7 天崩溃</div><div class="v" id="statWeek">—</div></div>
+      <div class="stat"><div class="k">影响设备（当前筛选）</div><div class="v" id="statDevices">—</div></div>
+      <div class="stat"><div class="k">记录总数（当前筛选）</div><div class="v" id="statTotal">—</div></div>
       <div class="stat"><div class="k">最近一次</div><div class="v" id="statLast" style="font-size:14px">—</div></div>
+      <div class="stat"><div class="k">今日活跃设备</div><div class="v" id="statActiveToday">—</div></div>
+      <div class="stat"><div class="k">近 30 天活跃设备</div><div class="v" id="statActive30">—</div></div>
     </div>
 
     <div class="tabs">
       <div class="tab active" data-tab="list">崩溃列表</div>
       <div class="tab" data-tab="group">按异常聚合</div>
+    </div>
+
+    <!-- 按时间统计崩溃数量：点箭头按钮切换区间，按钮上的数字是该区间的崩溃条数 -->
+    <div class="ranges" id="rangeBar">
+      <button class="range" data-days="1">今天<span class="n" id="cnt1">—</span></button>
+      <button class="range" data-days="3">近 3 天<span class="n" id="cnt3">—</span></button>
+      <button class="range" data-days="7">近 7 天<span class="n" id="cnt7">—</span></button>
+      <button class="range" data-days="30">近 30 天<span class="n" id="cnt30">—</span></button>
+      <button class="range active" data-days="0">全部<span class="n" id="cnt0">—</span></button>
     </div>
 
     <div class="toolbar">
@@ -210,10 +229,15 @@
     token: null,
     refresh: null,
     exp: 0,
-    rows: [],
+    rows: [],        // 崩溃记录（crash_type != launch）
+    launches: [],    // 活跃设备打点（crash_type == launch），只用于算日活/月活
+    days: 0,         // 时间筛选：1=今天 3/7/30=近N天 0=全部（默认全部，避免老记录被"今天"藏起来）
     tab: 'list',
     current: null
   };
+
+  // 活跃统计打点与崩溃共用一张表，靠 crash_type=launch 区分；不能混进崩溃列表
+  var LAUNCH_TYPE = 'launch';
 
   // ---------------------------------------------------------------- 存储
   function saveSession(session) {
@@ -275,18 +299,30 @@
     });
   }
 
-  function fetchRows() {
-    return fetch(BASE + '/rest/v1/crash_reports?select=*&order=created_at.desc&limit=' + T_LIMIT, {
+  function fetchJson(path) {
+    return fetch(BASE + '/rest/v1/' + path, {
       headers: authHeaders(state.token)
     }).then(function (r) {
       if (r.status === 401) {
-        return refreshToken().then(fetchRows);
+        return refreshToken().then(function () { return fetchJson(path); });
       }
       if (!r.ok) {
         return r.text().then(function (t) { throw new Error('读取失败 HTTP ' + r.status + '：' + t.slice(0, 200)); });
       }
       return r.json();
     });
+  }
+
+  // 崩溃记录：显式排除 launch（老数据里 crash_type 可能是 null，用 or 一起带上，避免漏掉）
+  function fetchCrashes() {
+    return fetchJson('crash_reports?select=*&or=(crash_type.is.null,crash_type.neq.'
+      + LAUNCH_TYPE + ')&order=created_at.desc&limit=' + T_LIMIT);
+  }
+
+  // 活跃打点：只要安装标识和时间，量大也不占渲染
+  function fetchLaunches() {
+    return fetchJson('crash_reports?select=install_id,created_at&crash_type=eq.'
+      + LAUNCH_TYPE + '&order=created_at.desc&limit=5000');
   }
 
   // ---------------------------------------------------------------- 工具
@@ -370,6 +406,37 @@
     toast('已导出 ' + rows.length + ' 条（JSON，含堆栈）');
   }
 
+  // ---------------------------------------------------------------- 时间筛选
+  // 区间一律按「本地 0 点」对齐：近 N 天 = 含今天在内的 N 个自然日
+  function startOfDaysAgo(n) {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - n);
+    return d;
+  }
+
+  function withinDays(iso, days) {
+    if (!days) return true;
+    var d = new Date(iso);
+    return !isNaN(d.getTime()) && d >= startOfDaysAgo(days - 1);
+  }
+
+  function countInDays(days) {
+    if (!days) return state.rows.length;
+    var from = startOfDaysAgo(days - 1);
+    return state.rows.filter(function (r) {
+      var d = new Date(r.created_at);
+      return !isNaN(d.getTime()) && d >= from;
+    }).length;
+  }
+
+  function renderRangeCounts() {
+    [1, 3, 7, 30, 0].forEach(function (days) {
+      var el = $('cnt' + days);
+      if (el) el.textContent = String(countInDays(days));
+    });
+  }
+
   // ---------------------------------------------------------------- 渲染
   function uniqueSorted(key) {
     var seen = {}, out = [];
@@ -395,6 +462,7 @@
     var ver = $('fVersion').value, model = $('fModel').value,
         page = $('fPage').value, q = $('fSearch').value.trim().toLowerCase();
     return state.rows.filter(function (r) {
+      if (!withinDays(r.created_at, state.days)) return false;
       if (ver && r.app_version !== ver) return false;
       if (model && r.device_model !== model) return false;
       if (page && r.page !== page) return false;
@@ -407,18 +475,36 @@
   }
 
   function renderStats(rows) {
-    var today = new Date(); today.setHours(0, 0, 0, 0);
-    var todayCount = 0, devices = {}, last = '';
-    rows.forEach(function (r) {
+    var todayStart = startOfDaysAgo(0), weekStart = startOfDaysAgo(6);
+    var todayCount = 0, weekCount = 0, devices = {}, last = '';
+    //今日/近7天取全部崩溃记录，不随搜索、机型筛选变化，作为"整体情况"的固定口径
+    state.rows.forEach(function (r) {
       var d = new Date(r.created_at);
-      if (!isNaN(d.getTime()) && d >= today) todayCount++;
-      if (r.install_id) devices[r.install_id] = 1;
+      if (!isNaN(d.getTime())) {
+        if (d >= todayStart) todayCount++;
+        if (d >= weekStart) weekCount++;
+      }
       if (!last || new Date(r.created_at) > new Date(last)) last = r.created_at;
     });
+    //影响设备与记录总数跟随当前筛选
+    rows.forEach(function (r) { if (r.install_id) devices[r.install_id] = 1; });
+
     $('statToday').textContent = String(todayCount);
+    $('statWeek').textContent = String(weekCount);
     $('statDevices').textContent = String(Object.keys(devices).length);
     $('statTotal').textContent = String(rows.length);
     $('statLast').textContent = last ? fmtTime(last) : '—';
+
+    //活跃设备来自 launch 打点，按安装标识去重；和崩溃表共表但互不影响
+    var activeToday = {}, active30 = {}, monthStart = startOfDaysAgo(29);
+    state.launches.forEach(function (r) {
+      var d = new Date(r.created_at);
+      if (isNaN(d.getTime()) || !r.install_id) return;
+      if (d >= todayStart) activeToday[r.install_id] = 1;
+      if (d >= monthStart) active30[r.install_id] = 1;
+    });
+    $('statActiveToday').textContent = String(Object.keys(activeToday).length);
+    $('statActive30').textContent = String(Object.keys(active30).length);
   }
 
   function renderList(rows) {
@@ -481,7 +567,8 @@
 
   function render() {
     var rows = filtered();
-    renderStats(state.rows);
+    renderStats(rows);
+    renderRangeCounts();
     if (state.tab === 'list') renderList(rows); else renderGroup(rows);
     // 导出区：跟随当前筛选结果
     $('expCount').textContent = rows.length ? '将导出 ' + rows.length + ' 条' : '';
@@ -534,8 +621,9 @@
 
   function load() {
     $('refreshBtn').disabled = true;
-    fetchRows().then(function (rows) {
-      state.rows = rows || [];
+    Promise.all([fetchCrashes(), fetchLaunches()]).then(function (res) {
+      state.rows = res[0] || [];
+      state.launches = res[1] || [];
       fillSelect($('fVersion'), uniqueSorted('app_version'), '全部版本');
       fillSelect($('fModel'), uniqueSorted('device_model'), '全部机型');
       fillSelect($('fPage'), uniqueSorted('page'), '全部页面');
@@ -597,6 +685,18 @@
       Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) { t.classList.remove('active'); });
       tab.classList.add('active');
       state.tab = tab.getAttribute('data-tab');
+      render();
+    });
+  });
+
+  // 时间区间筛选按钮：点击切换统计与列表的时间窗
+  Array.prototype.forEach.call(document.querySelectorAll('#rangeBar .range'), function (btn) {
+    btn.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('#rangeBar .range'), function (b) {
+        b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      state.days = Number(btn.getAttribute('data-days')) || 0;
       render();
     });
   });
