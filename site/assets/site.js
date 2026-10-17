@@ -8,12 +8,13 @@
 
   var REPO = 'cyq114514/Re-BiliTerminal';
 
-  // 兜底值：发版后若忘记更新，页面仍能显示（本地预览与代理失效时使用）
+  // 兜底值：与最新一次 Release 的资产保持一致（本地预览与函数失效时使用）。
+  // 注意：fileName 必须与 GitHub Release 上的资产名完全一致，否则下载 404。
   var FALLBACK = {
     versionName: '1.2.1',
-    size: 9536555,
-    sha256: '001ea0856468547ba1e9a7682ab3ad9269364f5d64da005840a9af2214c5f201',
-    fileName: 'ReBiliTerminal-1.2.1.apk'
+    size: 9537732,
+    sha256: 'a58841f2650ccddd5bb2fcb0170e48d9cae62249c23dee46f690a9ad01965744',
+    fileName: 'Re-BiliTerminal-v1.2.1-release.apk'
   };
 
   // 第三方 GitHub 加速前缀（社区维护，可能随时失效；仅重写 github.com 直链）
