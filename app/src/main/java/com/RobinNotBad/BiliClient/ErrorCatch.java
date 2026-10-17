@@ -8,8 +8,10 @@ import androidx.annotation.NonNull;
 
 import com.RobinNotBad.BiliClient.activity.CatchActivity;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
+import com.RobinNotBad.BiliClient.util.CrashStats;
 import com.RobinNotBad.BiliClient.util.CrashTrace;
 import com.RobinNotBad.BiliClient.util.CrashUploader;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 
 import org.json.JSONObject;
@@ -47,6 +49,55 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
         Thread.setDefaultUncaughtExceptionHandler(this);
     }
 
+    /**
+     * 启动最早期（Application.onCreate 之前）的兜底处理器。
+     *
+     * <p>原来要等 onCreate 走到 {@link #init(Context)} 才装 handler，
+     * 这之间的 MultiDex、SP 初始化、getFitDisplayContext、主题资源加载一旦抛异常，
+     * 进程直接消失且<b>什么都不留</b>——正是"闪退但零记录"的一种来源。
+     * 这一层拿不到任何配置，只能把堆栈落到 files/crash_early 下，
+     * 下次冷启动由 {@link com.RobinNotBad.BiliClient.util.CrashUploader#flushEarly(Context)} 转成正式上报。
+     */
+    public static void initEarly(Context context) {
+        final Context appContext = context;
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            try {
+                StringWriter writer = new StringWriter();
+                throwable.printStackTrace(new PrintWriter(writer));
+                String stack = "早期崩溃（Application.onCreate 之前）\n线程: " + thread.getName()
+                        + "\n\n" + writer;
+                CrashUploader.saveEarly(appContext, stack);
+            } catch (Throwable ignored) {
+            }
+            android.os.Process.killProcess(android.os.Process.myPid());
+        });
+    }
+
+    /**
+     * {@code :crash} 进程（崩溃页自己）的处理器：只留痕，不再拉起崩溃页。
+     *
+     * <p>崩溃页自己崩溃时如果还去 startActivity(CatchActivity)，会形成无限重启循环
+     * （旧代码注释里已经踩过这个坑），所以这里写完本地文件与计数后直接杀本进程。
+     */
+    public static void initCrashProcess(Context context) {
+        final Context appContext = context;
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            try {
+                CrashTrace.log("崩溃页: 自身崩溃 " + throwable);
+                StringWriter writer = new StringWriter();
+                throwable.printStackTrace(new PrintWriter(writer));
+                JSONObject report = CrashUploader.buildEvent(appContext, "crash-page",
+                        throwable.getClass().getName(), "崩溃页自身崩溃（:crash 进程）",
+                        thread.getName(), "CatchActivity", writer.toString());
+                CrashUploader.saveLocal(report);
+                CrashStats.record("crash-page");
+                Logu.e("crash", "崩溃页自身崩溃: " + throwable);
+            } catch (Throwable ignored) {
+            }
+            android.os.Process.killProcess(android.os.Process.myPid());
+        });
+    }
+
     @Override
     public void uncaughtException(@NonNull Thread thread, @NonNull Throwable throwable) {
         //崩溃即现场已不可信：清掉冷启动恢复记录，
@@ -64,6 +115,8 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
 
         boolean enabled = CrashReportUtil.isEnabled();
         JSONObject report = CrashUploader.buildReport(context, throwable, thread.getName(), stack);
+        //计数日志跨进程可读，崩溃页的「按时间统计」靠它（SP 在 :crash 进程读不到最新值）
+        CrashStats.record("java");
 
         //第 1 步：本地文本，落点不可写时返回空串，不影响后续
         String localPath = CrashUploader.saveLocal(report);

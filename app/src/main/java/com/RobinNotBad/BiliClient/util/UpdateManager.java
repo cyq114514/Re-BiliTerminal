@@ -344,7 +344,9 @@ public class UpdateManager {
 
                 activity.runOnUiThread(() -> {
                     if (activity.isDestroyed() || activity.isFinishing()) return;
-                    new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                    //自适应弹窗：更新说明是多行长文本且带三个按钮，系统弹窗在放大界面后
+                    //按钮会被顶出屏幕（三按钮还会被系统改成竖排，进一步挤掉正文）
+                    new AdaptiveDialog.Builder(activity)
                             .setTitle("发现新版本 " + info.versionName)
                             .setMessage(buildShortNotes(info))
                             .setPositiveButton("立即更新", (dialog, which) ->

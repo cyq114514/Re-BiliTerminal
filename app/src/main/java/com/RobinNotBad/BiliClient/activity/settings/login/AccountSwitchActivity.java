@@ -10,7 +10,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.appcompat.app.AlertDialog;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.SplashActivity;
@@ -145,7 +145,7 @@ public class AccountSwitchActivity extends BaseActivity {
         card.setOnLongClickListener(v -> {
             if (accountsCanBeRemoved()) {
                 String displayName = savedName.isEmpty() ? "UID:" + account.mid : savedName;
-                new AlertDialog.Builder(this)
+                new AdaptiveDialog.Builder(this)
                         .setTitle("删除账号")
                         .setMessage("确定要删除账号 " + displayName + " 吗？\n删除后需重新登录才能恢复。")
                         .setPositiveButton("删除", (dialog, which) -> {

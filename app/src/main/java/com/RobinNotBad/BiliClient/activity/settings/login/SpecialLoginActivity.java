@@ -52,15 +52,40 @@ public class SpecialLoginActivity extends BaseActivity {
             });
 
             confirm.setOnClickListener(view -> {
-                String loginInfo = textInput.getText().toString();
+                String loginInfo = textInput.getText().toString().trim();
                 try {
                     JSONObject jsonObject = new JSONObject(loginInfo);
-                    String cookies = jsonObject.getString("cookies");
-                    SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, Long.parseLong(NetWorkUtil.getInfoFromCookie("DedeUserID", cookies)));
+                    String cookies = jsonObject.optString("cookies", "").trim();
+                    String refreshToken = jsonObject.optString("refresh_token", "").trim();
+
+                    //逐项校验后才写凭证：getInfoFromCookie 取不到 DedeUserID 时返回空串，
+                    //原来的 Long.parseLong 直接抛 NumberFormatException 且 catch 只接 JSONException，必崩
+                    if (cookies.isEmpty()) {
+                        MsgUtil.showMsg("导入内容缺少 cookies\n请重新从浏览器复制完整登录信息");
+                        return;
+                    }
+                    String midText = NetWorkUtil.getInfoFromCookie("DedeUserID", cookies).trim();
+                    if (midText.isEmpty()) {
+                        MsgUtil.showMsg("cookies 里没有 DedeUserID\n这份登录信息不完整，请重新复制");
+                        return;
+                    }
+                    long mid;
+                    try {
+                        mid = Long.parseLong(midText);
+                    } catch (NumberFormatException e) {
+                        MsgUtil.showMsg("DedeUserID 不是有效数字\n请检查复制的内容是否被改过");
+                        return;
+                    }
+                    if (refreshToken.isEmpty()) {
+                        MsgUtil.showMsg("导入内容缺少 refresh_token\n请重新从浏览器复制完整登录信息");
+                        return;
+                    }
+
+                    SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, mid);
                     SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies));
                     SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies);
-                    SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, jsonObject.getString("refresh_token"));
-                    runOnUiThread(() -> MsgUtil.showMsg("登录成功！"));
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, refreshToken);
+                    MsgUtil.showMsg("登录成功！");
                     SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.setup, true);
 
                     //refreshHeaders 可能触发 buvid/bili_ticket 的网络请求（带重试），绝不能在主线程做

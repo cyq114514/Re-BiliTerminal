@@ -34,10 +34,18 @@ public class SharedPreferencesUtil {
     public static final String RESUME_PAGE_ENABLE = "resume_page_enable";
     //新版美学设计（移植自 Re-WearBili 的视觉语言）总开关，关闭后回到旧版观感
     public static final String NEW_UI_DESIGN = "new_ui_design";
+    //新版开屏动画单独开关：新版开屏用「图标 + 粉色短线 + 氛围光晕」，部分设备上图标与整体观感不协调，
+    //允许单独关掉回到旧版纯黑+文字，而不影响其它页面的新版美学（仅在新版美学开启时生效）
+    public static final String SPLASH_NEW_UI = "splash_new_ui";
     //崩溃上报授权：默认关闭，未授权时全程不初始化 Bugly（见 CrashReportUtil）
     public static final String CRASH_REPORT_ENABLE = "crash_report_enable";
     //是否已就崩溃上报征求过意见，避免每次进引导页都弹窗
     public static final String CRASH_REPORT_ASKED = "crash_report_asked";
+    //活跃设备统计：每天最多上报一次「匿名安装标识 + 版本 + 机型」，用于统计日活/月活。
+    //与崩溃上报分开授权（同一张表、同一通道，crash_type=launch），默认开启，可单独关闭
+    public static final String USAGE_STATS_ENABLE = "usage_stats_enable";
+    //上次上报活跃统计的日期（yyyyMMdd），用于每天只报一次
+    public static final String USAGE_STATS_LAST_DAY = "usage_stats_last_day";
 
     public static String cookies = "cookies";
     public static String mid = "mid";

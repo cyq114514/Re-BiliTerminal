@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    自适应弹窗按钮：文字按钮，宽度与高度都由代码给定（宽等分、高 48dp）。
+    这里不再写 wrap_content——MaterialButton 的 TextButton 样式自带 inset，
+    与 padding 叠加后会把内容区压到几个像素，字号放大时文字只剩中间一条。
+-->
+<com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.MaterialComponents.Button.TextButton"
+    android:layout_width="0dp"
+    android:layout_height="48dp"
+    android:includeFontPadding="false"
+    android:maxLines="2"
+    android:minWidth="0dp"
+    android:paddingLeft="8dp"
+    android:paddingRight="8dp"
+    android:paddingTop="0dp"
+    android:paddingBottom="0dp"
+    android:textColor="@color/bili_pink"
+    android:textSize="13sp" />

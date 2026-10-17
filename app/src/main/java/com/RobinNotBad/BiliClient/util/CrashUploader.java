@@ -58,6 +58,14 @@ public final class CrashUploader {
     /** 本地崩溃记录文件保留份数 */
     private static final int MAX_LOCAL_FILES = 20;
 
+    /**
+     * 单条待发记录的最大重试次数。
+     * 队列里如果有一条被服务端永久拒绝（表约束不匹配、字段超长等 4xx），
+     * 旧实现"首条失败就 break"会让后面所有记录永远发不出去，所以改成
+     * 「跳过继续 + 计次 + 到上限丢弃并留痕」。
+     */
+    private static final int MAX_RETRY = 3;
+
     /** 安装标识键：随机 UUID，卸载重装才会变，不含任何账号信息 */
     private static final String KEY_DEVICE_ID = "crash_report_device_id";
 
@@ -66,6 +74,9 @@ public final class CrashUploader {
 
     /** 崩溃时所在的页面（类名），由 Application 的 Activity 回调维护 */
     private static volatile String currentPage = "";
+
+    /** 最近一次上传的 HTTP 状态码：-1 表示没连上（断网/DNS/被重置），由崩溃页展示便于定性 */
+    private static volatile int lastHttpCode = -1;
 
     private static OkHttpClient client;
 
@@ -178,14 +189,111 @@ public final class CrashUploader {
             if (upload(report)) {
                 //noinspection ResultOfMethodCallIgnored
                 file.delete();
+                clearFail(file);
                 CrashTrace.log("上报: 补发成功 " + file.getName());
                 Logu.e("crash", "补发成功 " + file.getName());
-            } else {
-                //仍是网络问题，剩下的下次再试，别继续耗
-                CrashTrace.log("上报: 补发失败，保留队列");
-                Logu.e("crash", "补发失败，保留队列");
-                break;
+                continue;
             }
+            //旧实现"首条失败就 break"：一旦队首那条被服务端永久拒绝，后面所有记录永远发不出去。
+            //现在改为逐条计次，连续失败到 MAX_RETRY 次就丢弃并留痕，保证队列能继续往前走
+            int fails = bumpFail(file);
+            if (fails >= MAX_RETRY) {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+                clearFail(file);
+                CrashTrace.log("上报: 放弃 " + file.getName() + "（连续失败 " + fails + " 次，HTTP " + lastHttpCode + "）");
+                Logu.e("crash", "放弃一条记录，HTTP " + lastHttpCode);
+            } else {
+                CrashTrace.log("上报: 补发失败 " + file.getName() + "（第 " + fails + " 次，HTTP " + lastHttpCode + "）");
+                Logu.e("crash", "补发失败，第 " + fails + " 次");
+            }
+        }
+    }
+
+    /** 最近一次上传的 HTTP 状态码；-1 表示请求根本没连上（断网 / DNS / 被重置） */
+    public static int lastHttpCode() {
+        return lastHttpCode;
+    }
+
+    /** 待发队列里还有多少条（崩溃页展示与「重新上报」用） */
+    public static int pendingCount(Context context) {
+        File dir = pendingDir(context);
+        if (dir == null) return 0;
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
+        return files == null ? 0 : files.length;
+    }
+
+    /**
+     * 组装非 Java 崩溃类的事件（原生崩溃 / ANR / 被系统杀 / 活跃统计）。
+     * 字段与 crash_reports 表一一对应，{@code exception_class} 用来放细分原因。
+     */
+    public static JSONObject buildEvent(Context context, String crashType, String exceptionClass,
+                                        String message, String threadName, String page, String detail) {
+        JSONObject report = new JSONObject();
+        try {
+            report.put("install_id", deviceId(context));
+            report.put("app_version", BuildConfig.VERSION_NAME);
+            report.put("android_version", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE);
+            report.put("sdk_int", Build.VERSION.SDK_INT);
+            report.put("device_model", Build.MODEL == null ? "" : Build.MODEL);
+            report.put("crash_type", crashType == null ? "" : crashType);
+            report.put("exception_class", cut(exceptionClass, MAX_MESSAGE));
+            report.put("message", cut(message, MAX_MESSAGE));
+            report.put("stacktrace", cut(detail, MAX_STACK));
+            report.put("thread_name", threadName == null ? "" : threadName);
+            report.put("page", page == null ? "" : page);
+        } catch (Throwable ignored) {
+        }
+        return report;
+    }
+
+    /**
+     * 通用投递：入队 → 尽力上传（调用方必须是后台线程）。
+     * 与 Java 崩溃的区别只是没有崩溃页要弹，所以不需要 join 等 1.5 秒。
+     */
+    public static boolean submit(Context context, JSONObject report) {
+        File pending = enqueue(context, report);
+        if (upload(report)) {
+            if (pending != null && pending.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                pending.delete();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 启动最早期（Application.onCreate 之前、ErrorCatch 尚未安装）的崩溃：
+     * 那一刻读不到任何配置，只能把原始堆栈落到 files 下，下次冷启动再转成正式上报。
+     * 这条路径<b>不受上报开关约束</b>——写本地永远允许，传不传由下一次启动时的开关决定。
+     */
+    public static void saveEarly(Context context, String stack) {
+        try {
+            File dir = new File(context.getFilesDir(), "crash_early");
+            if (!dir.exists() && !dir.mkdirs()) return;
+            File target = new File(dir, System.currentTimeMillis() + ".txt");
+            writeFile(target, stack == null ? "" : stack);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 把上次启动的早期崩溃文件转成正式上报（冷启动后台线程调用）。 */
+    public static void flushEarly(Context context) {
+        File dir = new File(context.getFilesDir(), "crash_early");
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".txt"));
+        if (files == null || files.length == 0) return;
+        sortByTime(files);
+        for (File file : files) {
+            String stack = readText(file);
+            JSONObject report = buildEvent(context, "java-early", "EarlyStartupCrash",
+                    "Application.onCreate 之前崩溃（ErrorCatch 尚未安装）", "main", "", stack);
+            //本地留档 + （授权时）上报，最后才删源文件：宁可重复也不要丢
+            saveLocal(report);
+            if (CrashReportUtil.isEnabled()) submit(context, report);
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+            CrashTrace.log("上报: 早期崩溃已转报 " + file.getName());
         }
     }
 
@@ -193,6 +301,7 @@ public final class CrashUploader {
 
     private static boolean upload(JSONObject report) {
         try {
+            lastHttpCode = -1;
             Request request = new Request.Builder()
                     .url(ENDPOINT)
                     .addHeader("apikey", API_KEY)
@@ -201,11 +310,53 @@ public final class CrashUploader {
                     .post(RequestBody.create(JSON_TYPE, report.toString()))
                     .build();
             try (Response response = client().newCall(request).execute()) {
+                lastHttpCode = response.code();
+                if (!response.isSuccessful()) {
+                    //以前只知道"失败"，分不清断网和有响应被拒：4xx 是服务端拒绝（字段/表约束），
+                    //重试再多次也没用；5xx/超时才是网络问题。状态码必须留痕
+                    CrashTrace.log("上报: HTTP " + response.code() + " " + cut(response.message(), 60));
+                    Logu.e("crash", "上报失败 HTTP " + response.code());
+                }
                 return response.isSuccessful();
             }
         } catch (Throwable t) {
             CrashTrace.log("上报: 请求异常 " + t.getClass().getSimpleName());
             return false;
+        }
+    }
+
+    /** 失败计数的旁挂文件：与待发 json 同目录、同名加 .fail 后缀（不会被 .json 过滤器扫到） */
+    private static File failFile(File pending) {
+        return new File(pending.getParentFile(), pending.getName() + ".fail");
+    }
+
+    private static int bumpFail(File pending) {
+        int fails = 1;
+        try {
+            File f = failFile(pending);
+            if (f.exists()) {
+                String text = readText(f);
+                int stored = 0;
+                try {
+                    stored = text == null ? 0 : Integer.parseInt(text.trim());
+                } catch (NumberFormatException ignored) {
+                }
+                fails = stored + 1;
+            }
+            writeFile(f, String.valueOf(fails));
+        } catch (Throwable ignored) {
+        }
+        return fails;
+    }
+
+    private static void clearFail(File pending) {
+        try {
+            File f = failFile(pending);
+            if (f.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -288,6 +439,27 @@ public final class CrashUploader {
             String line;
             while ((line = reader.readLine()) != null) builder.append(line);
             return new JSONObject(builder.toString());
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    /** 读纯文本（早期崩溃堆栈、失败计数旁挂文件用）。失败返回 null。 */
+    private static String readText(File file) {
+        BufferedReader reader = null;
+        try {
+            reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) builder.append(line).append('\n');
+            return builder.toString();
         } catch (Throwable t) {
             return null;
         } finally {

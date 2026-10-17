@@ -4,9 +4,11 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
+import android.graphics.Rect;
 import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.view.View;
@@ -31,9 +33,26 @@ public class AmbientBackground extends View {
 
     private static final int COLOR_PINK = 0xFFFE679A;
 
+    /**
+     * 径向光晕的预渲染降采样倍数。
+     *
+     * <p>为什么需要：径向渐变的半径是 {@code max(w,h)*0.75}，在放大界面后几乎铺满整屏，
+     * 每帧都要对全屏像素做一次渐变求值。实测 1.6 倍缩放下「关于」页单帧 GPU 侧耗时 972ms
+     * （logcat 里 Davey! duration=2779ms），滑动直接掉到个位数帧。
+     *
+     * <p>渐变本身是柔和的低频图像，降到 1/4 分辨率再放大肉眼分辨不出，
+     * 但每帧从「整屏渐变计算」变成「一次位图拉伸」。缓存图约 w/4×h/4 像素（1080×2160 屏上 0.6MB）。
+     */
+    private static final int CACHE_SCALE = 4;
+
     private int mode = MODE_RADIAL;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private ValueAnimator breatheAnim;
+
+    /** 径向光晕的预渲染结果；仅 MODE_RADIAL 使用 */
+    private Bitmap radialCache;
+    private final Paint cachePaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+    private final Rect cacheDst = new Rect();
 
     public AmbientBackground(Context context) {
         super(context);
@@ -45,10 +64,9 @@ public class AmbientBackground extends View {
 
     public void setMode(int mode) {
         this.mode = mode;
-        //不做软件层/位图缓存：硬件路径下绘制内容记录一次进 display list，
-        //呼吸动画只改 view alpha（合成参数），不逐帧重绘，对低配手表最省
         //渐变的色带用 dither 缓解
         paint.setDither(true);
+        if (mode == MODE_RADIAL && getWidth() > 0) rebuildRadialCache(getWidth(), getHeight());
         invalidate();
     }
 
@@ -83,6 +101,7 @@ public class AmbientBackground extends View {
             breatheAnim.cancel();
             breatheAnim = null;
         }
+        releaseRadialCache();
         super.onDetachedFromWindow();
     }
 
@@ -97,6 +116,7 @@ public class AmbientBackground extends View {
                     new int[]{ColorUtils.setAlphaComponent(COLOR_PINK, 0x59),
                             ColorUtils.setAlphaComponent(COLOR_PINK, 0x00)},
                     new float[]{0f, 1f}, Shader.TileMode.CLAMP));
+            rebuildRadialCache(w, h);
         }
         invalidate();
     }
@@ -108,13 +128,54 @@ public class AmbientBackground extends View {
         final int h = getHeight();
         if (w == 0 || h == 0) return;
         if (mode == MODE_RADIAL) {
-            if (paint.getShader() != null) {
+            if (radialCache != null && !radialCache.isRecycled()) {
+                cacheDst.set(0, 0, w, h);
+                canvas.drawBitmap(radialCache, null, cacheDst, cachePaint);
+            } else if (paint.getShader() != null) {
+                //缓存建不起来时退回直接绘制：只是慢，不影响正确性
                 canvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, paint);
             }
         } else {
             drawRing(canvas, w * 0.82f, h * 0.10f, w * 0.375f);
             drawRing(canvas, w * 0.18f, h * 0.90f, w * 0.375f);
         }
+    }
+
+    /**
+     * 把径向光晕预渲染到一张 1/{@link #CACHE_SCALE} 分辨率的位图。
+     * 渐变本身是低频图像，降采样后放大肉眼无差，但省掉了每帧的整屏渐变求值。
+     */
+    private void rebuildRadialCache(int w, int h) {
+        releaseRadialCache();
+        if (w <= 0 || h <= 0) return;
+        int bw = Math.max(1, w / CACHE_SCALE);
+        int bh = Math.max(1, h / CACHE_SCALE);
+        Bitmap bitmap;
+        try {
+            bitmap = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+        } catch (Throwable t) {
+            return;   //内存不足等情况：onDraw 会自动退回直接绘制
+        }
+        try {
+            Canvas cacheCanvas = new Canvas(bitmap);
+            //先用原尺寸坐标系画，再整体缩放到缓存分辨率，避免半径/圆心两处换算出错
+            cacheCanvas.scale(bw / (float) w, bh / (float) h);
+            Paint cacheShaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+            cacheShaderPaint.setShader(new RadialGradient(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f,
+                    new int[]{ColorUtils.setAlphaComponent(COLOR_PINK, 0x59),
+                            ColorUtils.setAlphaComponent(COLOR_PINK, 0x00)},
+                    new float[]{0f, 1f}, Shader.TileMode.CLAMP));
+            cacheCanvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, cacheShaderPaint);
+        } catch (Throwable t) {
+            bitmap.recycle();
+            return;
+        }
+        radialCache = bitmap;
+    }
+
+    private void releaseRadialCache() {
+        if (radialCache != null && !radialCache.isRecycled()) radialCache.recycle();
+        radialCache = null;
     }
 
     private void drawRing(Canvas canvas, float cx, float cy, float radius) {

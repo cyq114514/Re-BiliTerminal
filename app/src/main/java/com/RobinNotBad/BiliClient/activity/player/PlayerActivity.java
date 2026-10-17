@@ -76,6 +76,7 @@ import com.RobinNotBad.BiliClient.util.CookieGenerator;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.ProgressDiag;
 import com.RobinNotBad.BiliClient.util.ProtobufParser;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -411,6 +412,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     @SuppressLint("SimpleDateFormat")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        //哨兵最早打点：崩溃若发生在布局加载阶段，这里是唯一还能留下线索的地方
+        PlayerSentinel.beginOrContinue("进入播放页");
         Logu.v("加载", "加载");
         super.onCreate(savedInstanceState);
 
@@ -425,6 +428,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         setContentView(R.layout.activity_player);
+        //哨兵打点收敛到「能区分崩溃阶段」的最小集合：每调用一次 stage 就是一次 commit（同步落盘），
+        //原来 8 次打点在低端机上光 fsync 就要几十毫秒，这里把相邻的快速步骤合并
+        PlayerSentinel.stage("布局完成");
         findview();
         if (!getExtras()) {
             finish();
@@ -432,13 +438,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         initUI();
+        PlayerSentinel.stage("UI初始化完成");
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PLAYER_MEDIA_SESSION_ENABLE, false)) {
             initMediaSession();
         }
 
+        //最经典的原生崩溃点：so 加载失败直接 SIGSEGV/SIGILL，进不了任何 Java handler
+        PlayerSentinel.stage("加载ijk库");
         IjkMediaPlayer.loadLibrariesOnce(null);
 
+        //so 加载与 new 是连续两行，中间再打一次点区分不出阶段，白多一次同步落盘
         ijkPlayer = new IjkMediaPlayer();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -981,6 +991,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     private void setDisplay() {
+        PlayerSentinel.stage("配置显示");
         Logu.v("创建播放器");
         Logu.v("url", video_url);
 
@@ -1131,6 +1142,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             danmuSocketConnect();
         } else
             runOnUiThread(() -> loading_text0.setText("载入视频中"));
+        PlayerSentinel.stage("设置数据源");
         try {
             if (isOnlineVideo) {
                 //ijkplayer 走 native 网络栈，不受 networkSecurityConfig 约束：http 播放地址会以明文拉流，
@@ -1249,6 +1261,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         ijkPlayer.setScreenOnWhilePlaying(true);
         ijkPlayer.prepareAsync();
+        PlayerSentinel.stage("已提交准备");
         Logu.v("开始准备");
     }
 
@@ -1263,6 +1276,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         isPrepared = true;
+        PlayerSentinel.stage("首帧就绪");
         video_all = (int) ijkPlayer.getDuration();
 
         changeVideoSize();
@@ -2592,6 +2606,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     @Override
     protected void onDestroy() {
+        //走到这里说明是正常销毁（原生崩溃根本执行不到 onDestroy），哨兵可以收工了
+        PlayerSentinel.finish();
         //部分设备/ROM 会在页面启动阶段先回调一次 onDestroy（isFinishing=false）：
         //此时播放器与定时器尚未建立，早退是安全的；
         //但若已经初始化过（系统回收内存、"不保留活动"等非 finish 销毁路径），

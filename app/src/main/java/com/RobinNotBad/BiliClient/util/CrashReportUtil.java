@@ -6,8 +6,6 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
-import androidx.appcompat.app.AlertDialog;
-
 import com.RobinNotBad.BiliClient.R;
 
 /**
@@ -88,7 +86,9 @@ public final class CrashReportUtil {
 
         hostRef = new java.lang.ref.WeakReference<>(activity);
         try {
-            AlertDialog.Builder builder = new AlertDialog.Builder(activity)
+            //用自适应弹窗而非系统 AlertDialog：系统弹窗正文全是 wrap_content、没有高度上限，
+            //应用内把「界面大小」调大后说明文案会顶出屏幕，按钮点不到
+            AdaptiveDialog.Builder builder = new AdaptiveDialog.Builder(activity)
                     .setTitle(R.string.crash_notice_title)
                     .setMessage(activity.getString(optedOut
                             ? R.string.crash_notice_message_off

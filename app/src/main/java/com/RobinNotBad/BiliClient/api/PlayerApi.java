@@ -27,6 +27,7 @@ import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.ProgressDiag;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
@@ -169,6 +170,8 @@ public class PlayerApi {
 
     public static void startGettingUrl(PlayerData playerData) {
         Context context = BiliTerminal.context;
+        //播放哨兵起点：放在"用户点播放"这一层，连跳转页都没起来就闪退的情况也能留下线索
+        PlayerSentinel.begin("点击播放");
         context.startActivity(new Intent().setClass(context, JumpToPlayerActivity.class).putExtra("data", playerData).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     }
 

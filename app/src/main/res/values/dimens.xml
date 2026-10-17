@@ -16,4 +16,9 @@
     <dimen name="badge_padding_vertical">1dp</dimen>
     <dimen name="menu_button_label_spacing">6dp</dimen>
     <dimen name="topbar_padding_horizontal">12dp</dimen>
+
+    <!-- 自适应弹窗：外圈留给卡片阴影，内圈是标题/正文的边距 -->
+    <dimen name="dialog_shadow_padding">8dp</dimen>
+    <dimen name="dialog_padding_horizontal">16dp</dimen>
+    <dimen name="dialog_padding_vertical">14dp</dimen>
 </resources>

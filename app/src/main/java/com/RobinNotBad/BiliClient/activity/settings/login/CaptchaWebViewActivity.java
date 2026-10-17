@@ -2,16 +2,24 @@ package com.RobinNotBad.BiliClient.activity.settings.login;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.view.InflateException;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.google.android.material.card.MaterialCardView;
 
@@ -44,7 +52,15 @@ public class CaptchaWebViewActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_captcha_webview);
+        try {
+            setContentView(R.layout.activity_captcha_webview);
+        } catch (InflateException e) {
+            //系统 WebView 服务缺失/被禁用时，<WebView> 节点膨胀即抛异常（真机案例：M2505W1 / Android 14）
+            //此时不能闪退，改为展示指引页
+            Logu.e("验证码页 WebView 膨胀失败: " + e.getMessage());
+            showWebViewUnavailable();
+            return;
+        }
         setPageName("人机验证");
 
         String gt = getIntent().getStringExtra(EXTRA_GT);
@@ -57,8 +73,102 @@ public class CaptchaWebViewActivity extends BaseActivity {
             return;
         }
 
-        initZoomControls();
-        initWebView(gt, challenge);
+        try {
+            initZoomControls();
+            initWebView(gt, challenge);
+        } catch (Exception e) {
+            //膨胀成功但 WebView 运行期仍然坏掉的情况，同样兜底而不是崩
+            Logu.e("验证码页 WebView 初始化失败: " + e.getMessage());
+            showWebViewUnavailable();
+        }
+    }
+
+    /**
+     * 探测系统 WebView 是否可用，供登录流程在拉起本页前预检查。
+     * 只有能确定"没有 WebView 实现"时才返回 false；其余情况（含探测异常、低版本系统）一律放行，
+     * 避免误伤特殊 ROM，真正的兜底由本页的异常处理承担。
+     */
+    public static boolean isWebViewAvailable() {
+        if (Build.VERSION.SDK_INT < 26) return true;
+        try {
+            return WebView.getCurrentWebViewPackage() != null;
+        } catch (Exception e) {
+            Logu.e("WebView 可用性探测异常，按可用放行: " + e.getMessage());
+            return true;
+        }
+    }
+
+    /**
+     * WebView 不可用时的指引页，替代闪退。
+     * 提供"打开系统设置"入口，方便用户启用 Android System WebView。
+     */
+    private void showWebViewUnavailable() {
+        setPageName("人机验证");
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        int pad = dp(24);
+        root.setPadding(pad, pad, pad, pad);
+        root.setBackgroundColor(0xFFF5F5F5);
+
+        TextView title = new TextView(this);
+        title.setText("无法加载人机验证");
+        title.setTextSize(18f);
+        title.setTextColor(0xFF333333);
+        title.setGravity(Gravity.CENTER);
+
+        TextView desc = new TextView(this);
+        desc.setText("本机的系统 WebView 服务缺失、被禁用或正在更新，验证码页面无法显示。\n\n" +
+                "请到系统设置中启用「Android System WebView」（或安装 Chrome）后重试。");
+        desc.setTextSize(14f);
+        desc.setTextColor(0xFF666666);
+        desc.setGravity(Gravity.CENTER);
+        desc.setPadding(0, dp(12), 0, dp(20));
+
+        Button openSettings = new Button(this);
+        openSettings.setText("打开系统设置");
+        openSettings.setOnClickListener(v -> openWebViewSettings());
+
+        Button close = new Button(this);
+        close.setText("关闭");
+        close.setOnClickListener(v -> {
+            setResult(RESULT_CANCELED);
+            finish();
+        });
+
+        root.addView(title);
+        root.addView(desc);
+        root.addView(openSettings);
+        root.addView(close);
+        setContentView(root);
+    }
+
+    /**
+     * 依次尝试跳转各 WebView provider 的应用详情页，都跳不了就退到系统设置首页。
+     */
+    private void openWebViewSettings() {
+        String[] providers = {"com.google.android.webview", "com.android.webview", "com.android.chrome"};
+        for (String pkg : providers) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + pkg));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                return;
+            } catch (Exception ignored) {
+                //该 provider 不存在或无法打开，试下一个
+            }
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception e) {
+            MsgUtil.showMsg("请手动到系统设置中启用 Android System WebView");
+        }
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density);
     }
 
     private void initZoomControls() {

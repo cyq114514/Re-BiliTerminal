@@ -127,6 +127,12 @@ public class SMSLoginFragment extends Fragment {
 
                 CenterThreadPool.runOnUiThread(() -> {
                     if (!isAdded()) return;
+                    if (!CaptchaWebViewActivity.isWebViewAvailable()) {
+                        //无系统 WebView 时不进验证页（会闪退），直接提示
+                        setStatus("系统 WebView 不可用，无法加载验证码");
+                        MsgUtil.showMsg("请在系统设置中启用「Android System WebView」");
+                        return;
+                    }
                     setStatus("");
                     Intent intent = new Intent(requireContext(), CaptchaWebViewActivity.class);
                     intent.putExtra(CaptchaWebViewActivity.EXTRA_GT, params.gt);

@@ -29,4 +29,7 @@
     <color name="divider_gray">#DDDDDD</color>
     <color name="color_danger">#FF5722</color>
     <color name="scrim_black">#66000000</color>
+
+    <!-- 自适应弹窗底色：不透明深灰，叠在系统 dim 之上保证长文本可读 -->
+    <color name="dialog_bg">#F21C1C1C</color>
 </resources>

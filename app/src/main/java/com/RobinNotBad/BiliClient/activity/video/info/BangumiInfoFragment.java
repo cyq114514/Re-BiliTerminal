@@ -14,7 +14,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -449,7 +449,9 @@ public class BangumiInfoFragment extends Fragment {
             }
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        //自适应弹窗：整季可能有上百集，系统弹窗的列表没有高度上限，放大界面后
+        //底部的集数会被屏幕裁掉且滚不到，这里由弹窗自己分配高度并内部滚动
+        AdaptiveDialog.Builder builder = new AdaptiveDialog.Builder(requireContext());
         builder.setSingleChoiceItems(choices.toArray(new String[0]), Math.max(currentFlatIndex, 0), (dialog, which) -> {
             if (which < 0 || which >= positions.size()) return;
             int[] position = positions.get(which);

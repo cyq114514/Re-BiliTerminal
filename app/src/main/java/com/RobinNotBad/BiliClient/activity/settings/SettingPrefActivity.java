@@ -28,8 +28,14 @@ public class SettingPrefActivity extends RefreshListActivity {
                 add(new SettingSection("title", "功能", "", "", ""));
                 add(new SettingSection("switch", "隐私模式", SharedPreferencesUtil.PRIVACY_MODE, getString(R.string.desc_privacy_mode), "false"));
                 //崩溃上报：与首启授权写同一个键，切换后由 CrashReportUtil 的偏好监听立即生效
+                //默认值必须与 CrashReportUtil.isEnabled()（默认 true）一致，
+                //否则设置页显示"关"、实际在传，用户会据此误判上报链路不通
                 add(new SettingSection("switch", "崩溃上报", SharedPreferencesUtil.CRASH_REPORT_ENABLE,
-                        getString(R.string.desc_crash_report), "false"));
+                        getString(R.string.desc_crash_report), "true"));
+                //活跃设备统计：只报匿名安装标识+版本+机型，每天最多一条，用于算日活/月活
+                add(new SettingSection("switch", "活跃设备统计", SharedPreferencesUtil.USAGE_STATS_ENABLE,
+                        "每天最多上报一次匿名安装标识、应用版本与机型，用于统计日活/月活设备数；不含账号信息",
+                        "true"));
                 add(new SettingSection("switch", "长按复制", "copy_enable", getString(R.string.desc_copy_enable), "true"));
                 add(new SettingSection("switch", "创作中心", "creative_enable", getString(R.string.desc_creative_enable),
                         "true"));
@@ -75,6 +81,8 @@ public class SettingPrefActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "新提示信息显示方式", SharedPreferencesUtil.SNACKBAR_ENABLE,
                         "打开此选项，会启用新提示信息显示方式", "true"));
 
+                add(new SettingSection("switch", "新版开屏动画", SharedPreferencesUtil.SPLASH_NEW_UI,
+                        "新版开屏为「图标+粉色短线+氛围光晕」，觉得图标不协调可关闭，回到纯黑+文字的旧开屏", "true"));
                 add(new SettingSection("title", "表冠", "", "", ""));
                 add(new SettingSection("switch", "启用表冠适配", "ui_rotatory_enable",
                         getString(R.string.setting_lab_ui_rotatory), "false"));

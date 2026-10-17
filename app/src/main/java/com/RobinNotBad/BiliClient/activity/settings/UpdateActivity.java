@@ -11,6 +11,7 @@ import android.widget.TextView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.model.UpdateInfo;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.LinkUrlUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -84,7 +85,7 @@ public class UpdateActivity extends BaseActivity {
         for (int i = 0; i < presets.length; i++)
             if (presets[i].equals(current)) checked = i;
 
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        new AdaptiveDialog.Builder(this)
                 .setTitle("选择更新源")
                 .setSingleChoiceItems(labels, checked, (dialog, which) -> {
                     if (which < presets.length) {
@@ -109,7 +110,7 @@ public class UpdateActivity extends BaseActivity {
         input.setText(UpdateManager.getMirrorPrefix());
         container.addView(input);
 
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        new AdaptiveDialog.Builder(this)
                 .setTitle("自定义镜像前缀")
                 .setMessage("将拼接在 github.com 链接之前，例如：\nhttps://mirror.example.com/\n留空表示直连")
                 .setView(container)

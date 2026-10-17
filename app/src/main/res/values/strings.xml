@@ -49,7 +49,7 @@
     <string name="err_crash_upload_json">上传接口出现变动，建议更新版本</string>
 
     <string name="crash_notice_title">崩溃上报说明</string>
-    <string name="crash_notice_message_on">为了定位闪退，本版本起默认开启崩溃上报。\n\n【会收集】崩溃堆栈、机型、系统版本、应用版本、随机生成的安装标识、崩溃时所在页面。\n【不会收集】账号、Cookie、浏览记录、搜索记录。\n\n每次崩溃还会在本机 Download/ReBiliDiag 留一份记录（该目录不可写时回落到 Android/media）。\n\n不想上报？点下方「关闭上报」，或随时到 设置 → 偏好设置 → 崩溃上报 关闭。</string>
+    <string name="crash_notice_message_on">为了定位闪退与统计活跃设备数，本版本起默认开启崩溃上报与活跃设备统计。\n\n【会收集】崩溃堆栈、机型、系统版本、应用版本、随机生成的安装标识、崩溃时所在页面；活跃设备统计每天最多一条（安装标识+版本+机型）。\n【不会收集】账号、Cookie、浏览记录、搜索记录。\n\n每次崩溃还会在本机 Download/ReBiliDiag 留一份记录（该目录不可写时回落到 Android/media）。\n\n不想上报？点下方「关闭上报」，或随时到 设置 → 偏好设置 关闭「崩溃上报」与「活跃设备统计」。</string>
     <string name="crash_notice_message_off">你此前关闭过崩溃上报，本次更新不会自动为你打开。\n\n崩溃上报会收集：崩溃堆栈、机型、系统版本、应用版本、随机安装标识、崩溃时所在页面；不包含账号、Cookie、浏览与搜索记录。\n\n如需开启，请到 设置 → 偏好设置 → 崩溃上报 打开。</string>
     <string name="crash_notice_ok">我知道了</string>
     <string name="crash_notice_disable">关闭上报</string>
@@ -66,6 +66,8 @@
     <string name="egg_about_to_uncle">"你指尖跃动的电光，是我此生不灭的信仰。"[extra_insert]{"type":"video","content":"BV157411v76Z","title":"【B站入站曲】"}</string>
     <string-array name="eggs">
         <item>恭喜你找到了这个彩蛋喵~再长按几次试试吧？\n\n*此处的彩蛋可能会随着版本更新而变动，如果你看到了这个，也可以向Robin投稿下一个版本的彩蛋哦？</item>
+
+        <item>AI的发展速度超乎我的想象，从26年初到现在26年10月，我几乎亲历了agentic coding的爆发式增长，Re：哔哩终端也因此得以从设想变为现实。迅捷发展的生产力也许正在默默改变生产关系，AI似乎已经成为了变革生产关系的一个奇点，我不得不思考这样一个问题：连像我这样的外行都能用AI维护出Re哔哩终端这样一个项目，我们的未来究竟会怎么样？归根到底，未来怎么办，只有天知道……我所能做的便是看着AI究竟会怎样变革人类社会，让我们拭目以待\n\n#Re哔哩终端开发者：你滴勋宗</item>
 
         <item>开源总是有无限的生机,就像大自然样,总会在枯萎的地方,重新长出嫩绿的新枝\n虽Robin停止了开发,但"我们"仍会继续维护与更新,也希望你在腕上玩的愉快\n\n#投稿者：元時光</item>
         <item>Do not go gentle into that good night,\nOld age should burn and rave at close of day;\nRage, rage against the dying of the light.\n\n不要温和地走进那个良夜，\n白昼告终时老人该燃烧、该狂喊；\n该怒斥、怒斥那光明的逐渐消歇。\n\n#——Dylan Thomas\n\n#投稿者：Aqua_ra1n\n\n*以上皆为原文，不要关心英文诗歌的语法问题（</item>

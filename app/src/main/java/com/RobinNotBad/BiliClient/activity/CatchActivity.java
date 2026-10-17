@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.model.ApiResult;
 import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CrashTrace;
+import com.RobinNotBad.BiliClient.util.CrashUploader;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
@@ -42,7 +43,12 @@ public class CatchActivity extends BaseActivity {
 
         stack_view.setText(stack);
 
-        findViewById(R.id.exit_btn).setOnClickListener(view -> System.exit(-1));
+        //原来是 System.exit(-1)：非 0 退出码会被系统判成异常退出并弹「应用已停止运行」，
+        //用户看到的就是"点退出又崩了一次"。这里改成正常结束 :crash 进程，不再触发系统弹窗
+        findViewById(R.id.exit_btn).setOnClickListener(view -> {
+            finish();
+            Process.killProcess(Process.myPid());
+        });
 
         SpannableString reason_str = null;
 
@@ -59,9 +65,28 @@ public class CatchActivity extends BaseActivity {
             else
                 reason_str = new SpannableString("未知的崩溃原因");
 
-            btn_upload.setVisibility(android.view.View.GONE);
-
         } else finish();
+
+        //原来正常崩溃时这个按钮被 GONE 掉，用户没有任何手动重传入口，
+        //队列里积压的记录只能干等下次启动。现在改成常显的「重新上报未发出的记录」
+        btn_upload.setVisibility(android.view.View.VISIBLE);
+        btn_upload.setText("重新上报未发出的记录");
+        btn_upload.setOnClickListener(view -> {
+            btn_upload.setEnabled(false);
+            btn_upload.setText("正在重新上报…");
+            CenterThreadPool.run(() -> {
+                int sent = CrashUploader.pendingCount(CatchActivity.this);
+                CrashUploader.flushPending(CatchActivity.this);
+                int left = CrashUploader.pendingCount(CatchActivity.this);
+                int http = CrashUploader.lastHttpCode();
+                CenterThreadPool.runOnUiThread(() -> {
+                    btn_upload.setEnabled(true);
+                    btn_upload.setText("重新上报未发出的记录（待发 " + left + "）\n上次结果：HTTP "
+                            + (http < 0 ? "未连上" : http) + "，原待发 " + sent + " 条");
+                });
+            });
+        });
+        btn_upload.setText("重新上报未发出的记录（待发 " + CrashUploader.pendingCount(this) + "）");
 
         findViewById(R.id.restart_btn).setOnClickListener(view -> {
             finish();

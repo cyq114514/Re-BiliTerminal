@@ -22,6 +22,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import org.json.JSONException;
@@ -98,8 +99,11 @@ public class JumpToPlayerActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        //"连播放界面都没见到就闪退"正好发生在这一层：本页负责取流，崩在这里用户看不到任何播放界面
+        PlayerSentinel.beginOrContinue("进入跳转页");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_player_jump);
+        PlayerSentinel.stage("跳转页布局完成");
 
         textView = findViewById(R.id.text_title);
 
@@ -111,6 +115,7 @@ public class JumpToPlayerActivity extends BaseActivity {
         //被外部拉起/进程重建等场景下 extra 可能缺失，直接退出而不是 NPE
         if (playerData == null) {
             MsgUtil.showMsgLong("启动参数缺失，请从应用内重新进入");
+            PlayerSentinel.finish();   //正常退出路径，别让下次启动误报一次"异常"
             finish();
             return;
         }
@@ -126,20 +131,25 @@ public class JumpToPlayerActivity extends BaseActivity {
 
     @SuppressLint("SetTextI18n")
     private void requestVideo() {
+        PlayerSentinel.stage("解析播放地址");
         CenterThreadPool.run(() -> {
 
             try {
                 if (playerData.isBangumi()) PlayerApi.getBangumi(playerData);
                 else PlayerApi.getVideo(playerData, download != 0);
 
+                PlayerSentinel.stage("地址已就绪");
                 Logu.d("history", String.valueOf(playerData.progress));
                 jump();
             } catch (IOException e) {
+                PlayerSentinel.finish();
                 setClickExit("网络错误！\n请检查你的网络连接是否正常");
             } catch (JSONException e) {
+                PlayerSentinel.finish();
                 setClickExit("视频获取失败！\n可能的原因：\n1.本视频仅大会员可播放\n2.视频获取接口失效\n\n清除应用数据也许可以解决" + e.getMessage());
                 e.printStackTrace();
             } catch (ActivityNotFoundException e) {
+                PlayerSentinel.finish();
                 setClickExit("跳转失败！\n请安装对应的播放器\n或在设置中选择正确的播放器\n或将 Re：哔哩终端 和播放器同时更新到最新版本");
                 e.printStackTrace();
             }
@@ -150,9 +160,16 @@ public class JumpToPlayerActivity extends BaseActivity {
         if (isDestroyed()) return;
         if (download == 0) {
             Intent intent = PlayerApi.jumpToPlayer(playerData);
+            //只有内置播放器归哨兵管：外部播放器跑在别的进程，它崩了不该算到我们头上。
+            //内置则继续挂标记，播放页正常销毁时才会清除
+            if ("terminalPlayer".equals(SharedPreferencesUtil.getString("player", "null")))
+                PlayerSentinel.stage("启动内置播放页");
+            else
+                PlayerSentinel.finish();
             launcher.launch(intent);
             setClickExit("等待退出播放后上报进度\n（点击跳过）");
         } else {
+            PlayerSentinel.finish();   //下载分支不进入播放，标记要清掉
             Intent intent = new Intent();
             intent.setClass(this, DownloadActivity.class);
             intent.putExtra("type", download);
@@ -169,6 +186,7 @@ public class JumpToPlayerActivity extends BaseActivity {
 
     @Override
     public void onBackPressed() {
+        PlayerSentinel.finish();   //用户主动退出跳转页，不是异常
         finish();
     }
 

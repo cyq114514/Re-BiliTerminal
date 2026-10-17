@@ -9,6 +9,8 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 
 import androidx.annotation.NonNull;
@@ -23,7 +25,10 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CookieRefresher;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
 import com.RobinNotBad.BiliClient.util.CrashUploader;
+import com.RobinNotBad.BiliClient.util.ExitReasonCollector;
+import com.RobinNotBad.BiliClient.util.LaunchPing;
 import com.RobinNotBad.BiliClient.util.Logu;
+import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
@@ -46,6 +51,9 @@ public class BiliTerminal extends Application {
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         MultiDex.install(this);
+        //最早的一层崩溃兜底：从这一行到 onCreate 装好 ErrorCatch 之间发生的崩溃，
+        //以前是完全不留痕的（MultiDex / SP / getFitDisplayContext 都在这个窗口里）
+        ErrorCatch.initEarly(this);
     }
 
     @Override
@@ -59,20 +67,42 @@ public class BiliTerminal extends Application {
             //准备 SP + context 即可，不做上报初始化、不装 ErrorCatch、不跑登录续期等——
             //既省内存也避免重复初始化与重复上报
             if (!isMainProcess()) {
+                //崩溃页自己也会崩（用户已经遇到过"点退出又崩"），这里装上只落盘、不重开页面的处理器
+                ErrorCatch.initCrashProcess(context);
                 return;
             }
 
             //崩溃捕获始终由 ErrorCatch 承担；上报开关只决定"传不传"，不影响崩溃页
             ErrorCatch.getInstance().init(context);
             CrashReportUtil.registerPreferenceListener(this);
-            //上次没传出去的崩溃（弱网/WiFi 被拦）在这次启动补发
+            //上次没传出去的崩溃（弱网/WiFi 被拦）在这次启动补发；
+            //同时补发"启动最早期的崩溃"，并把系统记录的 native 崩溃 / ANR / 被低内存杀掉也补报上来。
+            //三个任务必须各自独立提交：原来串在同一个 lambda 里，ExitReasonCollector 排在两次网络补发之后，
+            //而单次上传超时 8 秒、队列最多 5 条，弱网下最坏要等 40 秒才轮到它——"上次原生崩溃"的记录因此经常丢
             CenterThreadPool.run(() -> CrashUploader.flushPending(this));
+            CenterThreadPool.run(() -> CrashUploader.flushEarly(this));
+            CenterThreadPool.run(() -> ExitReasonCollector.collect(this));
+
+            //活跃设备统计：每天一条，随机延迟 3~8 秒再发，避免所有设备在冷启动瞬间同时打点。
+            //用 Handler 延迟而不是让线程 sleep：sleep 会白占一个后台线程最长 8 秒
+            new Handler(Looper.getMainLooper()).postDelayed(
+                    () -> CenterThreadPool.run(() -> LaunchPing.reportIfNeeded(this)),
+                    3000 + (long) (Math.random() * 5000));
+
+            //播放哨兵：上次播放没有正常收尾（原生崩溃/被系统回收）时补报一条。
+            //这类退出进不了 Java 崩溃 handler，只能靠标记残留来发现（内部先清标记再报，不会重复）
+            //必须放后台：它要读写偏好并 commit（同步落盘），在冷启动主线程上就是白等几次 fsync
+            CenterThreadPool.run(() -> PlayerSentinel.checkAndReport(this));
 
             //1.2.0-v5 曾在本地保存过"每集看到哪里"(episode_progress)，v6 起改为只信服务端
-            //（与 PiliPlus 同口径）。这里每次冷启动清空一次，避免旧数据残留在设备上造成记录错乱。
-            try {
-                getSharedPreferences("episode_progress", MODE_PRIVATE).edit().clear().apply();
-            } catch (Exception ignored) {
+            //（与 PiliPlus 同口径）。清一次就够，用标记记住：原来每次冷启动都清，等于每次启动
+            //多一次偏好文件重写，旧数据也早在第一次就没了
+            if (!SharedPreferencesUtil.getBoolean("episode_progress_cleared_v6", false)) {
+                try {
+                    getSharedPreferences("episode_progress", MODE_PRIVATE).edit().clear().apply();
+                    SharedPreferencesUtil.putBoolean("episode_progress_cleared_v6", true);
+                } catch (Exception ignored) {
+                }
             }
 
             //冷启动恢复记录的生命周期：所有 Activity 都销毁 = 用户正常退出任务，清除记录；

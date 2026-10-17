@@ -58,8 +58,11 @@ public class SplashActivity extends Activity {
 
         //开屏页跟随「新版美学设计」总开关（与页面内氛围背景同一口径）：
         //新版用黑底 + 粉色氛围光晕 + 图标 + 粉色短线，旧版保持原来的纯黑 + 文字。
-        //两个布局共用 @id/splashText，所以下面的打字机逻辑无需分支
-        boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
+        //两个布局共用 @id/splashText，所以下面的打字机逻辑无需分支。
+        //在此基础上再乘一个「新版开屏动画」独立开关：图标/光晕在部分设备上观感不协调时，
+        //可以只关开屏、保留其它页面的新版美学（总开关关闭时一律走旧版）
+        boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)
+                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.SPLASH_NEW_UI, true);
         setContentView(newUi ? R.layout.activity_splash_new : R.layout.activity_splash);
         Log.e("debug", "进入应用");
 

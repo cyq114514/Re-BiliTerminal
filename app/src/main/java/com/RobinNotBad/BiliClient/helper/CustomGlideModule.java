@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.helper;
 
+import android.app.ActivityManager;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
@@ -10,7 +11,9 @@ import com.bumptech.glide.GlideBuilder;
 import com.bumptech.glide.Registry;
 import com.bumptech.glide.annotation.GlideModule;
 import com.bumptech.glide.integration.okhttp3.OkHttpUrlLoader;
+import com.bumptech.glide.load.engine.bitmap_recycle.LruBitmapPool;
 import com.bumptech.glide.load.engine.cache.InternalCacheDiskCacheFactory;
+import com.bumptech.glide.load.engine.cache.LruResourceCache;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.module.AppGlideModule;
 
@@ -28,6 +31,20 @@ public class CustomGlideModule extends AppGlideModule {
         //磁盘缓存 64MB 上限（LRU 自动淘汰）：此前全线 NONE 不落盘，内存缓存回收后每图重走网络；
         //上限防低存储手表被缓存占满
         builder.setDiskCache(new InternalCacheDiskCacheFactory(context, 64 * 1024 * 1024));
+
+        //内存缓存与位图池显式封顶（memoryClass 的 1/8，4~32MB）：
+        //Glide 默认按 memoryClass 的比例放大（memoryCache≈0.8×、bitmapPool≈1.6×），
+        //在 64MB heap 的低端手表上接近半壁江山，进列表滑几下就触发 GC 甚至被系统回收。
+        //图片本身已经用 RGB_565 解码（见 GlideUtil），池子不需要更大
+        int memoryClassMb = 64;
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) memoryClassMb = am.getMemoryClass();
+        } catch (Throwable ignored) {
+        }
+        int cacheBytes = Math.max(4, Math.min(32, memoryClassMb / 8)) * 1024 * 1024;
+        builder.setMemoryCache(new LruResourceCache(cacheBytes));
+        builder.setBitmapPool(new LruBitmapPool(cacheBytes));
     }
 
     @Override

@@ -13,11 +13,11 @@ import android.widget.RadioButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.model.SettingSection;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -168,7 +168,8 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         }
 
         private void showWarnConfirm(SettingSection settingSection, boolean target, String message) {
-            new AlertDialog.Builder(itemView.getContext())
+            //自适应弹窗：警告文案较长，系统弹窗在放大界面后会把「取消」按钮顶出屏幕
+            new AdaptiveDialog.Builder(itemView.getContext())
                     .setTitle(settingSection.name)
                     .setMessage(message == null ? "" : message)
                     .setPositiveButton("确定", (dialog, which) ->

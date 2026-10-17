@@ -78,4 +78,19 @@
         #设置默认字体大小，某些设备的默认字体偏大
     </style>
 
+    <!--
+        自适应弹窗主题：不用系统 AlertDialog 的原因见 AdaptiveDialog 类注释——
+        系统弹窗布局全部 wrap_content 且没有高度上限，应用内放大字号/密度后会被屏幕裁掉。
+        这里把窗口背景设为透明，由布局里的 MaterialCardView 自绘；最小宽度归零，避免
+        系统按 65%/35% 强行定宽。
+    -->
+    <style name="Dialog.Adaptive" parent="Theme.MaterialComponents.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowMinWidthMajor">0%</item>
+        <item name="android:windowMinWidthMinor">0%</item>
+        <item name="android:backgroundDimAmount">0.55</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+
 </resources>
