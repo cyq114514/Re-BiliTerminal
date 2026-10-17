@@ -175,6 +175,11 @@ public class AboutActivity extends BaseActivity {
                     com.RobinNotBad.BiliClient.util.LinkUrlUtil.handleWebURL(this,
                             "https://github.com/cyq114514/Re-BiliTerminal"));
 
+            //官网：与仓库卡片同样的处理方式，站内跳转或外部浏览器由 LinkUrlUtil 决定
+            findViewById(R.id.website_card).setOnClickListener(v ->
+                    com.RobinNotBad.BiliClient.util.LinkUrlUtil.handleWebURL(this,
+                            "https://re-biliterminal.netlify.app"));
+
             findViewById(R.id.author_words).setOnClickListener(view -> {
                 eggClick_authorWords++;
                 if (eggClick_authorWords == 7) {
