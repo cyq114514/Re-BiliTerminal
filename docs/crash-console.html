@@ -59,6 +59,9 @@
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
   .toolbar select, .toolbar input { width: auto; min-width: 120px; }
   .toolbar input { min-width: 200px; flex: 1; }
+  .toolbar .exp { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar .exp .count { font-size: 12px; color: var(--text-dim); }
+  @media (max-width: 640px) { .toolbar .exp { margin-left: 0; } }
 
   .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
   .tab { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-size: 13px; color: var(--text-dim); }
@@ -151,6 +154,11 @@
       <select id="fModel"><option value="">全部机型</option></select>
       <select id="fPage"><option value="">全部页面</option></select>
       <input id="fSearch" type="text" placeholder="搜索异常类型 / 消息…">
+      <div class="exp">
+        <span class="count" id="expCount"></span>
+        <button id="expCsvBtn" title="导出当前筛选结果（不含堆栈，Excel 可直接打开）">导出 CSV</button>
+        <button id="expJsonBtn" title="导出当前筛选结果（含堆栈的完整数据）">导出 JSON</button>
+      </div>
     </div>
 
     <div class="card" style="padding:0; overflow:hidden">
@@ -310,6 +318,57 @@
     toast._t = setTimeout(function () { el.classList.remove('show'); }, 1800);
   }
 
+  // ---------------------------------------------------------------- 导出
+  function exportName(ext) {
+    var d = new Date(), p = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return 'crash-reports-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
+           '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.' + ext;
+  }
+
+  function download(name, text, mime) {
+    var blob = new Blob([text], { type: mime });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+      document.body.removeChild(a);
+    }, 0);
+  }
+
+  // CSV 标准转义：含引号/逗号/换行的字段用双引号包裹，内部引号翻倍
+  function csvCell(v) {
+    v = v == null ? '' : String(v);
+    return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
+
+  function exportCsv() {
+    var rows = filtered();
+    if (!rows.length) return;
+    var head = ['时间', '类型', '异常', '消息', '应用版本', '系统版本', 'SDK', '机型', '页面', '线程', '安装标识'];
+    var lines = [head.join(',')];
+    rows.forEach(function (r) {
+      lines.push([
+        fmtTime(r.created_at), r.crash_type || 'java', r.exception_class || '',
+        r.message || '', r.app_version || '', r.android_version || '',
+        r.sdk_int == null ? '' : r.sdk_int, r.device_model || '', r.page || '',
+        r.thread_name || '', r.install_id || ''
+      ].map(csvCell).join(','));
+    });
+    // \uFEFF BOM：让 Excel 按 UTF-8 解析，中文不乱码
+    download(exportName('csv'), '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+    toast('已导出 ' + rows.length + ' 条（CSV，不含堆栈）');
+  }
+
+  function exportJson() {
+    var rows = filtered();
+    if (!rows.length) return;
+    download(exportName('json'), JSON.stringify(rows, null, 2), 'application/json');
+    toast('已导出 ' + rows.length + ' 条（JSON，含堆栈）');
+  }
+
   // ---------------------------------------------------------------- 渲染
   function uniqueSorted(key) {
     var seen = {}, out = [];
@@ -423,6 +482,10 @@
     var rows = filtered();
     renderStats(state.rows);
     if (state.tab === 'list') renderList(rows); else renderGroup(rows);
+    // 导出区：跟随当前筛选结果
+    $('expCount').textContent = rows.length ? '将导出 ' + rows.length + ' 条' : '';
+    $('expCsvBtn').disabled = !rows.length;
+    $('expJsonBtn').disabled = !rows.length;
   }
 
   // ---------------------------------------------------------------- 详情
@@ -505,6 +568,8 @@
   });
 
   $('refreshBtn').addEventListener('click', load);
+  $('expCsvBtn').addEventListener('click', exportCsv);
+  $('expJsonBtn').addEventListener('click', exportJson);
   $('logoutBtn').addEventListener('click', function () {
     clearSession();
     state.rows = [];
