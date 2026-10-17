@@ -1,0 +1,7 @@
+# Netlify 反向代理：把 GitHub Release 上的 update.json 变成同源地址，
+# 绕开浏览器跨域限制；页面里的版本号与下载文件名都来自这里。
+/api/update.json  https://github.com/cyq114514/Re-BiliTerminal/releases/latest/download/update.json  200
+
+# 旧地址兼容（如以后换页面名）
+/features  /index.html#features  301
+/download  /index.html#download  301

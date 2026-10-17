@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 部署后请把下面 4 个 loc 里的域名替换为 Netlify 实际分配的站点地址 -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://re-biliterminal.netlify.app/</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://re-biliterminal.netlify.app/faq.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://re-biliterminal.netlify.app/changelog.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://re-biliterminal.netlify.app/privacy.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <priority>0.6</priority>
+  </url>
+</urlset>

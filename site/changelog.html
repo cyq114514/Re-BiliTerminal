@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>更新日志 · Re：哔哩终端</title>
+<meta name="description" content="Re：哔哩终端的历史版本更新说明。">
+<meta name="theme-color" content="#101012">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="brand">Re：<span>哔哩终端</span></div>
+    <nav>
+      <a href="index.html">首页</a>
+      <a href="faq.html">FAQ</a>
+      <a href="privacy.html">隐私</a>
+    </nav>
+  </div>
+</header>
+
+<main class="doc">
+  <div class="wrap">
+    <h1>更新日志</h1>
+    <p class="lead">只写用户能感知的变化。完整的技术细节在仓库的 <code>docs/更新日志.md</code>。</p>
+
+    <div class="log-item">
+      <h3>1.2.1</h3>
+      <div class="date">2026-10-17 · versionCode 20261017</div>
+      <ul>
+        <li><strong>崩溃页黑屏彻底修复</strong>：之前部分崩溃会看到永久黑屏，根因是崩溃页自身又崩了一次，现已修正。</li>
+        <li><strong>崩溃上报改为开发者自建服务</strong>：不再经过第三方平台，数据可控；同时移除了闭源 SDK，安装包小了约 280KB。</li>
+        <li><strong>崩溃上报默认开启</strong>：首次安装或升级会弹窗说明收集内容与关闭方式，可在「设置 → 偏好设置 → 崩溃上报」随时关闭。</li>
+        <li>每次崩溃都会在本机留一份记录（<code>Download/ReBiliDiag/crash-*.txt</code>），反馈时可直接提供。</li>
+        <li>弱网下上报失败不会丢失：会自动排队，下次启动补发。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
+      <h3>1.2.0fix</h3>
+      <div class="date">2026-10-11 · versionCode 20261011</div>
+      <ul>
+        <li><strong>修复番剧「看了这集、点开另一集却从上一集位置开始播」</strong>（跨集串进度）。</li>
+        <li><strong>修复番剧续播读不到位置</strong>：在网页端或官方客户端看过的进度现在能被正确接上。</li>
+        <li>番剧改为<strong>按集</strong>记录进度，任选一集都能从上次位置继续。</li>
+        <li>修复搜索页：搜完点输入框或切后台回来，结果被「搜索记录」挡住或消失。</li>
+        <li>评论卡片与搜索页样式统一；圆屏播放页布局修复。</li>
+        <li>经验、硬币的变化记录改为在本机累积（B 站接口只给最近一周），可查看更早的记录。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
+      <h3>1.2.0</h3>
+      <div class="date">2026-09</div>
+      <ul>
+        <li>「记住退出页面」改为默认关闭，避免切后台回来时跳到意外页面。</li>
+        <li>修复私信顶部黑块、番剧与表情页底色异常。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
+      <h3>1.1.7</h3>
+      <div class="date">2026-08</div>
+      <ul>
+        <li>流畅度与省流大版本：列表动画与重复绘制精简。</li>
+        <li>新增热搜榜、记住倍速、收藏夹公开/私有切换。</li>
+        <li>图片改为本地缓存，减少重复下载。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
+      <h3>1.1.6-fix</h3>
+      <div class="date">2026-08</div>
+      <ul>
+        <li>修复长时观看后闪退：画面资源释放、直播弹幕旧连接、页面定时任务泄漏。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
+      <h3>1.1.6</h3>
+      <div class="date">2026-07</div>
+      <ul>
+        <li>新版美学设计：氛围背景、圆形主菜单、按压反馈，设置内可回退旧版样式。</li>
+      </ul>
+    </div>
+
+    <p class="note">更早的版本与逐条技术细节见 <a href="https://github.com/cyq114514/Re-BiliTerminal/blob/main/docs/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.md" target="_blank" rel="noopener">仓库更新日志</a>。</p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="copy"><a href="index.html">返回首页</a> · Re：哔哩终端 · GPL-3.0</div>
+  </div>
+</footer>
+
+</body>
+</html>

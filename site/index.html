@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Re：哔哩终端 —— 轻量第三方 B 站客户端（手表 / 低配手机优先）</title>
+<meta name="description" content="Re：哔哩终端是基于哔哩终端 2.9.8fix 的第三方 B 站 Android 客户端，延续原版 Java 实现，专注番剧续播与动态体验，参考 Re:WearBili 重做界面，适配低配手机与智能手表。">
+<meta name="theme-color" content="#0c0c0e">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Re：哔哩终端 —— 轻量第三方 B 站客户端">
+<meta property="og:description" content="基于哔哩终端 2.9.8fix 的第三方 B 站客户端，专注番剧续播与动态体验，适配低配手机与智能手表。">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="brand">Re：<span>哔哩终端</span></div>
+    <nav>
+      <a href="#features">功能</a>
+      <a href="#changes">相比原版</a>
+      <a href="#branches">分支</a>
+      <a href="#download">下载</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">更新日志</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ===== Hero ===== -->
+<section class="hero">
+  <div class="wrap">
+    <h1 class="reveal">把 B 站装进 <em>你的设备</em></h1>
+    <p class="sub reveal">第三方 B 站客户端 · 基于哔哩终端 2.9.8fix · 手表与低配手机优先</p>
+    <p class="desc reveal">
+      延续原版 Java 实现，专注优化番剧续播与动态体验，并参考 Re:WearBili 重新设计了整套界面。
+      不做花哨的架构，只把有限的性能留给内容本身。
+    </p>
+    <div class="btns reveal">
+      <a class="btn primary" href="#download">下载最新版</a>
+      <a class="btn ghost" href="#features">看看能做什么</a>
+    </div>
+    <div class="bbadges reveal">
+      <span class="badge">Android 4.4+</span>
+      <span class="badge">GPL v3 开源</span>
+      <span class="badge">番剧分集进度</span>
+      <span class="badge">单一安装包</span>
+      <span class="badge" id="heroVer">v1.2.1</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 功能 ===== -->
+<section class="section" id="features">
+  <div class="wrap">
+    <h2 class="reveal">能做什么</h2>
+    <p class="lead reveal">不是把网页塞进壳里，而是围绕小屏与旧设备重做的一套交互。</p>
+    <div class="grid g2">
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.6l5.6 3.4-5.6 3.4z"/></svg>
+          番剧：每集各自接着看
+        </h3>
+        <p>分集进度独立记录，换集不会串进度；季与 OVA 合并展示，选集更顺。</p>
+        <ul>
+          <li>按集记录，不再"看了这集、点开另一集却从上一集位置开始"</li>
+          <li>看完自动进下一集，历史记录可回跳</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-3.5l-2.5 7-4-14-2.5 7H3"/></svg>
+          动态：能看也能发
+        </h3>
+        <p>带图发布、投票、置顶、话题页都在，动态有新内容时菜单会提醒。</p>
+        <ul>
+          <li>图文动态、转发、评论区完整</li>
+          <li>未读数量显示在菜单角标</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M9 20V10"/></svg>
+          界面：为圆屏和手指重做
+        </h3>
+        <p>移植 Re:WearBili 的设计语言：氛围背景、圆形主菜单、按压反馈，设置内可回退旧版样式。</p>
+        <ul>
+          <li>氛围背景与页头渐隐，滚动时不割裂</li>
+          <li>圆屏内缩、按压反馈、列表动画精简</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12.5" rx="2.5"/><path d="M10 10.5l4.5 2.5-4.5 2.5z"/></svg>
+          播放：后台与遥控
+        </h3>
+        <p>IJK 内核播放器，支持弹幕、后台播放与通知栏控制。</p>
+        <ul>
+          <li>倍速记忆、清晰度偏好、长按快进</li>
+          <li>切后台继续播，通知栏切歌式操作</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7.5" r="3.7"/></svg>
+          账号：多账号与续期
+        </h3>
+        <p>多账号切换，登录态按实时 Cookie 判定，过期前自动续期。</p>
+        <ul>
+          <li>不再"用着用着突然掉登录"</li>
+          <li>Cookie 只存在本机，不上传</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.5L4 14h6.5l-1 7.5L19 10h-6.5z"/></svg>
+          低配与弱网
+        </h3>
+        <p>安装包不到 10MB，没有 DI、没有 Retrofit，启动与滚动都按旧设备调过。</p>
+        <ul>
+          <li>应用内检查更新，支持第三方镜像加速</li>
+          <li>崩溃上报默认开启，可随时关闭（详见<a href="privacy.html">隐私说明</a>）</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== 相比原版 ===== -->
+<section class="section" id="changes">
+  <div class="wrap">
+    <h2 class="reveal">相比原版多了什么</h2>
+    <p class="lead reveal">
+      本项目基于哔哩终端 2.9.8fix 继续开发。下面这些是原版没有、由本分支补上的，
+      括号里是对应的版本号，详细说明见<a href="changelog.html">更新日志</a>。
+    </p>
+    <div class="grid g2">
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 4v16M17 4v16M3 9.5h4M3 14.5h4M17 9.5h4M17 14.5h4"/></svg>
+          番剧
+        </h3>
+        <ul>
+          <li><strong>按集记录进度</strong>：换集不再串进度，续播直接接上服务端记录（1.2.0fix）</li>
+          <li>季 / OVA 合并选集，找剧集不用翻两个分区（1.1.1）</li>
+          <li>番剧分类搜索（1.1.2）</li>
+          <li>圆屏播放页布局修复（1.2.0fix）</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L4 21l1.1-4.2A8.4 8.4 0 1 1 21 11.5z"/></svg>
+          动态与消息
+        </h3>
+        <ul>
+          <li>动态增强：带图发布、投票、置顶、话题页（1.1.0）</li>
+          <li>动态与消息未读数显示在菜单角标</li>
+          <li>私信可发图片（1.1.9）</li>
+          <li>私信顶部黑块、底色异常修复（1.2.0）</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/></svg>
+          界面
+        </h3>
+        <ul>
+          <li>全新美学：氛围背景、圆形主菜单、按压反馈，设置内可回退旧版（1.1.6）</li>
+          <li>列表动画与重复绘制精简，滚动更省电（1.1.7）</li>
+          <li>圆屏内缩与点击热区修正</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18V9M4 5v1M9 18V6M14 18v-7M19 18V8"/></svg>
+          播放
+        </h3>
+        <ul>
+          <li>后台播放 + 通知栏遥控（1.1.2）</li>
+          <li>记住倍速（1.1.7）</li>
+          <li>长时观看后的闪退修复：画面资源释放、定时任务泄漏（1.1.6-fix）</li>
+          <li>播放中自动保存进度</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>
+          日常使用
+        </h3>
+        <ul>
+          <li>切后台重进恢复上次页面（1.1.5）</li>
+          <li>应用内检查更新，支持镜像加速（1.1.4）</li>
+          <li>多账号切换（1.1.3）</li>
+          <li>热搜榜、收藏夹公开/私有、图片本地缓存（1.1.7）</li>
+          <li>经验与硬币变化在本机累积，能看更早的记录（1.2.0fix）</li>
+        </ul>
+      </div>
+
+      <div class="card reveal">
+        <h3>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v6.2c0 4.6-3.2 8.1-7.5 9.3-4.3-1.2-7.5-4.7-7.5-9.3V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg>
+          安全与稳定
+        </h3>
+        <ul>
+          <li>恢复旧系统的 TLS 证书校验、重定向域名白名单、登录凭证不再进日志</li>
+          <li>下载解压卡死、进度异常、记录丢失修复</li>
+          <li>崩溃页黑屏修复，崩溃上报改为自建服务（1.2.1）</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== 分支 ===== -->
+<section class="section" id="branches">
+  <div class="wrap">
+    <h2 class="reveal">三个分支，怎么选</h2>
+    <p class="lead reveal">
+      它们同出于哔哩终端，方向不同：要最新功能和 Kotlin 生态选 RE；设备老、网络差选 Revival；
+      看重番剧续播与动态体验、喜欢新界面选本项目。
+    </p>
+    <div class="grid g3">
+
+      <div class="card branch reveal">
+        <div class="tagline">Kotlin 重构 · 功能最全</div>
+        <h3>哔哩终端 RE</h3>
+        <p>使用 Kotlin 全面重构，面向未来，功能最丰富，基于原版哔哩终端 2.7.0。</p>
+        <div class="tags"><i>Kotlin</i><i>功能最全</i><i>基于 2.7.0</i></div>
+        <div class="links">
+          <a href="https://github.com/zisekongling/BiliTerminal-RE" target="_blank" rel="noopener">仓库</a>
+          <a href="https://biliterminal.zsapp.asia/" target="_blank" rel="noopener">官网</a>
+        </div>
+      </div>
+
+      <div class="card branch reveal">
+        <div class="tagline">兼容性最好 · 弱网优化</div>
+        <h3>哔哩终端 Revival（复活版）</h3>
+        <p>延续原版 Java，致力于解决老旧设备与弱网下的使用体验，兼容性最好。</p>
+        <div class="tags"><i>Java</i><i>老旧设备</i><i>弱网优化</i></div>
+        <div class="links">
+          <a href="https://github.com/jiabenguiyin/BiliTerminal-Revival" target="_blank" rel="noopener">仓库</a>
+          <a href="https://jp.031030.xyz/" target="_blank" rel="noopener">官网</a>
+        </div>
+      </div>
+
+      <div class="card branch current reveal">
+        <span class="here">当前</span>
+        <div class="tagline">番剧与动态优化 · 全新 UI</div>
+        <h3>Re：哔哩终端</h3>
+        <p>延续原版 Java，基于 2.9.8fix 二次开发，专注番剧与动态，并参考 Re:WearBili 重做界面。</p>
+        <div class="tags"><i>Java</i><i>番剧续播</i><i>全新 UI</i><i>基于 2.9.8fix</i></div>
+        <div class="links">
+          <a href="https://github.com/cyq114514/Re-BiliTerminal" target="_blank" rel="noopener">仓库</a>
+          <a href="https://re-biliterminal.netlify.app/" target="_blank" rel="noopener">官网</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== 下载 ===== -->
+<section class="section" id="download">
+  <div class="wrap">
+    <h2 class="reveal">下载</h2>
+    <p class="lead reveal">安装包由 GitHub Releases 分发，主站与镜像指向同一个文件。</p>
+
+    <div class="dl reveal">
+      <div class="dl-head">
+        <strong>Re：哔哩终端</strong>
+        <span class="ver" id="dlVersion">v1.2.1</span>
+      </div>
+      <div class="dl-meta" id="dlSize">9.1 MB · 单一安装包（armeabi-v7a + x86）</div>
+
+      <div class="dl-actions">
+        <a class="btn primary" id="dlMain" href="https://github.com/cyq114514/Re-BiliTerminal/releases/latest" target="_blank" rel="noopener">下载 APK</a>
+        <a class="btn ghost" id="dlAll" href="https://github.com/cyq114514/Re-BiliTerminal/releases" target="_blank" rel="noopener">全部版本</a>
+        <span id="dlMirrors" style="display:contents"></span>
+      </div>
+
+      <div class="sha">
+        <span>SHA-256&nbsp; <code id="dlSha">—</code></span>
+        <button id="copySha" type="button">复制</button>
+      </div>
+
+      <p class="note" id="dlHint"></p>
+      <p class="note">
+        校验：macOS / Linux 执行 <code>shasum -a 256 文件名</code>；Windows 执行
+        <code>certutil -hashfile 文件名 SHA256</code>。
+        镜像为社区维护的 GitHub 加速服务，可能失效，失效时请改用 GitHub 直链。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 安装 ===== -->
+<section class="section" id="install">
+  <div class="wrap">
+    <h2 class="reveal">安装</h2>
+    <p class="lead reveal">支持 Android 4.4（API 19）及以上，手机与 Wear OS 手表通用。</p>
+    <div class="steps">
+      <div class="step reveal">
+        <h3>下载 APK</h3>
+        <p>直接下载上面的安装包；手表建议先下到手机再传输。</p>
+      </div>
+      <div class="step reveal">
+        <h3>侧载到设备</h3>
+        <p>手机直接点开安装；手表可用 <code>adb install</code>、开发者模式或手表端文件管理器。</p>
+      </div>
+      <div class="step reveal">
+        <h3>校验完整性</h3>
+        <p>用上面的 SHA-256 核对文件，避免下载中断导致的安装失败。</p>
+      </div>
+      <div class="step reveal">
+        <h3>首次启动</h3>
+        <p>按引导完成设置，扫码登录 B 站账号即可。崩溃上报默认开启，可在设置里关闭。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 反馈 ===== -->
+<section class="section" id="feedback">
+  <div class="wrap">
+    <h2 class="reveal">反馈</h2>
+    <p class="lead reveal">遇到问题请走下面两个渠道，不要在应用商店评论区留言（看不到也不会回复）。</p>
+    <div class="fb grid g2">
+      <div class="card reveal">
+        <div class="k">官方交流群</div>
+        <div class="v qq">QQ 群 656364457</div>
+        <p>进群后 <strong>@你滴勋宗</strong> 反馈，带上机型、系统版本与复现步骤。</p>
+      </div>
+      <div class="card reveal">
+        <div class="k">应用内直达</div>
+        <div class="v">设置 → 关于</div>
+        <p>关于界面已内嵌开发者 B 站主页，也可以直接 <strong>B 站私信</strong> 反馈。</p>
+      </div>
+    </div>
+    <p class="note reveal">
+      本项目是个人维护的 fork，<strong>请勿拿本项目的问题去打扰原版哔哩终端的作者</strong>。
+      崩溃会在本地留一份记录（<code>Download/ReBiliDiag</code>，不可写时回落到 <code>Android/media</code>），
+      反馈时附上它会快很多。
+    </p>
+  </div>
+</section>
+
+<!-- ===== 声明 ===== -->
+<section class="section" id="notice">
+  <div class="wrap">
+    <h2 class="reveal">声明</h2>
+    <p class="lead reveal">请在使用前阅读。</p>
+    <div class="card reveal">
+      <p>
+        本应用是基于「哔哩终端 BiliClient」2.9.8fix 的<strong>非官方分支</strong>，与原作者及原团队<strong>无任何关系</strong>，
+        也不是官方续作。应用仅调用 B 站网页端公开接口，不提供任何破解或付费内容。
+      </p>
+      <p style="margin-top:12px">
+        代码以 GPL-3.0 开源，欢迎查看与自行编译；因使用本应用产生的任何后果由使用者自行承担。
+        若你仍认为本项目侵犯了你的权利，请通过上面的渠道联系我们。
+      </p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <h4>项目</h4>
+        <a href="https://github.com/cyq114514/Re-BiliTerminal" target="_blank" rel="noopener">GitHub 仓库</a><br>
+        <a href="https://github.com/cyq114514/Re-BiliTerminal/releases" target="_blank" rel="noopener">全部版本</a><br>
+        <a href="changelog.html">更新日志</a><br>
+        <a href="privacy.html">隐私说明</a>
+      </div>
+      <div>
+        <h4>其他分支</h4>
+        <a href="https://biliterminal.zsapp.asia/" target="_blank" rel="noopener">哔哩终端 RE</a><br>
+        <a href="https://jp.031030.xyz/" target="_blank" rel="noopener">哔哩终端 Revival</a>
+      </div>
+      <div>
+        <h4>反馈</h4>
+        QQ 群 656364457<br>
+        @你滴勋宗
+      </div>
+      <div>
+        <h4>许可</h4>
+        GPL-3.0<br>
+        非官方分支，与原作者无关
+      </div>
+    </div>
+    <div class="copy">
+      Re：哔哩终端 · 仅供学习与个人使用 · 页面不采集任何访问数据
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

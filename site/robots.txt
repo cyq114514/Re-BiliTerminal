@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://re-biliterminal.netlify.app/sitemap.xml

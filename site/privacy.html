@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>隐私说明 · Re：哔哩终端</title>
+<meta name="description" content="Re：哔哩终端的隐私说明：收集什么、不收集什么、崩溃上报如何关闭、权限用途与第三方库清单。">
+<meta name="theme-color" content="#101012">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="brand">Re：<span>哔哩终端</span></div>
+    <nav>
+      <a href="index.html">首页</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">更新日志</a>
+    </nav>
+  </div>
+</header>
+
+<main class="doc">
+  <div class="wrap">
+    <h1>隐私说明</h1>
+    <p class="lead">最后更新：2026-10-17 · 适用于 1.2.1 及以后版本</p>
+
+    <h2>一句话概括</h2>
+    <p>
+      本应用不收集账号、不采集浏览与搜索记录、不含广告与统计分析。
+      唯一会上传的是<strong>崩溃现场</strong>（用于定位闪退），默认开启、可随时关闭。
+    </p>
+
+    <h2>不收集什么</h2>
+    <ul>
+      <li>不上传 B 站账号、Cookie、登录凭证</li>
+      <li>不记录你看了什么、搜了什么、收藏了什么</li>
+      <li>不采集 IMEI / OAID / AndroidID / MAC 等设备唯一标识</li>
+      <li>不读取通讯录、短信、相册、位置</li>
+      <li>应用内没有广告 SDK，也没有第三方统计 SDK</li>
+    </ul>
+
+    <h2>崩溃上报</h2>
+    <p>
+      用途只有一个：闪退时把现场发回来，才能定位并修掉。1.2.1 起<strong>默认开启</strong>，
+      首次安装或升级时会弹窗说明一次。
+    </p>
+    <table>
+      <tr><th>字段</th><th>内容</th><th>用途</th></tr>
+      <tr><td>stacktrace</td><td>崩溃堆栈</td><td>定位到具体代码位置</td></tr>
+      <tr><td>exception_class / message</td><td>异常类型与消息</td><td>归类同类崩溃</td></tr>
+      <tr><td>app_version</td><td>应用版本号</td><td>判断是否为旧版本问题</td></tr>
+      <tr><td>android_version / sdk_int</td><td>系统版本</td><td>排查系统兼容性</td></tr>
+      <tr><td>device_model</td><td>机型</td><td>排查特定机型问题</td></tr>
+      <tr><td>page</td><td>崩溃时所在页面</td><td>缩小复现范围</td></tr>
+      <tr><td>thread_name</td><td>崩溃线程名</td><td>区分主线程/工作线程</td></tr>
+      <tr><td>install_id</td><td>本地随机生成的 UUID</td><td>统计影响设备数，<strong>与账号无关</strong></td></tr>
+    </table>
+    <p>
+      存储位置：Supabase 提供的数据库（区域 ap-southeast-1，新加坡）。
+      这意味着崩溃数据<strong>会出境存储</strong>，如果你不接受，请按下一节关闭上报。
+    </p>
+
+    <h2>如何关闭</h2>
+    <ul>
+      <li>设置 → 偏好设置 → <strong>崩溃上报</strong>，关掉即停止联网上报，立即生效；</li>
+      <li>首次安装/升级时的弹窗里也有「关闭上报」按钮；</li>
+      <li>关闭后崩溃页仍会显示，但不再发送任何数据。</li>
+    </ul>
+
+    <h2>本机留存的记录</h2>
+    <p>
+      无论是否开启上报，每次崩溃都会在本机留一份文本记录，方便你自己查看或反馈时提供：
+      <code>Download/ReBiliDiag/crash-*.txt</code>；该目录不可写时回落到
+      <code>Android/media/&lt;包名&gt;/</code>。最多保留 20 份，超出自动删除最旧的。
+    </p>
+
+    <h2>权限说明</h2>
+    <table>
+      <tr><th>权限</th><th>用途</th></tr>
+      <tr><td>INTERNET</td><td>访问 B 站接口、检查更新、崩溃上报</td></tr>
+      <tr><td>ACCESS_NETWORK_STATE / ACCESS_WIFI_STATE</td><td>判断网络是否可用，弱网时提示</td></tr>
+      <tr><td>READ / WRITE_EXTERNAL_STORAGE</td><td>旧版系统上下载视频、导出日志与崩溃记录</td></tr>
+      <tr><td>FOREGROUND_SERVICE / POST_NOTIFICATIONS</td><td>后台播放与下载的常驻通知</td></tr>
+      <tr><td>REQUEST_INSTALL_PACKAGES</td><td>应用内更新时调起系统安装器</td></tr>
+      <tr><td>VIBRATE</td><td>按压反馈</td></tr>
+    </table>
+
+    <h2>本网站</h2>
+    <p>
+      本页面是纯静态站点：不使用 Cookie、不接入访问统计、不投放广告、不加载任何第三方脚本或字体。
+    </p>
+
+    <h2>第三方库</h2>
+    <p>
+      OkHttp、Glide、PhotoView、Jsoup、EventBus、IJKPlayer、DanmakuFlameMaster 与 AndroidX。
+      完整清单见应用内「设置 → 关于」。这些库均在本地运行，不上报数据；唯一的联网上报就是上文的崩溃上报。
+    </p>
+
+    <h2>变更与联系</h2>
+    <p>
+      本说明如有变更会随版本更新，并在更新日志中注明。有疑问可通过
+      <strong>QQ 群 656364457</strong>（@你滴勋宗）或在应用内「设置 → 关于」经 B 站私信联系。
+    </p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="copy">
+      <a href="index.html">返回首页</a> · Re：哔哩终端 · GPL-3.0 · 非官方分支
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

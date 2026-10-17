@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>常见问题 · Re：哔哩终端</title>
+<meta name="description" content="Re：哔哩终端的安装、登录、播放、崩溃上报与更新等常见问题。">
+<meta name="theme-color" content="#101012">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="brand">Re：<span>哔哩终端</span></div>
+    <nav>
+      <a href="index.html">首页</a>
+      <a href="changelog.html">更新日志</a>
+      <a href="privacy.html">隐私</a>
+    </nav>
+  </div>
+</header>
+
+<main class="doc">
+  <div class="wrap">
+    <h1>常见问题</h1>
+    <p class="lead">先看这里，大部分问题都有现成答案。没解决的话走页尾的反馈渠道。</p>
+
+    <h2>安装</h2>
+
+    <details>
+      <summary>提示「解析包时出现问题」或安装失败</summary>
+      <p>先核对 SHA-256（首页下载区有），大概率是下载中断导致文件不完整。用浏览器重新下载，不要用第三方下载器续传。若校验一致仍失败，检查系统是否禁止了「安装未知来源应用」。</p>
+    </details>
+
+    <details>
+      <summary>手表怎么安装？</summary>
+      <p>三种方式：① 手机装好后通过配套 App 推送；② 手表开启开发者模式与 ADB 调试，用 <code>adb install xxx.apk</code>；③ 把 APK 放进手表存储，用手表端文件管理器点开安装。推荐第二种，最稳。</p>
+    </details>
+
+    <details>
+      <summary>支持哪些设备？</summary>
+      <p>Android 4.4（API 19）及以上，手机与 Wear OS 手表通用。安装包同时包含 armeabi-v7a 与 x86，一个包通吃，不需要挑架构。</p>
+    </details>
+
+    <h2>使用</h2>
+
+    <details>
+      <summary>打开就闪退 / 黑屏怎么办？</summary>
+      <p>先确认装的是 1.1.6-fix 之后的版本——早期版本有过「崩溃页自己崩溃导致无限黑屏」的问题，已修复。若新版仍然黑屏，请在崩溃页把「本地记录」的路径记下来，连同机型与系统版本一起反馈。</p>
+    </details>
+
+    <details>
+      <summary>登录后过一阵就掉线</summary>
+      <p>1.2.x 已改为按实时 Cookie 判定登录态，并在过期前自动续期。如果仍然频繁掉线，可能是同一账号在别处登录导致凭证失效，重新扫码即可。</p>
+    </details>
+
+    <details>
+      <summary>番剧进度不对 / 换集串进度</summary>
+      <p>这是 1.2.0fix 修掉的问题：进度改为按集从服务端读取，本地不再保存任何进度。如果仍出现，确认版本号是否 ≥ 1.2.0fix，并反馈具体番剧与集数。</p>
+    </details>
+
+    <details>
+      <summary>播放卡顿 / 音画不同步</summary>
+      <p>先在设置里切换解码方式与清晰度试试；低配设备建议关闭弹幕或降低同屏弹幕数。如果只在某个视频出现，多半是源本身的问题。</p>
+    </details>
+
+    <h2>崩溃上报</h2>
+
+    <details>
+      <summary>崩溃上报收集什么？会上传我的账号吗？</summary>
+      <p>只上传崩溃堆栈、异常类型、应用版本、系统版本、机型、崩溃页面、线程名，以及一个本地随机生成的安装标识。不上传账号、Cookie、浏览与搜索记录。完整字段见<a href="privacy.html">隐私说明</a>。</p>
+    </details>
+
+    <details>
+      <summary>怎么关掉崩溃上报？</summary>
+      <p>设置 → 偏好设置 → 崩溃上报，关掉即可，立即生效。首次安装或升级时的弹窗里也有「关闭上报」按钮。关闭后崩溃页照常显示，但不再发送数据。</p>
+    </details>
+
+    <details>
+      <summary>你们把数据存在哪里？</summary>
+      <p>存在开发者自建的 Supabase 数据库（新加坡区域），不经过任何第三方统计平台。这个项目 1.2.1 起已彻底移除腾讯 Bugly。</p>
+    </details>
+
+    <h2>更新与分支</h2>
+
+    <details>
+      <summary>应用内检查更新失败</summary>
+      <p>更新信息从 GitHub Releases 获取，国内网络可能访问不畅。可在设置里配置镜像前缀重试，或直接到首页下载最新安装包覆盖安装（登录态与设置都会保留）。</p>
+    </details>
+
+    <details>
+      <summary>它和「哔哩终端 RE」「Revival」有什么区别？</summary>
+      <p>三者同出于哔哩终端，方向不同：RE 用 Kotlin 重构、功能最全；Revival 主打老旧设备与弱网兼容；本项目延续 Java、基于 2.9.8fix，专注番剧续播与动态，并参考 Re:WearBili 重做了界面。详见<a href="index.html#branches">首页的分支对比</a>。</p>
+    </details>
+
+    <details>
+      <summary>为什么没有某个功能？</summary>
+      <p>可以提，但不一定做。本项目优先保证低配设备上的流畅与稳定，会拒绝明显增加内存与耗电的功能。欢迎在群里讨论。</p>
+    </details>
+
+    <h2>还是没解决？</h2>
+    <p>
+      加 QQ 群 <strong>656364457</strong> 并 <strong>@你滴勋宗</strong>，或到应用内「设置 → 关于」经 B 站私信反馈。
+      反馈时请带上：机型、系统版本、应用版本、复现步骤，以及崩溃记录文件（如果有）。
+    </p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="copy"><a href="index.html">返回首页</a> · Re：哔哩终端 · GPL-3.0</div>
+  </div>
+</footer>
+
+</body>
+</html>
