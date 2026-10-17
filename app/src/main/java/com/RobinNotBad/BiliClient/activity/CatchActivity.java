@@ -18,6 +18,7 @@ import com.RobinNotBad.BiliClient.api.AppInfoApi;
 import com.RobinNotBad.BiliClient.model.ApiResult;
 import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.CrashTrace;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
@@ -70,13 +71,40 @@ public class CatchActivity extends BaseActivity {
         });
 
         if (reason_str != null) {
-            reason_str.setSpan(new StyleSpan(Typeface.BOLD), 0, 8, Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
+            //加粗前 8 个字符（"可能的崩溃原因："）。必须按实际长度截断：
+            //未知异常走的是 7 个字的"未知的崩溃原因"，写死 0..8 会越界，
+            //崩溃页自己再崩一次 → 系统重新拉起 → 再崩，用户看到的就是无限黑屏
+            int boldEnd = Math.min(8, reason_str.length());
+            if (boldEnd > 0) {
+                reason_str.setSpan(new StyleSpan(Typeface.BOLD), 0, boldEnd, Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
+            }
             reason_view.setText(reason_str);
         } else reason_view.setText("未知的崩溃原因");
 
+        //把上报链路的结论直接印在页面上。
+        //不能指望用户去取追踪文件：清单里没有 WRITE_EXTERNAL_STORAGE，公开 Download 目录写不进去，
+        //追踪会回落到 Android/media 或 Android/data 下，很多文件管理器根本看不到
+        //追踪内容优先取 Intent 里带的（主进程在崩溃现场实时写入的），
+        //:crash 进程的 SP 缓存可能停留在上一次崩溃，直接读会拿到旧数据
+        //上报状态 + 本地文件路径：即使网络不通、后台收不到，现场也已经留在本机了
+        boolean reportEnabled = intent.getBooleanExtra("reportEnabled", false);
+        String crashFile = intent.getStringExtra("crashFile");
+        reason_view.append("\n\n崩溃上报：" + (reportEnabled ? "已开启" : "未开启"));
+        if (crashFile != null && !crashFile.isEmpty()) {
+            reason_view.append("\n本地记录：" + crashFile);
+        }
+
+        String trace = intent.getStringExtra("trace");
+        if (trace == null || trace.isEmpty()) trace = CrashTrace.readTail(20);
+        if (trace != null && !trace.isEmpty()) {
+            stack_view.append("\n\n==== 崩溃链路追踪 ====\n" + trace);
+        }
+
         stack_view.setOnClickListener(view -> {
             openStack = !openStack;
-            if (openStack) stack_view.setMaxLines(200);
+            //展开上限从 200 提到 400：堆栈后面还追了一段崩溃链路追踪，
+            //上限太小会把追踪过程截掉，恰好截掉最需要看的那几行
+            if (openStack) stack_view.setMaxLines(400);
             else stack_view.setMaxLines(5);
         });
 

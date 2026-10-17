@@ -29,8 +29,8 @@ android {
         minSdk 19
         //noinspection ExpiredTargetSdkVersion
         targetSdk 26
-        versionCode 20261011
-        versionName "1.2.0fix"
+        versionCode 20261017
+        versionName "1.2.1"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
@@ -134,4 +134,5 @@ dependencies {
     //此前的 org.brotli:dec 与 brotli4j 为 0 引用死依赖，已移除
     implementation 'com.google.protobuf:protobuf-javalite:3.21.12'
     implementation 'com.google.code.gson:gson:2.8.9'
+    //崩溃上报已改为自建服务（Supabase REST + OkHttp），不再依赖任何闭源 SDK
 }

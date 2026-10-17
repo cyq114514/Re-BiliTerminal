@@ -27,6 +27,9 @@ public class SettingPrefActivity extends RefreshListActivity {
             {
                 add(new SettingSection("title", "功能", "", "", ""));
                 add(new SettingSection("switch", "隐私模式", SharedPreferencesUtil.PRIVACY_MODE, getString(R.string.desc_privacy_mode), "false"));
+                //崩溃上报：与首启授权写同一个键，切换后由 CrashReportUtil 的偏好监听立即生效
+                add(new SettingSection("switch", "崩溃上报", SharedPreferencesUtil.CRASH_REPORT_ENABLE,
+                        getString(R.string.desc_crash_report), "false"));
                 add(new SettingSection("switch", "长按复制", "copy_enable", getString(R.string.desc_copy_enable), "true"));
                 add(new SettingSection("switch", "创作中心", "creative_enable", getString(R.string.desc_creative_enable),
                         "true"));

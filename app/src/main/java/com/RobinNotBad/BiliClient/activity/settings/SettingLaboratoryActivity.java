@@ -7,6 +7,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter;
 import com.RobinNotBad.BiliClient.model.SettingSection;
+import com.RobinNotBad.BiliClient.util.CrashReportUtil;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -95,6 +96,13 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
                         "打开后：播放番剧满 25 秒会回读一次服务端（观看记录/季级状态/本集进度）确认上报是否落库，"
                                 + "并把番剧进度的读写细节写入诊断文件（Download/ReBiliDiag/ 或 Android/media/ 对应包名目录下）。"
                                 + "排查\"续播位置不对/进度记不上\"这类问题时打开，把诊断文件发给维护者即可。", "false"));
+                //主动崩溃：验证崩溃上报链路是否真的能收到数据。
+                //不是普通开关——打开即触发一次真实崩溃，随后自动复位，避免重启后再次崩溃
+                add(new SettingSection("switch", "主动触发崩溃", CrashReportUtil.KEY_DEBUG_CRASH,
+                        "打开后应用会立即崩溃一次，并弹出崩溃页面，用于验证崩溃上报是否生效。\n"
+                                + "开关会在触发后自动复位，不会在重启后再次崩溃。\n"
+                                + "需要先在 设置-偏好设置 里打开「崩溃上报」，否则这次崩溃不会被上报，只会弹崩溃页。",
+                        "false"));
             }
         };
 

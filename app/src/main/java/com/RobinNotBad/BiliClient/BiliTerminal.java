@@ -21,6 +21,8 @@ import com.RobinNotBad.BiliClient.api.DynamicApi;
 import com.RobinNotBad.BiliClient.api.MessageApi;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CookieRefresher;
+import com.RobinNotBad.BiliClient.util.CrashReportUtil;
+import com.RobinNotBad.BiliClient.util.CrashUploader;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -52,8 +54,19 @@ public class BiliTerminal extends Application {
         if (context == null) {
             SharedPreferencesUtil.sharedPreferences = getSharedPreferences("default", MODE_PRIVATE);
             context = getFitDisplayContext(this);
-            ErrorCatch errorCatch = ErrorCatch.getInstance();
-            errorCatch.init(context);
+
+            //崩溃页 CatchActivity 跑在独立进程 :crash（见 AndroidManifest）。那个进程只需渲染崩溃页：
+            //准备 SP + context 即可，不做上报初始化、不装 ErrorCatch、不跑登录续期等——
+            //既省内存也避免重复初始化与重复上报
+            if (!isMainProcess()) {
+                return;
+            }
+
+            //崩溃捕获始终由 ErrorCatch 承担；上报开关只决定"传不传"，不影响崩溃页
+            ErrorCatch.getInstance().init(context);
+            CrashReportUtil.registerPreferenceListener(this);
+            //上次没传出去的崩溃（弱网/WiFi 被拦）在这次启动补发
+            CenterThreadPool.run(() -> CrashUploader.flushPending(this));
 
             //1.2.0-v5 曾在本地保存过"每集看到哪里"(episode_progress)，v6 起改为只信服务端
             //（与 PiliPlus 同口径）。这里每次冷启动清空一次，避免旧数据残留在设备上造成记录错乱。
@@ -85,6 +98,8 @@ public class BiliTerminal extends Application {
 
                 @Override
                 public void onActivityResumed(@NonNull Activity activity) {
+                    //崩溃上报里的 page 字段：记录崩溃时用户在哪一页，便于复现
+                    CrashUploader.setCurrentPage(activity.getClass().getSimpleName());
                 }
 
                 @Override
@@ -199,6 +214,26 @@ public class BiliTerminal extends Application {
         intent.setClass(context, UserInfoActivity.class);
         intent.putExtra("mid", mid);
         context.startActivity(intent);
+    }
+
+    /**
+     * 当前是否为主进程。崩溃页 CatchActivity 跑在 :crash 进程，那里要跳过 Bugly/ErrorCatch/登录续期等初始化。
+     *
+     * <p>读 /proc/self/cmdline：NUL 分隔，第一段就是进程名。主进程名等于包名；私有进程名形如
+     * {@code 包名:crash}。读不到时按主进程处理（宁可多初始化也不能让主进程不初始化）。
+     */
+    private boolean isMainProcess() {
+        try (java.io.FileInputStream in = new java.io.FileInputStream("/proc/self/cmdline")) {
+            byte[] buf = new byte[256];
+            int len = in.read(buf);
+            if (len <= 0) return true;
+            int end = 0;
+            while (end < len && buf[end] != 0) end++;
+            String name = new String(buf, 0, end);
+            return name.equals(getPackageName());
+        } catch (Throwable e) {
+            return true;
+        }
     }
 
 }

@@ -34,6 +34,7 @@ import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
 import com.RobinNotBad.BiliClient.util.BackgroundManager;
+import com.RobinNotBad.BiliClient.util.CrashReportUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -115,6 +116,13 @@ public class BaseActivity extends AppCompatActivity {
         }
 
         installAmbient();
+
+        //崩溃上报授权：挂在基类而不是引导页——引导页只有新用户会经过。
+        //用 decorView.post 等到窗口真正可用再弹，避免在 onCreate 期间弹窗拿到失效的 window token；
+        //CatchActivity（崩溃页）本身继承本类，必须在崩溃现场之外把这次询问挡掉
+        if (!(this instanceof com.RobinNotBad.BiliClient.activity.CatchActivity)) {
+            getWindow().getDecorView().post(() -> CrashReportUtil.askNoticeIfNeeded(this));
+        }
     }
 
     //氛围背景：新版美学下在每个页面内容层之下铺一层装饰（黑底上的粉色氛围），

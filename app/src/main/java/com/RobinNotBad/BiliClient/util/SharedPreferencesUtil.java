@@ -34,6 +34,10 @@ public class SharedPreferencesUtil {
     public static final String RESUME_PAGE_ENABLE = "resume_page_enable";
     //新版美学设计（移植自 Re-WearBili 的视觉语言）总开关，关闭后回到旧版观感
     public static final String NEW_UI_DESIGN = "new_ui_design";
+    //崩溃上报授权：默认关闭，未授权时全程不初始化 Bugly（见 CrashReportUtil）
+    public static final String CRASH_REPORT_ENABLE = "crash_report_enable";
+    //是否已就崩溃上报征求过意见，避免每次进引导页都弹窗
+    public static final String CRASH_REPORT_ASKED = "crash_report_asked";
 
     public static String cookies = "cookies";
     public static String mid = "mid";

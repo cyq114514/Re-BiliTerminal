@@ -110,6 +110,7 @@
             android:name=".activity.CatchActivity"
             android:exported="false"
             android:label="崩溃捕捉"
+            android:process=":crash"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.TutorialActivity"
