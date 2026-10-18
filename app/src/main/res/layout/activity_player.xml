@@ -375,12 +375,16 @@
 
         <!-- 片头/片尾「手动跳过」按钮：仅当档位为"手动跳过"且当前位于片段区间内时显示。
              另外两个档位不需要 UI：总是跳过/跳过一次自动跳，仅显示只用提示，禁用完全不处理 -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- 不能用 MaterialCardView：本页主题 Theme.NoSwipe 的 parent 是 android:Theme.Black，
+             非 MaterialComponents 后代，MaterialCardView 构造时直接抛 IllegalArgumentException，
+             整个布局 inflate 失败 → 播放页起不来。改用普通 FrameLayout + 形状背景。 -->
+        <FrameLayout
             android:id="@+id/clip_skip_card"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_above="@+id/bottom_control"
             android:layout_alignParentRight="true"
+            android:background="@drawable/bg_clip_skip"
             android:layout_marginEnd="12dp"
             android:layout_marginBottom="40dp"
             android:visibility="gone">
@@ -399,7 +403,7 @@
                 android:text="跳过片头"
                 android:textColor="@color/textwhite"
                 android:textSize="13sp" />
-        </com.google.android.material.card.MaterialCardView>
+        </FrameLayout>
 
         <ImageButton
             android:id="@+id/btn_debug"

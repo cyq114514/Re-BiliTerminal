@@ -111,9 +111,17 @@ public class ResumePageUtil {
         }
     }
 
+    /**
+     * 清空恢复栈。
+     *
+     * <p>必须同步写盘：调用它的两个地方都是「马上就要杀进程」——
+     * MenuActivity 的主动退出、ErrorCatch 的崩溃收尾。用 apply() 时写盘任务还在
+     * 后台队列里，SIGKILL 一来就丢，下次冷启动会把整条页面链恢复回来
+     * （表现为「点了退出又回到上次的页面」）。
+     */
     public static void clear() {
         try {
-            SharedPreferencesUtil.putString(KEY_RESUME_STACK, "");
+            SharedPreferencesUtil.putStringSync(KEY_RESUME_STACK, "");
         } catch (Exception ignored) {
         }
     }

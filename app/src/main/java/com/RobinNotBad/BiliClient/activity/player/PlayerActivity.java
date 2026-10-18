@@ -2592,6 +2592,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     protected void onStop() {
         super.onStop();
         Logu.v("onStop");
+        //标记「已退到后台」：此后进程若被系统回收，不应算作播放异常退出
+        PlayerSentinel.markBackgrounded(true);
         reportProgressNow(false);
     }
 
@@ -3371,6 +3373,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     @Override
     protected void onStart() {
         super.onStart();
+        //回到前台：撤销 onStop 打的「后台」标记
+        PlayerSentinel.markBackgrounded(false);
         if (eventBusEnabled() && !eventBusInit) {
             EventBus.getDefault().register(this);
             Logu.v("event", "register");

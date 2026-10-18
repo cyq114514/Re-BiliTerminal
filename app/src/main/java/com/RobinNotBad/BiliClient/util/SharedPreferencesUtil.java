@@ -78,6 +78,20 @@ public class SharedPreferencesUtil {
         sharedPreferences.edit().putString(key, value).apply();
     }
 
+    /**
+     * 同步写字符串：写盘完成才返回。
+     *
+     * <p>只用于「写完马上就要杀进程」的路径（用户主动退出、崩溃收尾）。
+     * {@link #putString} 走 apply()，写盘任务排在后台队列里，紧接着的
+     * {@code Process.killProcess} 是 SIGKILL，队列来不及 flush，那次写入就丢了——
+     * 表现就是「点了退出，下次打开又回到退出前的页面」。
+     */
+    public static void putStringSync(String key, String value) {
+        if (sharedPreferences == null) return;
+        //noinspection ApplySharedPref
+        sharedPreferences.edit().putString(key, value).commit();
+    }
+
     public static int getInt(String key, int def) {
         return sharedPreferences != null ? sharedPreferences.getInt(key, def) : def;
     }

@@ -27,6 +27,8 @@ public final class PlayerSentinel {
     private static final String KEY_TRAIL = "play_sentinel_trail";
     private static final String KEY_START = "play_sentinel_start";
     private static final String KEY_STREAK = "play_sentinel_streak";
+    /** 上次会话结束时页面是否在后台：后台被系统回收属于正常，不应算「播放异常退出」 */
+    private static final String KEY_BACKGROUNDED = "play_sentinel_backgrounded";
 
     /** 轨迹上限，够看清最后几步即可，避免偏好文件无限膨胀 */
     private static final int MAX_TRAIL = 400;
@@ -94,6 +96,26 @@ public final class PlayerSentinel {
         }
     }
 
+    /**
+     * 标记页面是否退到后台。由播放页 onStop（true）/ onStart（false）调用。
+     *
+     * <p>用途：用户按 Home 或锁屏后进程被系统回收时 onDestroy 不会执行，标记残留，
+     * 下次启动会被当成「播放异常退出」。实测米兔手表上报的 4 条里 3 条都是这种，
+     * 停留时间 147s / 1182s，且同时段有 LMK 记录——纯误报。
+     */
+    public static void markBackgrounded(boolean backgrounded) {
+        synchronized (PlayerSentinel.class) {
+            try {
+                SharedPreferences sp = sp();
+                if (!sp.getBoolean(KEY_ACTIVE, false)) return;
+                //与 stage 一样必须同步落盘：进程随时可能被回收
+                sp.edit().putBoolean(KEY_BACKGROUNDED, backgrounded).commit();
+            } catch (Throwable t) {
+                Logu.e("player_sentinel", "markBackgrounded 失败: " + t);
+            }
+        }
+    }
+
     /** 播放页正常销毁时调用，清除标记并复位连续异常计数。 */
     public static void finish() {
         synchronized (PlayerSentinel.class) {
@@ -120,6 +142,7 @@ public final class PlayerSentinel {
         final String trail;
         final long start;
         final int streak;
+        final boolean backgrounded;
         //读标记 + 清标记必须原子：本方法现在跑在后台线程，而 begin() 在主线程，
         //中间被插入一次 begin 会让刚写的新会话被误清（漏报一次）
         synchronized (PlayerSentinel.class) {
@@ -136,16 +159,25 @@ public final class PlayerSentinel {
             trail = sp.getString(KEY_TRAIL, "");
             start = sp.getLong(KEY_START, 0);
             streak = sp.getInt(KEY_STREAK, 0) + 1;
+            backgrounded = sp.getBoolean(KEY_BACKGROUNDED, false);
             try {
                 sp.edit()
                         .remove(KEY_ACTIVE)
                         .remove(KEY_STAGE)
                         .remove(KEY_TRAIL)
                         .remove(KEY_START)
+                        .remove(KEY_BACKGROUNDED)
                         .putInt(KEY_STREAK, streak)
                         .commit();
             } catch (Throwable ignored) {
             }
+        }
+
+        //退到后台后进程被回收不是「播放异常退出」：用户按 Home / 锁屏后系统清后台是常态。
+        //只有「听视频」（后台播放是预期行为）才继续当作异常上报
+        if (backgrounded && !SharedPreferencesUtil.getBoolean("player_audio_only", false)) {
+            Logu.e("player_sentinel", "上次会话在后台被回收，按正常退出处理（不上报）最后阶段=" + stage);
+            return;
         }
 
         //尊重用户的崩溃上报开关：关闭时只留一条 logcat，不落文件也不上传

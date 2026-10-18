@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.activity.settings;
 
 import android.annotation.SuppressLint;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -16,6 +17,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.util.BackgroundManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.CrashTrace;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -118,7 +120,17 @@ public class SettingUIActivity extends BaseActivity {
             bgImageState = findViewById(R.id.bg_image_state);
             updateBgImageState();
 
-            findViewById(R.id.btn_bg_pick).setOnClickListener(view -> bgImagePicker.launch("image/*"));
+            findViewById(R.id.btn_bg_pick).setOnClickListener(view -> {
+                try {
+                    bgImagePicker.launch("image/*");
+                } catch (ActivityNotFoundException e) {
+                    //部分精简 ROM / 手表（如 GLL-AL09）没有系统文件选择器：
+                    //GetContent 契约走 ACTION_GET_CONTENT + CATEGORY_OPENABLE，找不到处理者就直接抛，
+                    //不接住的话点一下闪退（线上已收到 3 例）
+                    CrashTrace.log("选图: 无可用文件选择器 " + e.getClass().getSimpleName());
+                    MsgUtil.showMsg("此设备没有可用的文件选择器\n无法选择图片");
+                }
+            });
             findViewById(R.id.btn_bg_clear).setOnClickListener(view -> {
                 BackgroundManager.clear(SettingUIActivity.this);
                 bgSwitch.setChecked(false);

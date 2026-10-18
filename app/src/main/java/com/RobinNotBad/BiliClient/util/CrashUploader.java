@@ -63,8 +63,12 @@ public final class CrashUploader {
      * 队列里如果有一条被服务端永久拒绝（表约束不匹配、字段超长等 4xx），
      * 旧实现"首条失败就 break"会让后面所有记录永远发不出去，所以改成
      * 「跳过继续 + 计次 + 到上限丢弃并留痕」。
+     *
+     * <p>3 次改 20 次：实测米兔手表连续多天 TLS 握手失败，3 次启动就把现场丢了，
+     * 等于对最需要排障的设备失明。4xx 仍是一次即丢（见 {@link #flushPending}），
+     * 只有网络/TLS 类失败才按这个上限计数。
      */
-    private static final int MAX_RETRY = 3;
+    private static final int MAX_RETRY = 20;
 
     /** 安装标识键：随机 UUID，卸载重装才会变，不含任何账号信息 */
     private static final String KEY_DEVICE_ID = "crash_report_device_id";
@@ -197,11 +201,16 @@ public final class CrashUploader {
             //旧实现"首条失败就 break"：一旦队首那条被服务端永久拒绝，后面所有记录永远发不出去。
             //现在改为逐条计次，连续失败到 MAX_RETRY 次就丢弃并留痕，保证队列能继续往前走
             int fails = bumpFail(file);
-            if (fails >= MAX_RETRY) {
+            //4xx 是服务端明确拒绝（字段/表约束不匹配），重试再多次也没用，一次就丢；
+            //断网、TLS 握手失败、5xx 才按 MAX_RETRY 计次，给弱网设备留足补发机会
+            boolean rejected = lastHttpCode >= 400 && lastHttpCode < 500;
+            if (rejected || fails >= MAX_RETRY) {
                 //noinspection ResultOfMethodCallIgnored
                 file.delete();
                 clearFail(file);
-                CrashTrace.log("上报: 放弃 " + file.getName() + "（连续失败 " + fails + " 次，HTTP " + lastHttpCode + "）");
+                CrashTrace.log("上报: 放弃 " + file.getName()
+                        + (rejected ? "（服务端拒绝 HTTP " + lastHttpCode + "）"
+                        : "（连续失败 " + fails + " 次，HTTP " + lastHttpCode + "）"));
                 Logu.e("crash", "放弃一条记录，HTTP " + lastHttpCode);
             } else {
                 CrashTrace.log("上报: 补发失败 " + file.getName() + "（第 " + fails + " 次，HTTP " + lastHttpCode + "）");
@@ -320,7 +329,12 @@ public final class CrashUploader {
                 return response.isSuccessful();
             }
         } catch (Throwable t) {
-            CrashTrace.log("上报: 请求异常 " + t.getClass().getSimpleName());
+            //必须带 message：之前只记异常类名，出现 SSLHandshakeException 时
+            //完全看不出是证书过期、SNI 被拦还是协议不支持，等于没法定位
+            String detail = t.getMessage() == null ? "" : t.getMessage();
+            CrashTrace.log("上报: 请求异常 " + t.getClass().getSimpleName()
+                    + (detail.isEmpty() ? "" : "：" + cut(detail, 200)));
+            Logu.e("crash", "上报异常 " + t.getClass().getSimpleName() + " " + cut(detail, 120));
             return false;
         }
     }

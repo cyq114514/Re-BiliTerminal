@@ -76,8 +76,12 @@ public class OpusInfoActivity extends BaseActivity {
                     OpusInfoFragment oiFragment = OpusInfoFragment.newInstance(oid);
                     fragmentList.add(oiFragment);
 
-                    replyFragment = ReplyFragment.newInstance(opus.commentId, opus.commentType, opus.stats.reply, seek_reply, opus.upInfo.mid);
-                    replyFragment.setManager(opus.upInfo);
+                    //接口在部分专栏（尤其实时数据缺失时）不返回 stats / upInfo，
+                    //直接取字段会 NPE（线上已收到 2 例：Attempt to read field 'int ...Stats.reply' on null）
+                    int replyCount = opus.stats != null ? opus.stats.reply : 0;
+                    replyFragment = ReplyFragment.newInstance(opus.commentId, opus.commentType, replyCount,
+                            seek_reply, opus.upInfo != null ? opus.upInfo.mid : 0);
+                    if (opus.upInfo != null) replyFragment.setManager(opus.upInfo);
                     fragmentList.add(replyFragment);
 
                     ViewPagerFragmentAdapter vpfAdapter = new ViewPagerFragmentAdapter(getSupportFragmentManager(), fragmentList);

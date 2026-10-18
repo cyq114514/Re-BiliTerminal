@@ -64,6 +64,15 @@ public final class ExitReasonCollector {
                 String processName = info.getProcessName();
                 if (processName != null && processName.contains(":crash")) continue;
 
+                //后台缓存进程被系统回收是正常行为，不算崩溃：
+                //importance=400 即 IMPORTANCE_CACHED。实测米兔手表 20 分钟内报 5 条，
+                //整批数据里 17/27 都是这个，真实问题全被它淹没了
+                if (reason == ApplicationExitInfo.REASON_LOW_MEMORY
+                        && info.getImportance() >= 400) {
+                    CrashTrace.log("退出原因: 跳过后台缓存进程回收 importance=" + info.getImportance());
+                    continue;
+                }
+
                 String type = typeOf(reason);
                 //typeOf 返回 null 表示「这一类退出不构成崩溃线索」（含 REASON_OTHER 与 SIGNALED），跳过
                 if (type == null) continue;
