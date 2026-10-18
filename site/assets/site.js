@@ -13,7 +13,7 @@
   var FALLBACK = {
     versionName: '1.2.2',
     size: 9556122,
-    sha256: 'd77d6a06534c164ea73962cec28c3ea9a2de57c76857a7fca737764945563e14',
+    sha256: '72cb20d4f05573c4f834029c36d1ea2c9d1ab7f18403d7fc67a2168a9d7654f1',
     fileName: 'Re-BiliTerminal-v1.2.2-release.apk'
   };
 
