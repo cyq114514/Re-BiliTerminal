@@ -4,7 +4,7 @@
 
 哔哩终端（BiliClient）的**非官方**二次开发分支 · 轻量第三方 B 站 Android 客户端
 
-当前版本 **1.2.1fix**（`versionCode 20261018`）· 基于哔哩终端 2.9.8 · 许可 GPL-3.0
+当前版本 **1.2.2**（`versionCode 20261019`）· 基于哔哩终端 2.9.8 · 许可 GPL-3.0
 
 [下载最新版](https://github.com/cyq114514/Re-BiliTerminal/releases/latest)　|　[官网](https://re-biliterminal.netlify.app/)　|　[更新日志](docs/更新日志.md)　|　[Vibe Coding 声明](#vibe-coding-声明)
 
