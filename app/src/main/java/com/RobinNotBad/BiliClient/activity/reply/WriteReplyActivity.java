@@ -137,6 +137,9 @@ public class WriteReplyActivity extends BaseActivity {
                     CenterThreadPool.run(() -> {
                         try {
                             JSONArray pictures = null;
+                            //上传成功后拿到的图片地址：add 接口返回的 reply 里不一定带 content.pictures，
+                            //本地这张卡片要显示图片只能自己补上（服务端数据本身是对的，下拉刷新后依旧是带图评论）
+                            List<String> uploadedPicUrls = new ArrayList<>();
                             if (finalHasPics) {
                                 MsgUtil.showMsg("正在上传图片...");
                                 //快照避免上传期间用户移除图片导致并发修改异常
@@ -150,6 +153,8 @@ public class WriteReplyActivity extends BaseActivity {
                                         uploadedCache.put(uri, uploaded);
                                     }
                                     pictures.put(uploaded.toReplyPicJson());
+                                    if (uploaded.url != null && !uploaded.url.isEmpty())
+                                        uploadedPicUrls.add(uploaded.url);
                                 }
                             }
                             Pair<Integer, Reply> result = ReplyApi.sendReply(oid, rpid, parent, text, replyType, pictures);
@@ -158,8 +163,21 @@ public class WriteReplyActivity extends BaseActivity {
 
                             if (resultCode == 0) {
                                 runOnUiThread(() -> MsgUtil.showMsg("发送成功>w<"));
+                                if (resultReply == null) {
+                                    //服务端返回 code=0 但没带 reply 对象（偶发）：不插本地卡片，
+                                    //也不能在这里空指针，把"发送成功"变成一条报错
+                                    runOnUiThread(() -> MsgUtil.showMsg("发送成功，下拉刷新即可看到"));
+                                    finish();
+                                    return;
+                                }
                                 resultReply.forceDelete = true;
                                 resultReply.pubTime = "刚刚";
+                                //带图评论：把这次上传的图片挂到本地这条评论上，卡片才能立刻显示缩略图
+                                //（add 接口的 reply 里不一定带 content.pictures）
+                                if (finalHasPics && !uploadedPicUrls.isEmpty()
+                                        && (resultReply.pictureList == null || resultReply.pictureList.isEmpty())) {
+                                    resultReply.pictureList = new ArrayList<>(uploadedPicUrls);
+                                }
                                 EventBus.getDefault().post(new ReplyEvent(1, resultReply, pos, oid));
                                 finish();
                             } else {

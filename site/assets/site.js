@@ -12,8 +12,8 @@
   // 注意：fileName 必须与 GitHub Release 上的资产名完全一致，否则下载 404。
   var FALLBACK = {
     versionName: '1.2.3',
-    size: 9568536,
-    sha256: 'a5a90bac757408a1f9207a041819b97f96b4fcae492148a7824c7d96b334797a',
+    size: 9569006,
+    sha256: 'f1ee66467deb00c8ffe77119910ed127f14acf35aa2f61aaf33edba38425c4b4',
     fileName: 'Re-BiliTerminal-v1.2.3-release.apk'
   };
 

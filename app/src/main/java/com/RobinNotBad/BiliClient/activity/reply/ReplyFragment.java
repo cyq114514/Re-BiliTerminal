@@ -52,6 +52,14 @@ public class ReplyFragment extends RefreshListFragment {
     //已加载评论的 rpid 集合，作为游标分页的兜底去重，防止 B站 API 在游标边界返回重复评论
     //后台解析线程 add 与主线程 refresh clear/add 并发，需同步包装
     private final Set<Long> loadedRpids = java.util.Collections.synchronizedSet(new HashSet<>());
+    //本地刚发出、服务端列表可能还没返回的根评论（最多留 20 条）。
+    //B站评论列表有延迟：刚发完立刻重新拉取常常还看不到自己那条，空评论区尤其明显。
+    //每次 refresh 成功后会把这些补回列表顶部，保证"发出去就能看到"
+    private final java.util.List<Reply> localPostedReplies = new java.util.ArrayList<>();
+    //补回的时间窗口：只在发出去的 5 分钟内兜着。窗口外的由服务端列表说话，
+    //否则"发完又删掉"的那条会在之后每次刷新时被幽灵般补回来
+    private static final long LOCAL_REPLY_MERGE_WINDOW_MS = 5 * 60 * 1000L;
+    private final java.util.Map<Long, Long> localPostedAt = new java.util.HashMap<>();
     //刷新/翻页世代号：refresh 时自增，旧任务的所有回调按世代丢弃，防止旧数据写进新列表造成通知错位
     private int loadGeneration = 0;
     //连续加载空页的总时长上限：弱网+重试瀑布下防止"翻页无反应"无限拖延，超时静默停在当前游标，下次下滑可续传
@@ -286,21 +294,32 @@ public class ReplyFragment extends RefreshListFragment {
     //否则与 RecyclerView 的布局/滚动并发会造成通知与数据错位，列表直接卡死
     public void notifyReplyInserted(ReplyEvent replyEvent) {
         if (replyEvent.getOid() != aid) return;
-        if (replyAdapter == null || replyList == null || recyclerView == null || recyclerView.getLayoutManager() == null)
-            return;
         Reply reply = replyEvent.getMessage();
         if (reply == null) return;
+        //先记下本地发出的根评论：列表还没就绪、或者随后一次 refresh 把列表整体换掉时都能补回来
+        if (reply.root == 0) rememberLocalReply(reply);
+        if (replyAdapter == null || replyList == null || recyclerView == null || recyclerView.getLayoutManager() == null)
+            return;
         if (reply.root == 0) {
             LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
             //findFirstCompletelyVisibleItemPosition 返回 adapter 位（0 是头部发送按钮），换算数据位要减 1
             int firstVisible = layoutManager.findFirstCompletelyVisibleItemPosition();
             int dataIndex = Math.max(firstVisible - 1, 0);
             if (dataIndex > replyList.size()) dataIndex = replyList.size();
+            boolean wasEmpty = replyList.isEmpty();
             replyList.add(dataIndex, reply);
             loadedRpids.add(reply.rpid);   //手工插入的评论也要进去重集，否则翻页拉到同一条会重复显示
             int adapterPos = dataIndex + 1;   //头部占一格
-            replyAdapter.notifyItemInserted(adapterPos);
-            layoutManager.scrollToPositionWithOffset(adapterPos, 0);
+            if (wasEmpty) {
+                //空评论区插第一条：直接整表刷新。原来单独 notifyItemInserted 在"列表只有头部"
+                //这种状态下偶尔不会真正触发重新布局，表现就是"评论发出去了但列表里看不到"，
+                //再发一条才被顺带刷出来。这里只有 0→1 这一种情况，整表刷新的代价可以忽略
+                replyAdapter.notifyDataSetChanged();
+                layoutManager.scrollToPosition(0);
+            } else {
+                replyAdapter.notifyItemInserted(adapterPos);
+                layoutManager.scrollToPositionWithOffset(adapterPos, 0);
+            }
         } else {
             //楼中楼回复：按根评论 rpid 定位。事件的 pos 只对发起回复的那个页面有效，
             //视频页/动态页/评论详情页可能同时收到同一事件，用 pos 会改错行甚至越界
@@ -314,6 +333,56 @@ public class ReplyFragment extends RefreshListFragment {
                 }
             }
         }
+    }
+
+    /** 记住本地刚发出的根评论（最多 20 条），并顺手进重集 */
+    private void rememberLocalReply(Reply reply) {
+        loadedRpids.add(reply.rpid);
+        localPostedAt.put(reply.rpid, System.currentTimeMillis());
+        for (int i = 0; i < localPostedReplies.size(); i++) {
+            if (localPostedReplies.get(i).rpid == reply.rpid) {
+                localPostedReplies.set(i, reply);
+                return;
+            }
+        }
+        localPostedReplies.add(reply);
+        while (localPostedReplies.size() > 20) localPostedReplies.remove(0);
+    }
+
+    /**
+     * 把本地刚发出、但服务端列表还没返回的评论补到最前面。
+     *
+     * <p>为什么需要：B站的评论列表有延迟，刚发完立刻拉取常常还看不到自己那条；
+     * 空评论区更明显——列表直接是 0 条，看起来就像"评论发出去了但没显示"，
+     * 再发第二条时服务端才把两条一起返回，于是表现为"第二条发出后两条才出现"。
+     */
+    private void mergeLocalReplies() {
+        if (replyList == null || localPostedReplies.isEmpty()) return;
+        int added = 0;
+        long now = System.currentTimeMillis();
+        for (int i = localPostedReplies.size() - 1; i >= 0; i--) {   //倒着插到 0，最终保持发送顺序
+            Reply local = localPostedReplies.get(i);
+            Long postedAt = localPostedAt.get(local.rpid);
+            if (postedAt == null || now - postedAt > LOCAL_REPLY_MERGE_WINDOW_MS) {
+                localPostedReplies.remove(i);   //超出兜底窗口：交给服务端列表
+                localPostedAt.remove(local.rpid);
+                continue;
+            }
+            boolean exists = false;
+            for (int j = 0; j < replyList.size(); j++) {
+                Reply r = replyList.get(j);
+                if (r != null && r.rpid == local.rpid) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                replyList.add(0, local);
+                loadedRpids.add(local.rpid);   //refresh 开头清过重集，这里补回去，防止翻页拉到同一条重复显示
+                added++;
+            }
+        }
+        if (added > 0) Logu.d("ReplyFragment", "补回本地刚发出的评论 " + added + " 条");
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -349,6 +418,8 @@ public class ReplyFragment extends RefreshListFragment {
                         if (replyList != null) replyList.clear();
                         else replyList = new ArrayList<>();
                         replyList.addAll(unique);
+                        //服务端还没返回的那几条本地评论补回顶部（见 mergeLocalReplies 注释）
+                        mergeLocalReplies();
                         if (replyAdapter == null) {
                             replyAdapter = createReplyAdapter();
                             replyAdapter.count = count;
