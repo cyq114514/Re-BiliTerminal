@@ -31,7 +31,11 @@ public class InstanceActivity extends BaseActivity {
         if (getIntent().hasExtra("from"))
             intent.putExtra("from", getIntent().getStringExtra("from"));
         startActivity(intent);
-        overridePendingTransition(R.anim.anim_activity_in_down, 0);
+        //「关闭界面过渡动画」打开时不要再强行加转场（BaseActivity.startActivity 已经置成 0,0）
+        if (!com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.getBoolean(
+                com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.DISABLE_ANIMATION, false)) {
+            overridePendingTransition(R.anim.anim_activity_in_down, 0);
+        }
     });
 
     @Override

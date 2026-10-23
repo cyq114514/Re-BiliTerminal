@@ -394,4 +394,55 @@ public class BaseActivity extends AppCompatActivity {
     public String getClassName() {
         return this.getClass().getSimpleName();
     }
+
+    // ---------------------------------------------------------------- 关闭界面过渡动画
+
+    /**
+     * 「关闭界面过渡动画」总开关（默认关闭，即动画照常）。
+     *
+     * <p>低配设备/晕动症用户可以在偏好设置里关掉：Activity 转场与页面渐入渐出都不再播放。
+     * 覆写 {@code startActivity} 的各个重载而不是去几十个调用点逐个加判断——
+     * {@code registerForActivityResult} 走的是三参版本，漏掉它就会出现"某些入口还有动画"。
+     */
+    private boolean animationsDisabled() {
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DISABLE_ANIMATION, false);
+    }
+
+    private void applyNoTransition() {
+        if (!animationsDisabled()) return;
+        try {
+            overridePendingTransition(0, 0);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Override
+    public void startActivity(Intent intent) {
+        super.startActivity(intent);
+        applyNoTransition();
+    }
+
+    @Override
+    public void startActivity(Intent intent, @Nullable Bundle options) {
+        super.startActivity(intent, options);
+        applyNoTransition();
+    }
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode) {
+        super.startActivityForResult(intent, requestCode);
+        applyNoTransition();
+    }
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode, @Nullable Bundle options) {
+        super.startActivityForResult(intent, requestCode, options);
+        applyNoTransition();
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        applyNoTransition();
+    }
 }

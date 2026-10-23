@@ -46,6 +46,10 @@ public class SharedPreferencesUtil {
     public static final String USAGE_STATS_ENABLE = "usage_stats_enable";
     //上次上报活跃统计的日期（yyyyMMdd），用于每天只报一次
     public static final String USAGE_STATS_LAST_DAY = "usage_stats_last_day";
+    //关闭界面过渡动画：关掉 Activity 转场与页面渐入渐出（低配设备/晕动症用户），默认关闭（动画照常）
+    public static final String DISABLE_ANIMATION = "ui_disable_animation";
+    //每次冷启动自动检查更新（GitHub 直连 + 内置镜像），只有打开后才在启动时探测，默认关闭
+    public static final String UPDATE_CHECK_ON_START = "update_check_on_start";
 
     public static String cookies = "cookies";
     public static String mid = "mid";

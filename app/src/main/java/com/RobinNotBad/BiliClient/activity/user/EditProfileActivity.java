@@ -90,8 +90,25 @@ public class EditProfileActivity extends BaseActivity {
             return;
         }
 
+        //手表/精简系统上常常没有相册（没有处理 ACTION_PICK 的 Activity），
+        //直接 startActivityForResult 会抛 ActivityNotFoundException 把页面崩掉——
+        //线上 4 条崩溃都是这个原因（sdk27 的手表机型）。这里先探测，再降级到系统文件选择器
         Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-        startActivityForResult(intent, REQUEST_CODE_PICK_IMAGE);
+        if (intent.resolveActivity(getPackageManager()) == null) {
+            intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("image/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            if (intent.resolveActivity(getPackageManager()) == null) {
+                MsgUtil.showMsg("这台设备没有可用的图片选择器");
+                return;
+            }
+        }
+        try {
+            startActivityForResult(intent, REQUEST_CODE_PICK_IMAGE);
+        } catch (Exception e) {
+            //探测通过但仍可能被系统拦下（部分厂商裁掉了返回的 Activity）
+            MsgUtil.err("打开图片选择器失败", e);
+        }
     }
 
     @Override

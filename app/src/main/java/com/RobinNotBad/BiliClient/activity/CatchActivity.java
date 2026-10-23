@@ -114,7 +114,12 @@ public class CatchActivity extends BaseActivity {
         //上报状态 + 本地文件路径：即使网络不通、后台收不到，现场也已经留在本机了
         boolean reportEnabled = intent.getBooleanExtra("reportEnabled", false);
         String crashFile = intent.getStringExtra("crashFile");
+        String filterReason = intent.getStringExtra("filterReason");
         reason_view.append("\n\n崩溃上报：" + (reportEnabled ? "已开启" : "未开启"));
+        if (filterReason != null && !filterReason.isEmpty()) {
+            //让用户知道"这次为什么没自动上传"：系统压力类/无本仓库帧/24h 重复等
+            reason_view.append("（本次未自动上传，原因：" + filterReason + "，仅本地留档）");
+        }
         if (crashFile != null && !crashFile.isEmpty()) {
             reason_view.append("\n本地记录：" + crashFile);
         }

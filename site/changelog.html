@@ -28,6 +28,22 @@
     <p class="lead">只写用户能感知的变化。完整的技术细节在仓库的 <code>docs/更新日志.md</code>。</p>
 
     <div class="log-item">
+      <h3>1.2.3</h3>
+      <div class="date">2026-10-24 · versionCode 20261024</div>
+      <ul>
+        <li><strong>Android 4.4/5.x 播放页闪退修复</strong>：老设备点开视频就崩——播放通知用到的系统组件在老系统上不存在，现已隔离。</li>
+        <li><strong>老设备崩溃上报修复</strong>：4.4/5.x 上崩溃记录一直传不上去（系统只支持旧版加密协议），现在能正常上报。</li>
+        <li><strong>弹幕越看越偏修复</strong>：弹幕时钟改为以播放器位置为准，长时间观看、切清晰度/听视频后仍与画面同步。</li>
+        <li><strong>开屏更快</strong>：进首页前不再串行等待两个 B 站接口，弱网/断网冷启动也能秒进。</li>
+        <li><strong>收藏夹恢复</strong>：视频收藏夹不再为空（B站收藏夹接口已迁移，整条链路跟进），收藏与取消收藏一并修复。</li>
+        <li><strong>新版下载器修复</strong>：不再弹「网络错误」、下载失败；优先走官方 CDN，并支持断点续传。</li>
+        <li><strong>缓存视频播放修复</strong>：播放已缓存视频不再弹错误框、停在「装填弹幕中」。</li>
+        <li><strong>崩溃上报更干净</strong>：只上报重要且能定位的问题，同一条崩溃 24 小时内不重复上传。</li>
+        <li><strong>两个新开关</strong>（默认关闭）：「关闭界面过渡动画」与「启动时检查更新」，都在 设置 → 偏好设置 里。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
       <h3>1.2.2</h3>
       <div class="date">2026-10-19 · versionCode 20261019</div>
       <ul>

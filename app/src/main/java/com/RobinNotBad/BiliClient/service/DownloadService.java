@@ -39,6 +39,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -147,8 +148,9 @@ public class DownloadService extends Service {
 
                 section = section_tmp;
 
-                // 获取视频链接
-                String url_video, url_danmaku, url_audio;
+                // 获取视频链接（候选列表：官方 CDN 优先、PCDN 垫底，见 PlayerApi.buildMediaCandidates）
+                List<String> urls_video, urls_audio;
+                String url_danmaku;
                 try {
                     PlayerData data = section.toPlayerData();
 
@@ -157,14 +159,18 @@ public class DownloadService extends Service {
                         PlayerApi.getVideoDash(data);
                         //优先用刚拉取的新链接：数据库里持久化的 URL 数小时就过期，
                         //重试/延迟下载的音频必然 403
-                        url_audio = data.audioUrl != null && !data.audioUrl.isEmpty()
-                                ? data.audioUrl
-                                : section.audioUrl;
-                        url_video = null; // 仅音频模式不需要视频
+                        urls_audio = new ArrayList<>(data.audioUrls);
+                        if (urls_audio.isEmpty() && data.audioUrl != null && !data.audioUrl.isEmpty())
+                            urls_audio.add(data.audioUrl);
+                        if (urls_audio.isEmpty() && section.audioUrl != null && !section.audioUrl.isEmpty())
+                            urls_audio.add(section.audioUrl);
+                        urls_video = null; // 仅音频模式不需要视频
                     } else {
                         PlayerApi.getVideo(data, true);
-                        url_video = data.videoUrl;
-                        url_audio = null;
+                        urls_video = new ArrayList<>(data.videoUrls);
+                        if (urls_video.isEmpty() && data.videoUrl != null && !data.videoUrl.isEmpty())
+                            urls_video.add(data.videoUrl);
+                        urls_audio = null;
                     }
                     url_danmaku = data.danmakuUrl;
                 } catch (JSONException e) {
@@ -228,7 +234,7 @@ public class DownloadService extends Service {
                             // 根据下载类型选择下载内容
                             if (section.isAudioOnly()) {
                                 toastState("下载音频");
-                                result = downFile(url_audio, new File(path_single, "audio.m4a"));
+                                result = downFile(urls_audio, new File(path_single, "audio.m4a"), true);
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
@@ -237,7 +243,7 @@ public class DownloadService extends Service {
                                 }
                             } else {
                                 toastState("下载视频");
-                                result = downFile(url_video, new File(path_single, "video.mp4"));
+                                result = downFile(urls_video, new File(path_single, "video.mp4"), true);
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
@@ -296,7 +302,7 @@ public class DownloadService extends Service {
                             // 根据下载类型选择下载内容
                             if (section.isAudioOnly()) {
                                 toastState("下载音频");
-                                result = downFile(url_audio, new File(path_page, "audio.m4a"));
+                                result = downFile(urls_audio, new File(path_page, "audio.m4a"), true);
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
@@ -305,7 +311,7 @@ public class DownloadService extends Service {
                                 }
                             } else {
                                 toastState("下载视频");
-                                result = downFile(url_video, new File(path_page, "video.mp4"));
+                                result = downFile(urls_video, new File(path_page, "video.mp4"), true);
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
@@ -449,72 +455,196 @@ public class DownloadService extends Service {
         return NORMAL;
     }
 
-    /**
-     * 服务端下发的媒体地址不可盲信：下载请求带登录 Cookie 与 Referer，此前会把它们
-     * 发往响应里给的任意 URL（含明文 http）。统一在这里收口：非 B 站白名单域拒绝，
-     * http 升级为 https（B 站媒体 CDN 均支持）。
-     */
-    private static String validateMediaUrl(String url) {
-        HttpUrl parsed = HttpUrl.parse(url);
-        if (parsed == null) return null;
-        if (!parsed.isHttps()) parsed = parsed.newBuilder().scheme("https").build();
-        return NetWorkUtil.isBilibiliHost(parsed.host()) ? parsed.toString() : null;
+    /** 一条可下载的媒体地址 + 它是否属于 B 站自有域名（决定能否携带登录 Cookie）。 */
+    private static final class MediaSource {
+        final String url;
+        final boolean trusted;
+
+        MediaSource(String url, boolean trusted) {
+            this.url = url;
+            this.trusted = trusted;
+        }
     }
 
+    /**
+     * 把服务端下发的地址解析成可下载的 {@link MediaSource}（两档策略）。
+     *
+     * <p><b>为什么改</b>：B 站现在对 1080P 的 mp4（format=mp4720）与 DASH 流下发的首地址
+     * 大量是 PCDN —— {@code *.mcdn.bilivideo.cn:8082}（B 站自有）与
+     * {@code *.edge.mountaintoys.cn:4483}（第三方 PCDN）。改造前这里只放行 bilivideo.com，
+     * 于是下载第一步就返回 ERR_NETWORK，用户看到的就是「下载失败，网络错误」；
+     * 而 backup_url 里一直带着官方 {@code upos-sz-*.bilivideo.com}。
+     *
+     * <p><b>策略</b>：
+     * <ul>
+     *   <li>B 站自有域：与改造前一致，带完整请求头（含 Cookie），http 升级为 https；</li>
+     *   <li>非 B 站域：只有"确实来自 playurl 响应"（fromPlayUrl）才放行，且<b>一律不带 Cookie</b>，
+     *       只保留 UA/Referer/Origin —— 第三方 PCDN 是合法播放地址，但不是 B 站资产；</li>
+     *   <li>其余（用户输入、未知来源）仍然拒绝。</li>
+     * </ul>
+     */
+    private static MediaSource resolveMediaSource(String url, boolean fromPlayUrl) {
+        if (url == null || url.isEmpty()) return null;
+        HttpUrl parsed = HttpUrl.parse(url);
+        if (parsed == null) return null;
+        boolean trusted = NetWorkUtil.isBilibiliHost(parsed.host());
+        if (trusted) {
+            if (!parsed.isHttps()) parsed = parsed.newBuilder().scheme("https").build();
+            return new MediaSource(parsed.toString(), true);
+        }
+        if (!fromPlayUrl) return null;
+        //第三方 PCDN 节点：保持原 scheme（部分节点只在特定端口上监听 http），且永远拿不到 Cookie
+        return new MediaSource(parsed.toString(), false);
+    }
+
+    private static String hostOf(String url) {
+        try {
+            HttpUrl parsed = HttpUrl.parse(url);
+            return parsed != null ? parsed.host() : "?";
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
+    /** 下载单一可信地址（封面、字幕等）。 */
     private int downFile(String url, File file) throws IOException {
-        String safeUrl = validateMediaUrl(url);
-        if (safeUrl == null) return ERR_NETWORK;
+        ArrayList<String> one = new ArrayList<>(1);
+        one.add(url);
+        return downFile(one, file, false);
+    }
+
+    /**
+     * 下载播放媒体（视频/音频）：逐个候选地址尝试，带 Range 断点续传。
+     *
+     * <p>候选列表由 {@link PlayerApi#buildMediaCandidates} 整理：官方 CDN 在前、PCDN 在后。
+     * 任何一个候选成功即返回，全部失败才报 ERR_NETWORK —— 这样既不会被自家域名校验拦死，
+     * 又能优先走快的官方线路（实测 PCDN 拉 200KB 要 5 秒，官方 CDN 约 1 秒）。
+     *
+     * @param urls        候选地址
+     * @param fromPlayUrl 是否直接来自 playurl 响应（决定非 B 站域能否放行）
+     */
+    private int downFile(List<String> urls, File file, boolean fromPlayUrl) throws IOException {
+        if (urls == null || urls.isEmpty()) return ERR_NETWORK;
+        int lastResult = ERR_NETWORK;
+        for (int i = 0; i < urls.size(); i++) {
+            if (!started) return ERR_UNKNOWN;
+            MediaSource source = resolveMediaSource(urls.get(i), fromPlayUrl);
+            if (source == null) {
+                Logu.w("download", "候选 " + (i + 1) + "/" + urls.size() + " 被域名策略拒绝");
+                continue;
+            }
+            int result = downloadFrom(source, file);
+            if (result == NORMAL) return NORMAL;
+            lastResult = result;
+            Logu.e("download", "候选 " + (i + 1) + "/" + urls.size() + " 失败(" + result + ") host=" + hostOf(source.url));
+        }
+        return lastResult;
+    }
+
+    /** 单个候选地址的实际下载：支持 Range 续传 + 长度校验。 */
+    private int downloadFrom(MediaSource source, File file) throws IOException {
+        ArrayList<String> headers = source.trusted
+                ? new ArrayList<>(NetWorkUtil.webHeaders)
+                : NetWorkUtil.webHeadersWithoutCookie();
+
+        long existing = file.exists() ? file.length() : 0;
+        boolean resume = existing > 0;
+        if (resume) {
+            headers.add("Range");
+            headers.add("bytes=" + existing + "-");
+        }
+
         Response response;
         try {
-            response = NetWorkUtil.get(safeUrl);
+            response = NetWorkUtil.get(source.url, headers);
         } catch (IOException e) {
             return ERR_NETWORK;
         }
+
         InputStream inputStream = null;
         FileOutputStream fileOutputStream = null;
         try {
-            //B 站错误响应多为 JSON：不校验状态码会把错误页写进 video.mp4，本地列表显示可播放
-            if (!response.isSuccessful()) {
+            int code = response.code();
+            boolean append;
+            if (resume && code == 206) {
+                append = true;
+            } else if (resume && code == 416) {
+                //Range 超出文件末尾：本地那份其实已经完整
                 response.close();
+                return NORMAL;
+            } else if (response.isSuccessful()) {
+                //200：服务端忽略了 Range（或不支持续传）→ 从头覆盖写
+                append = false;
+                existing = 0;
+            } else {
+                //B 站错误响应多为 JSON：不校验状态码会把错误页写进 video.mp4，本地列表显示可播放
+                Logu.e("download", "HTTP " + code + " host=" + hostOf(source.url));
+                response.close();
+                //403/412 多为地址过期，换下一个候选比原地重试更有意义
                 return ERR_NETWORK;
             }
-            if (!file.exists() && !file.createNewFile())
+
+            if (!append) {
+                if (file.exists() && !file.delete()) return ERR_FILE;
+                if (!file.createNewFile()) return ERR_FILE;
+            } else if (!file.exists() && !file.createNewFile()) {
                 return ERR_FILE;
-            else if (!file.delete() || !file.createNewFile())
-                return ERR_FILE;
+            }
+
+            if (response.body() == null) {
+                //没有响应体（服务端异常/被拦截）：当网络错误处理，交给下一个候选
+                return ERR_NETWORK;
+            }
+            long bodyLength = response.body().contentLength();
+            long total = bodyLength > 0 ? existing + bodyLength : -1;
+            percent = (total > 0 && existing > 0) ? 1f * existing / total : 0;
 
             inputStream = Objects.requireNonNull(response.body()).byteStream();
-            fileOutputStream = new FileOutputStream(file);
+            fileOutputStream = new FileOutputStream(file, append);
             int len;
             byte[] bytes = new byte[1024 * 10];
-            long TotalFileSize = Objects.requireNonNull(response.body()).contentLength();
-            long completeFileSize = 0;
+            long written = existing;
             while ((len = inputStream.read(bytes)) != -1 && started) {
                 fileOutputStream.write(bytes, 0, len);
-                completeFileSize += len;
-                //长度未知（chunked/-1）时不算百分比，避免负数/NaN；也不再每 10KB 一次 file.length() 系统调用
-                if (TotalFileSize > 0)
-                    percent = 1.0f * completeFileSize / TotalFileSize;
+                written += len;
+                //长度未知（chunked/-1）时不算百分比，避免负数/NaN
+                if (total > 0) percent = 1f * written / total;
             }
-            if (!started)
-                return ERR_UNKNOWN;
+            fileOutputStream.flush();
+            if (!started) return ERR_UNKNOWN;
+
+            //完整性校验：PCDN 节点偶尔提前断流，长度对不上就判本次候选失败，
+            //交给下一个候选（或下次下载从断点续传）
+            if (total > 0 && file.length() < total) {
+                Logu.e("download", "长度不足 " + file.length() + "/" + total + " host=" + hostOf(source.url));
+                return ERR_FILE;
+            }
+            return NORMAL;
         } catch (IOException e) {
             return ERR_FILE;
         } finally {
-            if (inputStream != null)
-                inputStream.close();
-            if (fileOutputStream != null)
-                fileOutputStream.close();
-            if (response.body() != null)
-                response.body().close();
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (fileOutputStream != null) {
+                try {
+                    fileOutputStream.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (response.body() != null) response.body().close();
             response.close();
         }
-        return NORMAL;
     }
 
     private int downDanmaku(String danmaku, File danmakuFile) throws IOException {
-        String safeUrl = validateMediaUrl(danmaku);
-        if (safeUrl == null) return ERR_NETWORK;
+        //弹幕地址固定是 comment.bilibili.com，属于 B 站自有域，不允许走"第三方 PCDN"那档
+        MediaSource source = resolveMediaSource(danmaku, false);
+        if (source == null) return ERR_NETWORK;
+        String safeUrl = source.url;
         Response response;
         try {
             response = NetWorkUtil.get(safeUrl);

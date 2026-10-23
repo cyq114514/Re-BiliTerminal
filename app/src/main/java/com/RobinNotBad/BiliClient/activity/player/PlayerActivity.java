@@ -14,9 +14,6 @@ import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
 import android.media.AudioManager;
-import android.media.MediaMetadata;
-import android.media.session.MediaSession;
-import android.media.session.PlaybackState;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -53,6 +50,7 @@ import com.RobinNotBad.BiliClient.activity.InteractionDebugActivity;
 import com.RobinNotBad.BiliClient.adapter.QualitySelectorAdapter;
 import com.RobinNotBad.BiliClient.adapter.ViewPointAdapter;
 import com.RobinNotBad.BiliClient.api.ConfInfoApi;
+import com.RobinNotBad.BiliClient.helper.MediaSessionHelper;
 import com.RobinNotBad.BiliClient.api.BangumiApi;
 import com.RobinNotBad.BiliClient.api.DanmakuApi;
 import com.RobinNotBad.BiliClient.api.HistoryApi;
@@ -176,7 +174,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private Timer progressTimer, speedTimer, loadingTimer, onlineTimer, surfaceTimer;
     private Handler mainHandler;
     private String video_url, danmaku_url;
-    private MediaSession mediaSession;
+    //MediaSession 的类型被隔离在 MediaSessionHelper 里（API21+ 才加载）：
+    //PlayerActivity 自身不能再出现 android.media.session.* 签名，否则 EventBus 反射会在 4.4 上崩
+    private MediaSessionHelper mediaSessionHelper;
 
     private boolean isPlaying, isPrepared, hasDanmaku,
             isOnlineVideo, isLiveMode, isSeeking, isDanmakuVisible;
@@ -264,14 +264,30 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     //弹幕跳转请求：弹幕尚未 prepare 时 DanmakuView.seekTo 会被丢弃，先记住位置等 prepared 回调补做
     private long pendingDanmakuSeekMs = -1;
-    //弹幕与播放器位置允许的最大偏差，超过则纠正一次
-    private static final long DANMAKU_SYNC_TOLERANCE_MS = 2000;
+    /**
+     * 弹幕时间轴与播放器位置的允许偏差。
+     *
+     * <p>DFM 的时钟是"自己走"的（见 DrawHandler.syncTimer：按 SystemClock.uptimeMillis 与渲染帧率推进），
+     * 播放器位置才是唯一可信基准。偏差超过本值就由 {@link #updateTimer} 直接纠正，
+     * 否则低帧率设备上的"慢漂移"会一直累积（旧逻辑只在时间轴完全停住时才管，永远修不到慢漂移）。
+     */
+    private static final long DANMAKU_DRIFT_FIX_MS = 500;
+    //兜底通道（250ms tick）的容差与冷却，比 updateTimer 粗一档
+    private static final long DANMAKU_SYNC_TOLERANCE_MS = 800;
+    private static final long DANMAKU_SYNC_COOLDOWN_MS = 2000;
+    //连续多少次采样都超差才动手，避开 seek 后播放器尚未到位的过渡期
+    private static final int DANMAKU_DRIFT_CONFIRM = 2;
+    private int danmakuDriftHitCount = 0;
+    private int danmakuSyncTickCount = 0;
     //弹幕校正冷却，避免偏差持续存在时每 250ms 触发一次 seek
     private long lastDanmakuSyncMs = 0;
-    private static final long DANMAKU_SYNC_COOLDOWN_MS = 3000;
-    //卡死判定：上次观测到的弹幕时间轴位置与观测时刻
+    //上次观测到的弹幕时间轴位置与观测时刻（诊断用）
     private long lastObservedDanmakuMs = -1;
     private long lastObservedWallMs = 0;
+    //同步诊断日志节流：每 5 秒一条，真机上直接看两个时间差多少
+    private long lastDanmakuDiagMs = 0;
+    //当前倍速缓存：DFM 的 prepared 回调跑在弹幕线程上，那里不能去读 SeekBar（跨线程碰 View）
+    private volatile float currentSpeed = 1.0f;
 
     private int screen_width, screen_height;
     private int video_width, video_height;
@@ -518,11 +534,27 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 downdanmu();
             } else {
                 runOnUiThread(() -> btn_danmaku_send.setVisibility(View.GONE));
-                danmakuFile = new File(danmaku_url);
-                if (danmakuFile.exists())
-                    streamDanmaku(danmakuFile.toString());
-                else
+                //本地缓存的弹幕必须在主线程渲染：streamDanmaku 会直接操作 DanmakuView，
+                //在 CenterThreadPool 的协程线程（Dispatchers.IO，线程名 DefaultDispatcher-worker-N）
+                //上调用会抛 CalledFromWrongThreadException。此前只修了在线路径
+                //（downdanmuOld / streamDanmakuOnUi），这条本地分支被漏掉，表现为
+                //「播放缓存视频弹错误框、停在装填弹幕中且进度 00:00/00:00」——
+                //因为异常把同一个 lambda 后面的 setDisplay() 一起中断了。
+                File localDanmaku = (danmaku_url == null || danmaku_url.isEmpty()) ? null : new File(danmaku_url);
+                danmakuFile = localDanmaku;
+                if (localDanmaku != null && localDanmaku.exists()) {
+                    //再包一层 try/catch：弹幕文件损坏只该"没有弹幕"，不该让整段加载失败
+                    runOnUiThread(() -> {
+                        try {
+                            streamDanmaku(localDanmaku.toString());
+                        } catch (Throwable t) {
+                            hasDanmaku = false;
+                            Logu.e("本地弹幕", "渲染失败: " + t);
+                        }
+                    });
+                } else {
                     hasDanmaku = false;
+                }
             }
 
             if (!destroyed && SharedPreferencesUtil.getBoolean("player_subtitle_autoshow", true))
@@ -757,6 +789,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         if (onLongClick) {
                             onLongClick = false;
                             float normalSpeed = speed_values[seekbar_speed.getProgress()];
+                            currentSpeed = normalSpeed;
                             if (ijkPlayer != null)
                                 ijkPlayer.setSpeed(normalSpeed);
                             if (mDanmakuView != null)
@@ -791,6 +824,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (motionEvent.getAction() == MotionEvent.ACTION_UP && onLongClick) {
                     onLongClick = false;
                     float normalSpeed = speed_values[seekbar_speed.getProgress()];
+                    currentSpeed = normalSpeed;
                     if (ijkPlayer != null)
                         ijkPlayer.setSpeed(normalSpeed);
                     if (mDanmakuView != null)
@@ -818,6 +852,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     && !isLiveMode) {
                 if (!onLongClick && !gesture_click_disabled) {
                     hidecon.run();
+                    currentSpeed = 3.0f;
                     if (ijkPlayer != null)
                         ijkPlayer.setSpeed(3.0F);
                     if (mDanmakuView != null)
@@ -1196,7 +1231,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     mDanmakuView.pause();
                 }
                 btn_control.setImageResource(R.drawable.btn_player_play);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+                if (hasMediaSession()) {
                     updateMediaSessionPlaybackState();
                 }
             }
@@ -1217,7 +1252,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         mDanmakuView.pause();
                     }
                     btn_control.setImageResource(R.drawable.btn_player_play);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+                    if (hasMediaSession()) {
                         updateMediaSessionPlaybackState();
                     }
                 });
@@ -1277,6 +1312,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         isPrepared = true;
         PlayerSentinel.stage("首帧就绪");
+        //换清晰度/切听视频会复用同一个 video_now 字段：重建期间它还是旧实例的位置，
+        //不清掉的话新实例刚 prepared 的头 250ms 里，updateTimer 会拿旧位置把弹幕拽过去、
+        //再被新位置拽回来（两次可见跳变）。这里连同"变化检测"一起复位
+        video_now = 0;
+        video_now_last = -1;
         video_all = (int) ijkPlayer.getDuration();
 
         changeVideoSize();
@@ -1288,6 +1328,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             for (int i = 0; i < speed_values.length; i++) {
                 if (speed_values[i] == savedSpeed && i != 2) {
                     ijkPlayer.setSpeed(speed_values[i]);
+                    currentSpeed = speed_values[i];
                     if (mDanmakuView != null) mDanmakuView.setSpeed(speed_values[i]);
                     text_speed.setText(speed_strs[i]);
                     seekbar_speed.setProgress(i);   //fromUser=false，监听器不会重复应用
@@ -1297,7 +1338,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         if ((isLiveMode || hasDanmaku) && mDanmakuView != null) {
-            mDanmakuView.start();
+            //零点必须跟播放器对齐：无参 start() 内部等价于 start(0)，会把弹幕零点定在
+            //"DFM 准备好的那一刻"；弹幕下载/解析慢于取流时，整场就固定偏后（见 DanmakuView.start）
+            long danmakuAnchor = 0;
+            if (!isLiveMode && progress_history > 5
+                    && SharedPreferencesUtil.getBoolean("player_from_last", true)) {
+                danmakuAnchor = progress_history;
+            }
+            Logu.d("弹幕同步", "start 锚点=" + danmakuAnchor + "ms（progress_history=" + progress_history + "）");
+            mDanmakuView.start(danmakuAnchor);
         }
         if (SharedPreferencesUtil.getBoolean("player_ui_showDanmakuBtn", true)) {
             isDanmakuVisible = !SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true);
@@ -1416,7 +1465,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         ijkPlayer.start();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+        if (hasMediaSession()) {
             updateMediaSessionMetadata();
             updateMediaSessionPlaybackState();
         }
@@ -1534,7 +1583,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                             viewPointAdapter.updateCurrentPosition((int) curr_sec);
                         }
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+                        if (hasMediaSession()) {
                             updateMediaSessionPlaybackState();
                         }
                     }
@@ -2181,13 +2230,22 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             @Override
             public void prepared() {
                 Logu.v("danmaku", "prepared");
-                //弹幕下载通常慢于取流，onPrepared 里的 seek 会被 DanmakuView 直接丢弃（handler 未 prepared），
-                //断点续播时弹幕就会从 0 开始播——这里补做一次，这是"跳转后弹幕对不上/像卡住"的另一半原因
-                if (pendingDanmakuSeekMs >= 0) {
-                    Logu.d("弹幕跳转", "prepared 后补做 seek=" + pendingDanmakuSeekMs);
-                    mDanmakuView.seekTo(pendingDanmakuSeekMs);
-                    pendingDanmakuSeekMs = -1;
+                //弹幕下载通常慢于取流，onPrepared 里的 seek/start 会被 DanmakuView 直接丢弃（handler 未 prepared），
+                //弹幕就会从 0 开始播。这里**无条件**按当前播放位置对齐一次：
+                //只有 pendingDanmakuSeekMs 时补做是不够的——普通起播时它一直是 -1，
+                //而 DFM 的零点此时才被 RESUME 定成"现在"，视频却已经播了 N 秒（整场固定偏后）
+                //换清晰度/切听视频会重建播放器：此刻 video_now 还是旧实例的位置，不能再拿来当锚点
+                long anchor = pendingDanmakuSeekMs >= 0 ? pendingDanmakuSeekMs
+                        : (isPrepared ? video_now : 0);
+                if (anchor > 0) {
+                    Logu.d("弹幕同步", "prepared 后对齐 seek=" + anchor + "ms");
+                    mDanmakuView.seekTo(anchor);
+                    lastDanmakuSyncMs = System.currentTimeMillis();
                 }
+                pendingDanmakuSeekMs = -1;
+                //prepare() 之后 handler 才 isPrepared，此前 onPrepared 里的 setSpeed 会被静默丢弃，
+                //倍速播放时弹幕时钟就停在 1x——这里补一次
+                mDanmakuView.setSpeed(currentPlayerSpeed());
                 String msg = protobufSegments != null
                         ? "弹幕君准备完毕～(是新来的哦～)"
                         : "弹幕君准备完毕～(*≧ω≦)";
@@ -2200,7 +2258,23 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 //而 getCurrentPosition 是会拿播放器原生锁的 JNI 调用，一旦与 seek、release 并发，
                 //轻则弹幕时间轴被旧位置拽住不动（跳转后弹幕卡死），重则 DFM 线程彻底卡住，
                 //让主线程 release() 里的 join 永远等下去（退出播放后整个应用卡死）。
-                //弹幕时钟交给 DFM 自己走，位置对齐由 seekDanmakuTo / syncDanmakuIfDrifted 负责。
+                //
+                //只读 250ms 进度定时器维护的 volatile 字段 video_now：把播放器位置作为弹幕时间轴的
+                //唯一基准。连续两次采样都超差才纠正——单帧抖动、seek 后播放器尚未到位都不该动手。
+                if (!hasDanmaku || !isPlaying || isSeeking) return;
+                long pos = video_now;
+                if (pos <= 0) return;
+                long drift = pos - timer.currMillisecond;
+                if (Math.abs(drift) <= DANMAKU_DRIFT_FIX_MS) {
+                    danmakuDriftHitCount = 0;
+                    return;
+                }
+                if (++danmakuDriftHitCount < DANMAKU_DRIFT_CONFIRM) return;
+                danmakuDriftHitCount = 0;
+                timer.update(pos);
+                lastDanmakuSyncMs = System.currentTimeMillis();
+                Logu.d("弹幕同步", "updateTimer 校正：player=" + pos
+                        + " 原弹幕=" + (pos - drift) + " 偏差=" + drift + "ms");
             }
 
             @Override
@@ -2487,7 +2561,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
         if (btn_control != null)
             btn_control.setImageResource(R.drawable.btn_player_play);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+        if (hasMediaSession()) {
             updateMediaSessionPlaybackState();
         }
     }
@@ -2502,7 +2576,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
         if (btn_control != null)
             btn_control.setImageResource(R.drawable.btn_player_pause);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+        if (hasMediaSession()) {
             updateMediaSessionPlaybackState();
         }
     }
@@ -2675,9 +2749,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             liveWebSocket = null;
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
-            mediaSession.release();
-            mediaSession = null;
+        if (hasMediaSession()) {
+            mediaSessionHelper.release();
+            mediaSessionHelper = null;
         }
 
         setRequestedOrientation(SharedPreferencesUtil.getBoolean("ui_landscape", false)
@@ -2813,17 +2887,24 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         });
     }
 
-    @SuppressLint("WrongConstant")
+    /**
+     * 是否真的存在 MediaSession。
+     *
+     * <p>SDK 判断必须放在前面做短路：API&lt;21 的设备上连 helper 字段都不要去读，
+     * 免得虚拟机在解析字段类型时碰到 android.media.session.*（那正是老系统崩溃的来源）。
+     */
+    private boolean hasMediaSession() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSessionHelper != null;
+    }
+
+    /** 实例化 MediaSession 隔离层；调用方已判过 SDK≥21（API21 以下本类不加载）。 */
     private void initMediaSession() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             return;
         }
-        mediaSession = new MediaSession(this, "BiliClientPlayer");
-        mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        mediaSession.setCallback(new MediaSession.Callback() {
+        mediaSessionHelper = new MediaSessionHelper(this, "BiliClientPlayer", new MediaSessionHelper.Callback() {
             @Override
             public void onPlay() {
-                super.onPlay();
                 runOnUiThread(() -> {
                     if (!isPlaying) {
                         playerResume();
@@ -2834,7 +2915,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void onPause() {
-                super.onPause();
                 runOnUiThread(() -> {
                     if (isPlaying) {
                         playerPause();
@@ -2845,7 +2925,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void onSkipToNext() {
-                super.onSkipToNext();
                 runOnUiThread(() -> {
                     if (hasMultiplePages() && currentPageIndex < pagenames.size() - 1) {
                         switchToPage(currentPageIndex + 1);
@@ -2855,7 +2934,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void onSkipToPrevious() {
-                super.onSkipToPrevious();
                 runOnUiThread(() -> {
                     if (hasMultiplePages() && currentPageIndex > 0) {
                         switchToPage(currentPageIndex - 1);
@@ -2865,53 +2943,26 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void onSeekTo(long pos) {
-                super.onSeekTo(pos);
                 runOnUiThread(() -> {
                     seekToPosition(pos);
                     updateMediaSessionPlaybackState();
                 });
             }
         });
-        mediaSession.setActive(true);
     }
 
     private void updateMediaSessionMetadata() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || mediaSession == null) {
-            return;
-        }
-        MediaMetadata.Builder metadataBuilder = new MediaMetadata.Builder();
-        if (videoTitle != null) {
-            metadataBuilder.putString(MediaMetadata.METADATA_KEY_TITLE, videoTitle);
-        }
-        if (video_all > 0) {
-            metadataBuilder.putLong(MediaMetadata.METADATA_KEY_DURATION, video_all);
-        }
-        mediaSession.setMetadata(metadataBuilder.build());
+        if (mediaSessionHelper == null) return;
+        mediaSessionHelper.setMetadata(videoTitle, video_all);
     }
 
     private void updateMediaSessionPlaybackState() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || mediaSession == null) {
-            return;
-        }
-        int state = isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
+        if (mediaSessionHelper == null) return;
         //这里既会被 progressTimer 线程调用，也会被 finish()→playerPause() 这条主线程退出链调用，
         //因此不能用 ijkPlayer.getCurrentPosition()（原生锁，seek 期间可能不返回），统一用后台维护的 video_now
-        long position = video_now;
-        long actions = PlaybackState.ACTION_PLAY
-                | PlaybackState.ACTION_PAUSE
-                | PlaybackState.ACTION_SEEK_TO
-                | PlaybackState.ACTION_SKIP_TO_NEXT
-                | PlaybackState.ACTION_SKIP_TO_PREVIOUS;
-        if (!hasMultiplePages() || currentPageIndex >= pagenames.size() - 1) {
-            actions &= ~PlaybackState.ACTION_SKIP_TO_NEXT;
-        }
-        if (!hasMultiplePages() || currentPageIndex <= 0) {
-            actions &= ~PlaybackState.ACTION_SKIP_TO_PREVIOUS;
-        }
-        PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
-                .setState(state, position, 1.0f)
-                .setActions(actions);
-        mediaSession.setPlaybackState(stateBuilder.build());
+        boolean hasNext = hasMultiplePages() && currentPageIndex < pagenames.size() - 1;
+        boolean hasPrevious = hasMultiplePages() && currentPageIndex > 0;
+        mediaSessionHelper.setPlaybackState(isPlaying, video_now, hasNext, hasPrevious);
     }
 
     private void initUI() {
@@ -3162,6 +3213,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (fromUser) {
                     text_newspeed.setText(speed_strs[position]);
                     text_speed.setText(speed_strs[position]);
+                    currentSpeed = speed_values[position];
                     if (ijkPlayer != null)
                         ijkPlayer.setSpeed(speed_values[position]);
                     if (mDanmakuView != null)
@@ -3235,18 +3287,31 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void seekDanmakuTo(long positionMs) {
         if (!hasDanmaku || mDanmakuView == null) return;
         if (positionMs < 0) positionMs = 0;
-        pendingDanmakuSeekMs = positionMs;
         //主动跳转后先进入冷却：播放器 seek 需要时间才真正到位，期间不能反过来把弹幕拉回旧位置
         lastDanmakuSyncMs = System.currentTimeMillis();
         lastObservedDanmakuMs = -1;
-        mDanmakuView.seekTo(positionMs);
+        danmakuSyncTickCount = 0;
+        danmakuDriftHitCount = 0;
+        if (mDanmakuView.isPrepared()) {
+            //已经 prepared 就当场生效；pending 必须清掉，否则下次 reload 的 prepared 回调
+            //会拿这个过期位置再跳一次（切P/换清晰度后弹幕莫名跳回旧位置就是这个原因）
+            pendingDanmakuSeekMs = -1;
+            mDanmakuView.seekTo(positionMs);
+        } else {
+            //handler 还没 prepared，seekTo 会被 DanmakuView 直接丢弃，等 prepared 回调补做
+            pendingDanmakuSeekMs = positionMs;
+        }
     }
 
     /**
-     * 弹幕时间轴卡死校正。
-     * 判定条件是"弹幕时间轴停止推进，而播放器还在前进"，而不是简单的偏差超阈值——
-     * 后者会在 seek 后播放器尚未到位时把弹幕反向拽回旧位置，形成来回抖动。
-     * 只允许在后台定时任务里读播放器位置，绝不能在 DFM 的线程里读（见 streamDanmaku 的回调注释）。
+     * 弹幕与播放器位置偏差校正（250ms tick 里的兜底通道）。
+     *
+     * <p>原判定是"弹幕时间轴停止推进，而播放器还在前进"——只能救"卡死"，救不了"慢漂移"：
+     * 时间轴一直在走、只是走得不准时永远不触发，偏差就永久留下。现在改成看**绝对偏差**，
+     * 连续 3 个 tick（750ms）都超差才动手，并在 {@code lastDanmakuSyncMs} 上留冷却，
+     * 避免 seek 后播放器尚未到位的过渡期被来回拽。
+     *
+     * <p>只允许在后台定时任务里读播放器位置，绝不能在 DFM 的线程里读（见 updateTimer 的注释）。
      */
     private void syncDanmakuIfDrifted(long playerPositionMs) {
         if (!isPrepared || !isPlaying || isSeeking || !isDanmakuVisible) return;
@@ -3255,20 +3320,39 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         long danmakuTime = mDanmakuView.getCurrentTime();
         long now = System.currentTimeMillis();
-        if (danmakuTime != lastObservedDanmakuMs) {   //时间轴在推进 = 正常
+        long diff = playerPositionMs - danmakuTime;
+
+        //同步诊断：每 5 秒一条，真机上直接看两个时间差了多少（旧版只能靠"感觉漂了"描述问题）
+        if (now - lastDanmakuDiagMs >= 5000) {
+            lastDanmakuDiagMs = now;
+            Logu.d("弹幕同步", "player=" + playerPositionMs + " danmaku=" + danmakuTime + " diff=" + diff + "ms");
+        }
+
+        if (Math.abs(diff) <= DANMAKU_SYNC_TOLERANCE_MS) {
+            danmakuSyncTickCount = 0;
             lastObservedDanmakuMs = danmakuTime;
             lastObservedWallMs = now;
             return;
         }
-        //确认停住：至少观察 1.5s，且播放器已经领先超过容差
-        if (now - lastObservedWallMs < 1500) return;
-        if (playerPositionMs - danmakuTime <= DANMAKU_SYNC_TOLERANCE_MS) return;
+        if (++danmakuSyncTickCount < 3) return;
+        danmakuSyncTickCount = 0;
         if (now - lastDanmakuSyncMs < DANMAKU_SYNC_COOLDOWN_MS) return;
 
         lastDanmakuSyncMs = now;
+        lastObservedDanmakuMs = danmakuTime;
         lastObservedWallMs = now;
-        Logu.w("弹幕校正", "弹幕时间轴停止推进（danmaku=" + danmakuTime + "，player=" + playerPositionMs + "），重新对齐");
+        Logu.w("弹幕校正", "弹幕与播放器偏差 " + diff + "ms（danmaku=" + danmakuTime
+                + "，player=" + playerPositionMs + "），重新对齐");
         seekDanmakuTo(playerPositionMs);
+    }
+
+    /**
+     * 当前倍速。读的是缓存字段而不是 SeekBar：{@code prepared()} 回调跑在弹幕线程上，
+     * 跨线程读 View 属于未定义行为（个别 ROM 会直接抛异常）。
+     */
+    private float currentPlayerSpeed() {
+        float speed = currentSpeed;
+        return speed > 0 ? speed : 1.0f;
     }
 
     private void toggleAudioOnlyMode() {

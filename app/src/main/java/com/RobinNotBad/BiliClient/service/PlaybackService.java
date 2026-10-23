@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.player.PlayerActivity;
+import com.RobinNotBad.BiliClient.util.Logu;
 
 import java.lang.ref.WeakReference;
 import java.util.Locale;
@@ -78,6 +79,26 @@ public class PlaybackService extends Service {
             channel.setShowBadge(false);
             notifyManager.createNotificationChannel(channel);
         }
+        //5 秒规则：startForegroundService() 之后必须尽快 startForeground()。
+        //原来只在 onStartCommand 里调用，主线程一旦忙（播放页退后台时的进度上报、播放器收尾）
+        //就可能超时，系统直接抛 ForegroundServiceDidNotStartInTimeException 把进程打死（线上 1 条）。
+        //这里先挂一个不读 Activity 的占位通知，onStartCommand 再用 refresh() 换成真实内容
+        try {
+            startForeground(NOTIFICATION_ID, buildPlaceholder());
+        } catch (Throwable t) {
+            Logu.e("playback", "startForeground 失败: " + t);
+        }
+    }
+
+    /** 占位通知：不读 Activity 引用，onCreate 阶段（主线程可能正忙）也能安全构造。 */
+    private android.app.Notification buildPlaceholder() {
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.icon)
+                .setContentTitle("Re：哔哩终端正在播放")
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build();
     }
 
     @SuppressLint("UnspecifiedImmutableFlag")

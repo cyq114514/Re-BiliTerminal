@@ -20,9 +20,16 @@ import java.util.ArrayList;
 import java.util.Calendar;
 
 public class AppInfoApi {
-    public static void check(Context context) {
+    /**
+     * 启动弹窗：免责声明 + 深夜提醒。
+     *
+     * <p>纯本地判断、不发网络请求，但**必须在首屏 Activity resumed 之后、在主线程调用**——
+     * 它内部是 {@code startActivity(DialogActivity)}，早于首屏启动会和首屏的 startActivity 竞争，
+     * 弹窗会被压在首屏下面，用户要再点一次菜单才看到（实测反馈）。
+     * 调度见 {@code BiliTerminal.runAfterFirstPageResumed}。
+     */
+    public static void showStartupDialogs(Context context) {
         // 讲真这免责声明没啥卵用，写这个也就是半开玩笑的，难道免责声明能挡住律师函吗
-        // 而且"fuck_uncle"过分了嗷，咱做第三方软件的真不能这么干……
         if (!SharedPreferencesUtil.getBoolean("disclaimer_shown", false)) {
             MsgUtil.showDialog("免责声明", "使用前请先阅读：\n" + context.getString(R.string.about_to_uncle), 3);
             SharedPreferencesUtil.putBoolean("disclaimer_shown", true);
@@ -35,7 +42,16 @@ public class AppInfoApi {
                 MsgUtil.showDialog("温馨提醒", "夜深了，要注意休息呐~", 3);
             }
         }
+    }
 
+    /** 兼容旧调用：弹窗 + 版本检查（后台线程）。新代码请分别调用两个方法，避免弹窗抢在首屏前面。 */
+    public static void check(Context context) {
+        showStartupDialogs(context);
+        checkVersion(context);
+    }
+
+    /** 版本/更新包检查（含网络请求，必须在后台线程调用）。 */
+    public static void checkVersion(Context context) {
         try {
             int version = BiliTerminal.getVersion();
             int curr = ConfInfoApi.getDateCurr();

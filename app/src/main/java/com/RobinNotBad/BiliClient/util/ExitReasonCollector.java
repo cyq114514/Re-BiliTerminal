@@ -64,18 +64,15 @@ public final class ExitReasonCollector {
                 String processName = info.getProcessName();
                 if (processName != null && processName.contains(":crash")) continue;
 
-                //后台缓存进程被系统回收是正常行为，不算崩溃：
-                //importance=400 即 IMPORTANCE_CACHED。实测米兔手表 20 分钟内报 5 条，
-                //整批数据里 17/27 都是这个，真实问题全被它淹没了
-                if (reason == ApplicationExitInfo.REASON_LOW_MEMORY
-                        && info.getImportance() >= 400) {
-                    CrashTrace.log("退出原因: 跳过后台缓存进程回收 importance=" + info.getImportance());
+                //只保留真正能当"崩溃线索"的原因：native 崩溃、ANR、初始化失败。
+                //内存回收（lmk）、冻结（freezer）、资源占用过高（resource）都是系统在内存压力下的
+                //常规操作，没有代码线索——按"只报最重要的崩溃"的口径，它们连本地记录都不再生成
+                //（真 OOM 会以 java.lang.OutOfMemoryError 走 Java 崩溃链路，那条仍然上报）
+                String type = typeOf(reason);
+                if (type == null) {
+                    CrashTrace.log("退出原因: 跳过非崩溃类 reason=" + reason);
                     continue;
                 }
-
-                String type = typeOf(reason);
-                //typeOf 返回 null 表示「这一类退出不构成崩溃线索」（含 REASON_OTHER 与 SIGNALED），跳过
-                if (type == null) continue;
 
                 String detail = buildDetail(context, info);
                 JSONObject report = CrashUploader.buildEvent(context, type, "reason:" + reason,
@@ -83,6 +80,11 @@ public final class ExitReasonCollector {
                 //用系统记录的真实发生时间，避免历史崩溃被算进"今天"
                 CrashStats.record(type, ts);
                 CrashTrace.log("退出原因: " + type + " ts=" + ts);
+                CrashFilter.Decision decision = CrashFilter.decide(report);
+                if (!decision.upload) {
+                    CrashTrace.log("退出原因: 仅本地（" + decision.reason + "）");
+                    continue;
+                }
                 if (CrashReportUtil.isEnabled()) CrashUploader.submit(context, report);
             }
             if (newest > lastTs) SharedPreferencesUtil.putLong(KEY_LAST_TS, newest);
@@ -94,9 +96,14 @@ public final class ExitReasonCollector {
     /**
      * 只保留能当"崩溃线索"的原因，其余返回 null 跳过。
      *
-     * <p>为什么跳过 {@code REASON_SIGNALED}：我们自己崩溃后就是 {@code Process.killProcess}（SIGKILL）收尾，
-     * 每次 Java 崩溃都会额外产生一条 SIGNALED 记录，噪音大于价值。
-     * {@code REASON_OTHER} 覆盖用户划掉任务、系统清理等正常场景，同样不报。
+     * <p>保留：原生崩溃、ANR、进程初始化失败——这三类要么有代码关联，要么用户能直接感知。
+     * <p>跳过：
+     * <ul>
+     *   <li>{@code REASON_SIGNALED}：我们自己崩溃后就是 killProcess(SIGKILL) 收尾，每崩一次就会多一条；</li>
+     *   <li>{@code REASON_OTHER}：用户划掉任务、系统清理等正常场景；</li>
+     *   <li>{@code REASON_LOW_MEMORY} / {@code REASON_FREEZER} / {@code REASON_EXCESSIVE_RESOURCE_USAGE}：
+     *       系统内存压力下的常规回收，没有代码线索（真 OOM 会走 Java 崩溃链路）。</li>
+     * </ul>
      */
     private static String typeOf(int reason) {
         switch (reason) {
@@ -104,14 +111,8 @@ public final class ExitReasonCollector {
                 return "native";
             case ApplicationExitInfo.REASON_ANR:
                 return "anr";
-            case ApplicationExitInfo.REASON_LOW_MEMORY:
-                return "lmk";
             case ApplicationExitInfo.REASON_INITIALIZATION_FAILURE:
                 return "init-failure";
-            case ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE:
-                return "resource";
-            case ApplicationExitInfo.REASON_FREEZER:
-                return "freezer";
             default:
                 return null;
         }

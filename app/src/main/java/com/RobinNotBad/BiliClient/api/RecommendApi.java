@@ -59,31 +59,55 @@ public class RecommendApi {
 
     /**
      * 设置项：首页是否使用 app 端推荐。
-     * 默认关闭＝保持与修复前完全一致的 web 端行为（PiliPlus 的「首页使用app端推荐」也是这样一个开关）。
+     * 默认开启（app 端与 web 端返回的是两套内容，app 端的推荐相关性更好）。
      */
     public static final String KEY_APP_RECOMMEND = "home_app_recommend";
 
     /** app 端推荐的分页游标：把上一页最后一条的 idx 回传即可继续翻页 */
     private static long appRecommendIdx = 0;
 
-    public static void getRecommend(List<VideoCard> videoCardList) throws IOException, JSONException {
-        if (SharedPreferencesUtil.getBoolean(KEY_APP_RECOMMEND, false)) {
-            getRecommendApp(videoCardList);
-            return;
+    /**
+     * 取一页推荐。
+     *
+     * @param page 第几页（从 1 开始）。web 端要用它做 fresh_idx/brush 让服务端"换一批"，
+     *             app 端要在第 1 页把游标复位（PiliPlus 的 onRefresh 同样把 page 归零）。
+     * @return 本页拿到的条目数（0 表示没数据；调用方据此判断是否到底/失败）
+     */
+    public static int getRecommend(List<VideoCard> videoCardList, int page) throws IOException, JSONException {
+        if (SharedPreferencesUtil.getBoolean(KEY_APP_RECOMMEND, true)) {
+            return getRecommendApp(videoCardList, page);
         }
+        return getRecommendWeb(videoCardList, page);
+    }
+
+    /**
+     * web 端推荐。
+     *
+     * <p><b>fresh_idx / brush / fresh_type / ps 是"换一批"的关键参数</b>（PiliPlus 同款）：
+     * 实测不传这几个参数时，用<b>完全相同的参数</b>连打两次，服务端返回的都是同一批 30 条
+     * （交集 30、顺序一致）——所以「下拉加载更多」会不断追加同一批内容。
+     * 带上 fresh_idx=N/brush=N/fresh_type=4 后，相邻两页交集为 0。
+     */
+    private static int getRecommendWeb(List<VideoCard> videoCardList, int page) throws IOException, JSONException {
+        int safePage = page <= 0 ? 1 : page;
         String url = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd";
         url += new NetWorkUtil.FormData().setUrlParam(true)
                 .put("web_location", 1430650)
                 .put("feed_version", "V8")
                 .put("homepage_ver", 1)
                 .put("uniq_id", UNIQ_ID)
-                .put("screen", "1100-2056");
+                .put("screen", "1100-2056")
+                .put("ps", 20)
+                .put("fresh_idx", safePage)
+                .put("brush", safePage)
+                .put("fresh_type", 4);
 
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url)).toString();
         ApiResponse<RecommendResponse> resp = GsonUtil.fromJson(json,
                 new com.google.gson.reflect.TypeToken<ApiResponse<RecommendResponse>>(){}.getType());
-        if (resp == null || !resp.isSuccess() || resp.data == null || resp.data.item == null) return;
+        if (resp == null || !resp.isSuccess() || resp.data == null || resp.data.item == null) return 0;
 
+        int added = 0;
         for (Item card : resp.data.item) {
             if (card == null || TextUtils.isEmpty(card.bvid)) {
                 Log.d("BiliClient", "RecommendApi getRecommend: isAd");
@@ -92,7 +116,9 @@ public class RecommendApi {
             String upName = card.owner != null ? card.owner.name : "";
             int viewCount = card.stat != null ? card.stat.view : 0;
             videoCardList.add(new VideoCard(card.title, upName, StringUtil.toWan(viewCount) + "观看", card.pic, 0, card.bvid));
+            added++;
         }
+        return added;
     }
 
     /**
@@ -106,27 +132,41 @@ public class RecommendApi {
      * 身份字段是 args.aid / player_args.aid（不是 web 端的 bvid），
      * 所以不能沿用上面"bvid 为空即跳过"的判据，否则会把所有正常条目都当广告滤掉。
      */
-    private static void getRecommendApp(List<VideoCard> videoCardList) throws IOException, JSONException {
+    private static int getRecommendApp(List<VideoCard> videoCardList, int page) throws IOException, JSONException {
+        //第 1 页（含下拉刷新）必须把游标复位并带 pull=true：否则"刷新"拿到的是更早的下一批，
+        //不是最新一批（PiliPlus 的 onRefresh 也是 page=0 + pull=true）
+        final boolean fresh = page <= 1;
+        if (fresh) appRecommendIdx = 0;
         String url = "https://app.bilibili.com/x/v2/feed/index"
                 + "?build=1&mobi_app=android&platform=android"
-                + "&idx=" + appRecommendIdx + "&login_event=0&network=wifi";
+                + "&idx=" + appRecommendIdx + "&login_event=0&network=wifi"
+                + "&pull=" + (fresh ? "true" : "false");
         JSONObject json = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders);
         int code = json.optInt("code", -1);
         if (code != 0) {
             //不打印完整响应体（可能含推荐上下文），只记状态码
             Logu.e("recommend", "app 端推荐返回 code=" + code);
-            return;
+            return 0;
         }
         JSONObject data = json.optJSONObject("data");
         JSONArray items = data != null ? data.optJSONArray("items") : null;
-        if (items == null) return;
+        if (items == null) return 0;
 
+        int added = 0;
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null) continue;
 
             String title = item.optString("title", "");
             if (TextUtils.isEmpty(title)) continue;   //广告位与异常条目没有标题
+
+            //推广位过滤（PiliPlus 的 _filterAppRcmd 同款判据）：只保留可播放的普通投稿卡片，
+            //否则直播/番剧/推广卡会被当成普通视频塞进列表，点进去是空的
+            String cardGoto = item.optString("card_goto", "");
+            if ("ad_av".equals(cardGoto) || "ad_web_s".equals(cardGoto)) continue;
+            if (item.optJSONObject("ad_info") != null) continue;
+            if (item.optInt("can_play", 1) != 1) continue;
+            if (!cardGoto.isEmpty() && !"av".equals(cardGoto)) continue;
 
             JSONObject args = item.optJSONObject("args");
             JSONObject playerArgs = item.optJSONObject("player_args");
@@ -141,11 +181,13 @@ public class RecommendApi {
             if (TextUtils.isEmpty(viewText)) viewText = "推荐";
             videoCardList.add(new VideoCard(title, upName, viewText,
                     item.optString("cover", ""), aid, bvid));
+            added++;
 
             //翻页游标：取最后一条的 idx，下一页从它继续
             long idx = item.optLong("idx", 0);
             if (idx > 0) appRecommendIdx = idx - 1;
         }
+        return added;
     }
 
     public static ArrayList<VideoCard> getRelated(long aid) throws IOException, JSONException {

@@ -44,9 +44,11 @@ public class SettingPrefActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "默认搜索内容", SharedPreferencesUtil.SEARCH_DEFAULT_CONTENT_ENABLE,
                         getString(R.string.desc_search_default_content_enable), "false"));
                 add(new SettingSection("switch", "识别链接", "link_enable", getString(R.string.desc_link_enable), "true"));
-                //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换
+                //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换。
+                //默认值必须与 RecommendApi.getRecommend 里的默认值一致（true），否则会重演
+                //"设置页显示关、实际在开"的口径不一致问题
                 add(new SettingSection("switch", "首页使用app端推荐", RecommendApi.KEY_APP_RECOMMEND,
-                        "若web端推荐不太符合预期，可尝试切换至app端推荐", "false"));
+                        "默认使用 app 端推荐（相关性更好）；若观感不符预期，可关闭改用 web 端推荐", "true"));
                 add(new SettingSection("switch", "新动态数量检查", SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE,
                         getString(R.string.desc_dynamic_update_check_enable), "true"));
                 add(new SettingSection("switch", "消息数量检查", SharedPreferencesUtil.MESSAGE_UPDATE_CHECK_ENABLE,
@@ -61,6 +63,10 @@ public class SettingPrefActivity extends RefreshListActivity {
                         getString(R.string.desc_night_reminder), "true"));
                 add(new SettingSection("switch", "记住退出页面", SharedPreferencesUtil.RESUME_PAGE_ENABLE,
                         getString(R.string.desc_resume_page), "false"));
+                //冷启动自动检查更新：默认关闭（启动链路已经做过提速，这一项会额外发一次网络请求）
+                add(new SettingSection("switch", "启动时检查更新", SharedPreferencesUtil.UPDATE_CHECK_ON_START,
+                        "每次冷启动在后台从 GitHub（直连失败会依次尝试内置镜像）检查新版本，发现更新时弹窗提示；默认关闭",
+                        "false"));
 
 
                 add(new SettingSection("title", "优化", "", "", ""));
@@ -74,6 +80,9 @@ public class SettingPrefActivity extends RefreshListActivity {
                 add(new SettingSection("title", "视觉", "", "", ""));
                 add(new SettingSection("switch", "加载渐入渐出动画", SharedPreferencesUtil.LOAD_TRANSITION,
                         getString(R.string.desc_load_transition), "true"));
+                //总开关：Activity 转场 + 页面渐入渐出一起关掉，低配设备切换更干脆
+                add(new SettingSection("switch", "关闭界面过渡动画", SharedPreferencesUtil.DISABLE_ANIMATION,
+                        "关闭页面转场与渐入渐出动画，切换更干脆；默认不启用（动画照常）", "false"));
                 add(new SettingSection("switch", "翻动时不加载图片", "image_no_load_onscroll",
                         getString(R.string.desc_img_no_load_onscroll), "false"));
                 add(new SettingSection("switch", "异步加载布局", SharedPreferencesUtil.ASYNC_INFLATE_ENABLE,

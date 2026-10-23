@@ -30,6 +30,7 @@ public final class PlayerSentinel {
     /** 上次会话结束时页面是否在后台：后台被系统回收属于正常，不应算「播放异常退出」 */
     private static final String KEY_BACKGROUNDED = "play_sentinel_backgrounded";
 
+
     /** 轨迹上限，够看清最后几步即可，避免偏好文件无限膨胀 */
     private static final int MAX_TRAIL = 400;
 
@@ -194,7 +195,15 @@ public final class PlayerSentinel {
                 JSONObject report = CrashUploader.buildReport(context, synthetic, "player-sentinel", trail);
                 //此刻还停在启动页，真实位置写死在播放页
                 report.put("page", "PlayerActivity");
+                //本地永远留档；上不上传交给统一裁决：
+                //哨兵分不清 native 崩溃/系统回收/强杀，只有"连续异常 ≥2 次"或"停在 native 高危阶段"
+                //才算强信号，且同样受 24h 同指纹去重约束（见 CrashFilter）
                 CrashUploader.saveLocal(report);
+                CrashFilter.Decision decision = CrashFilter.decide(report);
+                if (!decision.upload) {
+                    Logu.e("player_sentinel", "仅本地留档（" + decision.reason + "）");
+                    return;
+                }
                 File pending = CrashUploader.enqueue(context, report);
                 CrashUploader.tryUpload(report, pending);
             } catch (Throwable t) {

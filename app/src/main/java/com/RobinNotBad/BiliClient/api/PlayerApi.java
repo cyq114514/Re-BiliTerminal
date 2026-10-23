@@ -69,6 +69,8 @@ public class PlayerApi {
 
     public static class DurlItem {
         @SerializedName("url") public String url;
+        /** 备用地址：B 站对 1080P 的 mp4 首地址常常给 PCDN，官方 upos CDN 只出现在这里 */
+        @SerializedName("backup_url") public List<String> backup_url;
     }
 
     public static class PlayUrlResult {
@@ -190,6 +192,46 @@ public class PlayerApi {
         else DownloadService.startDownload(videoInfo.title, videoInfo.pagenames.get(page), videoInfo.aid, videoInfo.cids.get(page), videoInfo.cover, qn, "audio_only", audioUrl);
     }
 
+    /**
+     * 把 playurl 下发的地址整理成「下载候选列表」：去重 + 官方 CDN 优先（PiliPlus 的 getCdnUrl 同思路）。
+     *
+     * <p>实测 B 站现在给 1080P 的 mp4（format=mp4720）与 DASH 流，首地址大量是 PCDN：
+     * {@code *.edge.mountaintoys.cn:4483}、{@code *.mcdn.bilivideo.cn:8082}；而 backup_url
+     * 里始终带着 {@code upos-sz-*.bilivideo.com}。下载器按本列表顺序尝试，
+     * 官方线路优先（实测快 5 倍），PCDN 作兜底（能下，只是慢）。
+     */
+    public static ArrayList<String> buildMediaCandidates(String primary, List<String> backups) {
+        ArrayList<String> all = new ArrayList<>();
+        if (primary != null && !primary.isEmpty()) all.add(primary);
+        if (backups != null) {
+            for (String b : backups) {
+                if (b != null && !b.isEmpty() && !all.contains(b)) all.add(b);
+            }
+        }
+        if (all.size() <= 1) return all;
+
+        ArrayList<String> trusted = new ArrayList<>();
+        ArrayList<String> others = new ArrayList<>();
+        for (String u : all) {
+            if (isTrustedMediaHost(u)) trusted.add(u);
+            else others.add(u);
+        }
+        ArrayList<String> ordered = new ArrayList<>(all.size());
+        ordered.addAll(trusted);
+        ordered.addAll(others);
+        return ordered;
+    }
+
+    /** 该地址是否属于 B 站自己的域名（可用于携带登录 Cookie 的媒体请求）。 */
+    public static boolean isTrustedMediaHost(String url) {
+        try {
+            okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+            return parsed != null && NetWorkUtil.isBilibiliHost(parsed.host());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public static void getVideoDash(PlayerData playerData) throws IOException, JSONException {
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
         String url = "https://api.bilibili.com/x/player/wbi/playurl?avid=" + playerData.aid + "&cid=" + playerData.cid + "&qn=" + playerData.qn + "&fnval=16&fnver=0&platform=pc&voice_balance=1&gaia_source=pre-load&isGaiaAvoided=true";
@@ -201,9 +243,15 @@ public class PlayerApi {
         if (data.dash != null) {
             playerData.dashData = data.dash;
             DashVideoStream vs = playerData.dashData.getVideoStream(playerData.qn);
-            if (vs != null) playerData.videoUrl = vs.baseUrl;
+            if (vs != null) {
+                playerData.videoUrls = buildMediaCandidates(vs.baseUrl, vs.backupUrl);
+                playerData.videoUrl = playerData.videoUrls.isEmpty() ? vs.baseUrl : playerData.videoUrls.get(0);
+            }
             DashAudioStream as = playerData.dashData.getBestAudioStream();
-            if (as != null) playerData.audioUrl = as.baseUrl;
+            if (as != null) {
+                playerData.audioUrls = buildMediaCandidates(as.baseUrl, as.backupUrl);
+                playerData.audioUrl = playerData.audioUrls.isEmpty() ? as.baseUrl : playerData.audioUrls.get(0);
+            }
         } else {
             getVideo(playerData, true);
             return;
@@ -234,7 +282,8 @@ public class PlayerApi {
         if (resp == null || !resp.isSuccess() || resp.data == null) throw new JSONException("获取播放地址失败");
         PlayUrlData data = resp.data;
         if (data.durl == null || data.durl.isEmpty()) throw new JSONException("durl is empty");
-        playerData.videoUrl = data.durl.get(0).url;
+        playerData.videoUrls = buildMediaCandidates(data.durl.get(0).url, data.durl.get(0).backup_url);
+        playerData.videoUrl = playerData.videoUrls.isEmpty() ? data.durl.get(0).url : playerData.videoUrls.get(0);
         playerData.cidHistory = data.last_play_cid; playerData.progress = adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
         if (playerData.cidHistory == 0) { playerData.cidHistory = playerData.cid; playerData.progress = 0; }
         if (data.accept_description != null && data.accept_quality != null) {
@@ -319,7 +368,8 @@ public class PlayerApi {
         long identityEpid = playerData.epid != 0 ? playerData.epid : confirmedEpid;
         if (playerData.epid == 0 && identityEpid != 0) playerData.epid = identityEpid;
 
-        playerData.videoUrl = stream.durl.get(0).url;
+        playerData.videoUrls = buildMediaCandidates(stream.durl.get(0).url, stream.durl.get(0).backup_url);
+        playerData.videoUrl = playerData.videoUrls.isEmpty() ? stream.durl.get(0).url : playerData.videoUrls.get(0);
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
         playerData.cidHistory = playerData.cid;
         //片头/片尾片段：随取流响应一起下发，直接交给播放器做跳过判定（派生的展示数据，取不到就是 null）

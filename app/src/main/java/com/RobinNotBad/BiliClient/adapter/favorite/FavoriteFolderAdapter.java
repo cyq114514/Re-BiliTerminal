@@ -120,11 +120,17 @@ public class FavoriteFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
                     return;
 
                 favoriteHolder.name.setText(StringUtil.htmlToString(folder.name));
-                favoriteHolder.count.setText(folder.videoCount + "/" + folder.maxCount);
+                //v3 接口不再返回收藏夹容量上限（maxCount=0）：只显示数量；
+                //老缓存数据里可能还有上限值，那就沿用老样式，不把 /0 显示出来
+                favoriteHolder.count.setText(folder.maxCount > 0
+                        ? folder.videoCount + "/" + folder.maxCount
+                        : String.valueOf(folder.videoCount));
                 GlideUtil.requestCover(favoriteHolder.cover, folder.cover, R.mipmap.placeholder);
                 favoriteHolder.itemView.setOnClickListener(view -> {
                     Intent intent = new Intent();
                     intent.setClass(context, FavoriteVideoListActivity.class);
+                    //v3 的内容接口只认 media_id；fid 一并带上，供老数据/兜底换算使用
+                    intent.putExtra("mediaId", folder.mediaId);
                     intent.putExtra("fid", folder.id);
                     intent.putExtra("mid", mid);
                     intent.putExtra("name", folder.name);

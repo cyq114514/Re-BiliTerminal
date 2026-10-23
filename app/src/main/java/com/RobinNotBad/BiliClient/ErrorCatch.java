@@ -7,6 +7,7 @@ import android.content.Intent;
 import androidx.annotation.NonNull;
 
 import com.RobinNotBad.BiliClient.activity.CatchActivity;
+import com.RobinNotBad.BiliClient.util.CrashFilter;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
 import com.RobinNotBad.BiliClient.util.CrashStats;
 import com.RobinNotBad.BiliClient.util.CrashTrace;
@@ -118,12 +119,17 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
         //计数日志跨进程可读，崩溃页的「按时间统计」靠它（SP 在 :crash 进程读不到最新值）
         CrashStats.record("java");
 
-        //第 1 步：本地文本，落点不可写时返回空串，不影响后续
+        //第 1 步：本地文本，落点不可写时返回空串，不影响后续（过滤只影响上传，本地永远留）
         String localPath = CrashUploader.saveLocal(report);
         CrashTrace.log("崩溃: 本地记录 " + (localPath.isEmpty() ? "写入失败" : localPath));
 
-        //第 2 步：入队（仅授权时）。放在上传之前，进程提前被杀也不会丢
-        File pending = enabled ? CrashUploader.enqueue(context, report) : null;
+        //第 1.5 步：上报判定（系统压力类/无本仓库帧/测试崩溃/24h 重复 → 只留本地）
+        CrashFilter.Decision decision = CrashFilter.decide(report);
+        CrashTrace.log("崩溃: 上报判定 " + (decision.upload ? "上传" : "仅本地") + "（" + decision.reason + "）");
+        boolean upload = enabled && decision.upload;
+
+        //第 2 步：入队（仅授权且判定通过时）。放在上传之前，进程提前被杀也不会丢
+        File pending = upload ? CrashUploader.enqueue(context, report) : null;
         CrashTrace.log("崩溃: 待发队列 " + (pending == null ? "未入队" : pending.getName()));
 
         //第 3 步：先交崩溃页，任何可能失败的步骤都不能挡在它前面
@@ -132,6 +138,8 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
             intent.putExtra("stack", stack);
             intent.putExtra("reportEnabled", enabled);
             intent.putExtra("crashFile", localPath);
+            //过滤原因带给崩溃页：用户能看到"这次为什么没自动上传"，本地文件路径也在同一页
+            intent.putExtra("filterReason", decision.upload ? "" : decision.reason);
             //追踪随 Intent 传：SP 多进程不共享缓存，:crash 进程直接读会拿到旧数据
             intent.putExtra("trace", CrashTrace.readTail(20));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); //这句是安卓4必须有的
@@ -145,7 +153,7 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
 
         //第 4 步：上报放到独立线程。这里运行在刚抛异常的那个线程上（通常已死的主线程），
         //任何阻塞都会推迟杀进程，用户就停在冻屏上
-        if (enabled && pending != null) {
+        if (upload && pending != null) {
             final File pendingFile = pending;
             Thread uploader = new Thread(
                     () -> CrashUploader.tryUpload(report, pendingFile), "crash-upload");

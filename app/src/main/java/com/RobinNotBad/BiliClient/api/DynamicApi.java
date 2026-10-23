@@ -34,6 +34,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -233,6 +234,9 @@ public class DynamicApi {
         JSONArray contentJSONArray = new JSONArray();
         Set<Pair<Integer, Integer>> indexes = new HashSet<>();
         Map<Pair<Integer, Integer>, Long> uidIndexes = new HashMap<>();
+        //允许传 null（转发引用等场景没有 @）：buildContents 已经兜了一层，这里再守一次，
+        //免得别处直接调用时 NPE
+        if (atUserUid == null) atUserUid = new HashMap<>();
         for (Map.Entry<String, Long> entry : atUserUid.entrySet()) {
             Pattern pattern = Pattern.compile("@" + java.util.regex.Pattern.quote(entry.getKey()) + " ");   //昵称含 .*[\\ 等元字符时未转义会抛 PatternSyntaxException
             Matcher matcher = pattern.matcher(content);
@@ -247,7 +251,10 @@ public class DynamicApi {
         ArrayList<Pair<Integer, Integer>> indexesList = new ArrayList<>(indexes);
         //indexes 是 HashSet 无序：命中多个@时必须按出现位置排序，
         //乱序不仅拼接乱，还会 substring(pos, index.first) 越界崩溃
-        indexesList.sort((a, b) -> Integer.compare(a.first, b.first));
+        //必须用 Collections.sort：List.sort 是 API 24 才有的默认方法，minSdk 19 的老设备上
+        //（Android 4.4/5.x）会抛 NoSuchMethodError: No virtual method sort(Ljava/util/Comparator;)
+        //——用户反馈"点转发/发动态后弹错"就是它（全 dex 唯一一处该 API）
+        Collections.sort(indexesList, (a, b) -> Integer.compare(a.first, b.first));
         int pos = 0;
         for (Pair<Integer, Integer> index : indexesList) {
             String sub = content.substring(pos, index.first);

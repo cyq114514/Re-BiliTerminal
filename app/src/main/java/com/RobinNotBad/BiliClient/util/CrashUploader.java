@@ -52,8 +52,11 @@ public final class CrashUploader {
     /** 单次上报超时：崩溃路径上不能等太久 */
     private static final long TIMEOUT_SECONDS = 8;
 
-    /** 待发队列上限：超过就丢最旧的，避免长期失败把存储吃满 */
-    private static final int MAX_PENDING = 5;
+    /**
+     * 待发队列上限。弱网设备上队列经常是满的，所以入队时按优先级淘汰：
+     * 先丢 p1（播放哨兵这种"可疑但证据弱"的记录），再丢最旧的 p0，避免真崩溃被挤掉。
+     */
+    private static final int MAX_PENDING = 8;
 
     /** 本地崩溃记录文件保留份数 */
     private static final int MAX_LOCAL_FILES = 20;
@@ -182,7 +185,8 @@ public final class CrashUploader {
         if (dir == null) return;
         File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
         if (files == null || files.length == 0) return;
-        sortByTime(files);
+        //P0 优先、P1 其次，同优先级按时间（弱网设备上队列常满，不能先发哨兵）
+        sortForUpload(files);
         for (File file : files) {
             JSONObject report = readJson(file);
             if (report == null) {
@@ -376,13 +380,22 @@ public final class CrashUploader {
 
     private static synchronized OkHttpClient client() {
         if (client == null) {
-            client = new OkHttpClient.Builder()
+            OkHttpClient.Builder builder = new OkHttpClient.Builder()
                     .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .writeTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     //失败就是失败，不在崩溃路径上自动重试
-                    .retryOnConnectionFailure(false)
-                    .build();
+                    .retryOnConnectionFailure(false);
+            //老设备必须套上 TLS1.1/1.2 兼容（与全站 NetWorkUtil 同一套）：
+            //Android 4.4/5.x 默认只谈 TLSv1.0，上传域名要求 TLS1.2，
+            //裸 client 会 100% SSLHandshakeException("tlsv1 alert protocol version")，
+            //表现为老设备崩溃报告一条都传不上来（实测 4.4 用户连续补发 5 次全失败）
+            try {
+                NetWorkUtil.setOkHttpSsl(builder);
+            } catch (Throwable t) {
+                Logu.e("crash", "TLS 兼容初始化失败（按系统默认继续）: " + t);
+            }
+            client = builder.build();
         }
         return client;
     }
@@ -415,20 +428,56 @@ public final class CrashUploader {
         try {
             File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
             if (files != null && files.length >= MAX_PENDING) {
-                sortByTime(files);
-                List<File> extras = new ArrayList<>(Arrays.asList(files));
-                for (int i = 0; i <= files.length - MAX_PENDING; i++) {
-                    //noinspection ResultOfMethodCallIgnored
-                    extras.get(i).delete();
-                }
+                evictOne(files);
             }
-            File target = new File(dir, System.currentTimeMillis() + ".json");
+            //文件名带优先级前缀：flush 时先发 p0，队列满时先淘汰 p1
+            File target = new File(dir, priorityOf(report) + "_" + System.currentTimeMillis() + ".json");
             writeFile(target, report.toString());
             return target;
         } catch (Throwable t) {
             CrashTrace.log("上报: 入队失败 " + t.getClass().getSimpleName());
             return null;
         }
+    }
+
+    /**
+     * 队列优先级：播放哨兵是"可疑但证据弱"的记录（分不清 native 崩溃/系统回收），
+     * 队列满时先丢它；其余崩溃一律当 P0。
+     */
+    private static String priorityOf(JSONObject report) {
+        String cls = report == null ? "" : report.optString("exception_class", "");
+        return CrashFilter.SENTINEL_CLASS.equals(cls) ? "p1" : "p0";
+    }
+
+    /** 队列满时淘汰一条：优先 p1 里最旧的，没有 p1 才丢最旧的 p0 */
+    private static void evictOne(File[] files) {
+        File victim = null;
+        for (File file : files) {
+            if (!file.getName().startsWith("p1_")) continue;
+            if (victim == null || file.lastModified() < victim.lastModified()) victim = file;
+        }
+        if (victim == null) {
+            for (File file : files) {
+                if (victim == null || file.lastModified() < victim.lastModified()) victim = file;
+            }
+        }
+        if (victim == null) return;
+        //noinspection ResultOfMethodCallIgnored
+        victim.delete();
+        clearFail(victim);
+    }
+
+    /** 上传顺序：P0 优先，其次 P1，同优先级内按时间升序（老版本留下的无前缀文件按 P0 处理） */
+    private static void sortForUpload(File[] files) {
+        Arrays.sort(files, new Comparator<File>() {
+            @Override
+            public int compare(File a, File b) {
+                int pa = a.getName().startsWith("p1_") ? 1 : 0;
+                int pb = b.getName().startsWith("p1_") ? 1 : 0;
+                if (pa != pb) return pa - pb;
+                return Long.compare(a.lastModified(), b.lastModified());
+            }
+        });
     }
 
     /**

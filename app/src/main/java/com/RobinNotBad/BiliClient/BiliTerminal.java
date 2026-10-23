@@ -11,12 +11,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.multidex.MultiDex;
 
+import com.RobinNotBad.BiliClient.activity.SplashActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
@@ -43,6 +45,32 @@ public class BiliTerminal extends Application {
     @SuppressLint("StaticFieldLeak")
     public static Context context;
 
+    /**
+     * 进程启动的近似时刻（Application 类加载时取一次），只用于启动耗时埋点：
+     * {@code adb logcat -s startup} 能看到「MultiDex / onCreate / 进入首屏」各花了多久。
+     */
+    public static final long START_UPTIME_MS = SystemClock.uptimeMillis();
+
+    /**
+     * 启动瞬间那批网络任务（崩溃补发、哨兵上报、未读数）统一延后这么久。
+     *
+     * <p>冷启动时它们会和开屏页/首屏的请求抢 DNS、TLS 与带宽，弱网设备上首屏能慢几百毫秒；
+     * 这几件事都允许迟到，不影响正确性（补发失败本来就会留到下次启动）。
+     */
+    private static final long STARTUP_NET_DEFER_MS = 2000;
+
+    /** 首屏（非 Splash）resumed 之后执行一次的回调：需要宿主 Activity 的场景（更新弹窗）用这个 */
+    public interface FirstPageCallback {
+        void onFirstPage(Activity activity);
+    }
+
+    /**
+     * 首屏 resumed 后要执行一次的启动回调（免责声明 / 深夜提醒 / 启动检查更新）。
+     *
+     * <p>用列表而不是单个字段：启动弹窗和启动检查更新是两件独立的事，后注册的不能把前一个挤掉。
+     */
+    private static final java.util.List<FirstPageCallback> sFirstPageCallbacks = new java.util.ArrayList<>();
+
     public static boolean DPI_FORCE_CHANGE = false;
 
     private static WeakReference<InstanceActivity> instance = new WeakReference<>(null);
@@ -50,7 +78,11 @@ public class BiliTerminal extends Application {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
+        //4.4/5.x 冷启动的一次性开销：dex 只有一份时它会白扫一遍 APK，用日志把它记下来便于定位
+        long multidexStart = SystemClock.uptimeMillis();
         MultiDex.install(this);
+        android.util.Log.d("startup", "MultiDex.install "
+                + (SystemClock.uptimeMillis() - multidexStart) + "ms（sdk=" + Build.VERSION.SDK_INT + "）");
         //最早的一层崩溃兜底：从这一行到 onCreate 装好 ErrorCatch 之间发生的崩溃，
         //以前是完全不留痕的（MultiDex / SP / getFitDisplayContext 都在这个窗口里）
         ErrorCatch.initEarly(this);
@@ -79,8 +111,14 @@ public class BiliTerminal extends Application {
             //同时补发"启动最早期的崩溃"，并把系统记录的 native 崩溃 / ANR / 被低内存杀掉也补报上来。
             //三个任务必须各自独立提交：原来串在同一个 lambda 里，ExitReasonCollector 排在两次网络补发之后，
             //而单次上传超时 8 秒、队列最多 5 条，弱网下最坏要等 40 秒才轮到它——"上次原生崩溃"的记录因此经常丢
-            CenterThreadPool.run(() -> CrashUploader.flushPending(this));
-            CenterThreadPool.run(() -> CrashUploader.flushEarly(this));
+            //启动瞬间的网络任务全部延后：崩溃补发、早期崩溃补发都属于"可以迟到"的活，
+            //冷启动时它们会和开屏/首屏抢 DNS/TLS/带宽（弱网上首屏能慢几百毫秒）
+            Handler startupHandler = new Handler(Looper.getMainLooper());
+            startupHandler.postDelayed(() -> CenterThreadPool.run(() -> CrashUploader.flushPending(this)),
+                    STARTUP_NET_DEFER_MS);
+            startupHandler.postDelayed(() -> CenterThreadPool.run(() -> CrashUploader.flushEarly(this)),
+                    STARTUP_NET_DEFER_MS + 500);
+            //系统记录的 native 崩溃/ANR/被回收原因只读本地数据、不占网络，保持立即执行
             CenterThreadPool.run(() -> ExitReasonCollector.collect(this));
 
             //活跃设备统计：每天一条，随机延迟 3~8 秒再发，避免所有设备在冷启动瞬间同时打点。
@@ -92,7 +130,8 @@ public class BiliTerminal extends Application {
             //播放哨兵：上次播放没有正常收尾（原生崩溃/被系统回收）时补报一条。
             //这类退出进不了 Java 崩溃 handler，只能靠标记残留来发现（内部先清标记再报，不会重复）
             //必须放后台：它要读写偏好并 commit（同步落盘），在冷启动主线程上就是白等几次 fsync
-            CenterThreadPool.run(() -> PlayerSentinel.checkAndReport(this));
+            startupHandler.postDelayed(() -> CenterThreadPool.run(() -> PlayerSentinel.checkAndReport(this)),
+                    STARTUP_NET_DEFER_MS + 800);
 
             //1.2.0-v5 曾在本地保存过"每集看到哪里"(episode_progress)，v6 起改为只信服务端
             //（与 PiliPlus 同口径）。清一次就够，用标记记住：原来每次冷启动都清，等于每次启动
@@ -130,6 +169,30 @@ public class BiliTerminal extends Application {
                 public void onActivityResumed(@NonNull Activity activity) {
                     //崩溃上报里的 page 字段：记录崩溃时用户在哪一页，便于复现
                     CrashUploader.setCurrentPage(activity.getClass().getSimpleName());
+
+                    //首屏之后的启动弹窗：此刻首屏已在栈顶，弹窗才会盖在它上面。
+                    //延迟 250ms 是为"恢复链"场景留出余量——连续 startActivity 时第一条 resumed
+                    //的可能只是栈底页，紧接着还有几条要入栈，太早弹会被后入栈的页面盖住
+                    final java.util.List<FirstPageCallback> pending;
+                    synchronized (BiliTerminal.class) {
+                        if (sFirstPageCallbacks.isEmpty() || activity instanceof SplashActivity) return;
+                        pending = new java.util.ArrayList<>(sFirstPageCallbacks);
+                        sFirstPageCallbacks.clear();
+                    }
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        //回调执行时首选"当前栈顶页"：恢复链/转场期间首个 resumed 的页可能已被盖住，
+                        //而更新弹窗需要一个还活着的宿主 Activity
+                        Activity host = activity;
+                        InstanceActivity top = instance.get();
+                        if (top != null && !top.isDestroyed()) host = top;
+                        for (FirstPageCallback callback : pending) {
+                            try {
+                                callback.onFirstPage(host);
+                            } catch (Throwable t) {
+                                Logu.e("startup", "启动回调执行失败: " + t);
+                            }
+                        }
+                    }, 250);
                 }
 
                 @Override
@@ -163,7 +226,7 @@ public class BiliTerminal extends Application {
             CookieRefresher.startPeriodicCheck();
 
             if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE, true) && SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) != 0) {
-                CenterThreadPool.run(() -> {
+                startupHandler.postDelayed(() -> CenterThreadPool.run(() -> {
                     try {
                         long updateBaseline = SharedPreferencesUtil.getLong("dynamic_update_baseline", 0);
                         int updateNum = DynamicApi.checkDynamicUpdate("all", updateBaseline);
@@ -171,11 +234,11 @@ public class BiliTerminal extends Application {
                     } catch (IOException | JSONException e) {
                         SharedPreferencesUtil.putInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
                     }
-                });
+                }), STARTUP_NET_DEFER_MS + 700);
             }
 
             if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.MESSAGE_UPDATE_CHECK_ENABLE, true) && SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) != 0) {
-                CenterThreadPool.run(() -> {
+                startupHandler.postDelayed(() -> CenterThreadPool.run(() -> {
                     try {
                         int messageUnread = MessageApi.checkMessageUnread();
                         int privateMsgUnread = MessageApi.checkPrivateMsgUnread();
@@ -184,8 +247,30 @@ public class BiliTerminal extends Application {
                     } catch (Exception e) {
                         SharedPreferencesUtil.putInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
                     }
-                });
+                }), STARTUP_NET_DEFER_MS + 900);
             }
+
+            android.util.Log.d("startup", "Application.onCreate 完成，距进程启动 "
+                    + (SystemClock.uptimeMillis() - START_UPTIME_MS) + "ms");
+        }
+    }
+
+    /**
+     * 安排一个"首屏 Activity 显示之后"执行一次的回调（主线程执行）。
+     *
+     * <p>为什么需要它：启动弹窗（免责声明 / 深夜提醒）是 {@code startActivity(DialogActivity)}，
+     * 如果从开屏页的后台线程直接拉起，会和首屏的 startActivity 竞争——弹窗被压在首屏下面，
+     * 用户要再点一下菜单才看到（实测反馈）。挂到这里，等首屏真的 resumed 了再弹，顺序就稳定了。
+     */
+    public static void runAfterFirstPageResumed(Runnable callback) {
+        if (callback == null) return;
+        runAfterFirstPageResumed(activity -> callback.run());
+    }
+
+    public static void runAfterFirstPageResumed(FirstPageCallback callback) {
+        if (callback == null) return;
+        synchronized (BiliTerminal.class) {
+            sFirstPageCallbacks.add(callback);
         }
     }
 

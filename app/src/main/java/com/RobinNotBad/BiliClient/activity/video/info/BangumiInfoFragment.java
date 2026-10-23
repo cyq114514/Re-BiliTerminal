@@ -131,6 +131,10 @@ public class BangumiInfoFragment extends Fragment {
 
     @SuppressLint("SetTextI18n")
     private void initView() {
+        //数据是异步回来的：回到这里时页面可能已经 detach/销毁，Glide.with(requireContext()) 会抛
+        //"You cannot start a load for a destroyed activity" 把进程崩掉（线上 1 条）。
+        //下面全是 findViewById + setText，提前返回不会留下半初始化状态
+        if (!isAdded() || getActivity() == null || getActivity().isDestroyed()) return;
         //init data.
         ImageView imageMediaCover = rootView.findViewById(R.id.image_media_cover);
         Button playButton = rootView.findViewById(R.id.btn_play);

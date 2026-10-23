@@ -22,6 +22,8 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
 
     private long mid;
     private long fid;
+    /** v3 内容接口（x/v3/fav/resource/list）只认 media_id，fid 仅作兜底换算 */
+    private long mediaId;
     private ArrayList<VideoCard> videoList;
     private VideoCardAdapter videoCardAdapter;
 
@@ -36,6 +38,9 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         Intent intent = getIntent();
         mid = intent.getLongExtra("mid", 0);
         fid = intent.getLongExtra("fid", 0);
+        mediaId = intent.getLongExtra("mediaId", 0);
+        //老入口（或第三方拉起）只带 fid 时按 B 站规则换算：media_id = fid*100 + mid 后两位
+        if (mediaId <= 0) mediaId = FavoriteApi.mediaIdOf(mid, fid);
         String name = intent.getStringExtra("name");
 
         setPageName(name);
@@ -44,7 +49,7 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
 
         CenterThreadPool.run(() -> {
             try {
-                int result = FavoriteApi.getFolderVideos(mid, fid, page, videoList);
+                int result = FavoriteApi.getFolderVideos(mediaId, page, videoList);
                 if (result != -1) {
                     videoCardAdapter = new VideoCardAdapter(this, videoList);
 
@@ -53,7 +58,7 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
                         if (longClickPosition == position && timestamp - longClickTimestamp < 4000) {
                             CenterThreadPool.run(() -> {
                                 try {
-                                    int delResult = FavoriteApi.deleteFavorite(videoList.get(position).aid, fid);
+                                    int delResult = FavoriteApi.deleteFavorite(videoList.get(position).aid, mediaId);
                                     longClickPosition = -1;
                                     if (delResult == 0) runOnUiThread(() -> {
                                         MsgUtil.showMsg("删除成功");
@@ -95,7 +100,7 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         CenterThreadPool.run(() -> {
             try {
                 int lastSize = videoList.size();
-                int result = FavoriteApi.getFolderVideos(mid, fid, page, videoList);
+                int result = FavoriteApi.getFolderVideos(mediaId, page, videoList);
                 if (result != -1) {
                     Log.e("debug", "下一页");
                     runOnUiThread(() -> videoCardAdapter.notifyItemRangeInserted(lastSize, videoList.size() - lastSize));

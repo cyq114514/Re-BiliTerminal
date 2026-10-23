@@ -32,6 +32,17 @@ public class PlayerData implements Parcelable {
     public DashData dashData; // DASH格式数据
     public String audioUrl = ""; // 单独的音频URL（用于仅音频下载）
 
+    /**
+     * 候选地址列表（主地址 + backup_url/backupUrl），已按"官方 CDN 优先、PCDN 垫底"排好序。
+     *
+     * <p>为什么需要：B 站现在给 1080P 的 mp4/durl 与 DASH 流下发的首地址大量是 PCDN
+     * （{@code *.mcdn.bilivideo.cn:8082}、{@code *.edge.mountaintoys.cn:4483} 这类），
+     * 而 {@code backup_url} 里始终带着官方 {@code upos-sz-*.bilivideo.com}。
+     * 下载器逐个候选重试，才能既不被自家域名校验拦死，又优先走快的官方线路。
+     */
+    public ArrayList<String> videoUrls = new ArrayList<>();
+    public ArrayList<String> audioUrls = new ArrayList<>();
+
     //番剧(PGC)专用维度：上报观看进度必须走 x/click-interface/web/heartbeat，
     //该接口只有带 epid/sid/sub_type 才会把记录记成番剧；x/v2/history/report 没有这些字段。
     public long epid = 0;      //剧集 epid
@@ -76,6 +87,11 @@ public class PlayerData implements Parcelable {
         //真机日志里表现为 [开播续播] bvid=null、上报体缺 bvid
         String rawBvid = in.readString();
         bvid = rawBvid != null ? rawBvid : "";
+        //候选地址列表：与 writeToParcel 末尾严格同序（同上，位置不能提前）
+        videoUrls = in.createStringArrayList();
+        if (videoUrls == null) videoUrls = new ArrayList<>();
+        audioUrls = in.createStringArrayList();
+        if (audioUrls == null) audioUrls = new ArrayList<>();
         // dashData不序列化，下载时会重新获取
     }
 
@@ -121,6 +137,9 @@ public class PlayerData implements Parcelable {
         //写入侧兜 null：调用方可能把取不到的 bvid 直接赋成 null，
         //写 null 会让读取侧拿到 null（见构造器里的说明）
         dest.writeString(bvid != null ? bvid : "");
+        //候选地址：只能追加在 P3 末尾，顺序必须与读取侧一致
+        dest.writeStringList(videoUrls);
+        dest.writeStringList(audioUrls);
         // dashData不序列化，下载时会重新获取
     }
 

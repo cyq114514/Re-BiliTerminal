@@ -19,7 +19,8 @@ public class AddFavoriteActivity extends RefreshListActivity {
     FolderChooseAdapter adapter;
     ArrayList<String> folderList = new ArrayList<>();
     ArrayList<Boolean> stateList = new ArrayList<>();
-    ArrayList<Long> fidList = new ArrayList<>();
+    //media_id 列表（v3 增删收藏夹只认它，不再是老 fid）
+    ArrayList<Long> mediaIdList = new ArrayList<>();
     long aid;
     int RESULT_ADDED = 1;
     int RESULT_DELETED = -1;
@@ -41,9 +42,9 @@ public class AddFavoriteActivity extends RefreshListActivity {
 
         CenterThreadPool.run(() -> {
             try {
-                FavoriteApi.getFavoriteState(aid, folderList, fidList, stateList);
+                FavoriteApi.getFavoriteState(aid, folderList, mediaIdList, stateList);
 
-                adapter = new FolderChooseAdapter(this, folderList, fidList, stateList, aid);
+                adapter = new FolderChooseAdapter(this, folderList, mediaIdList, stateList, aid);
 
                 setAdapter(adapter);
 

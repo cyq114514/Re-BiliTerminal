@@ -138,7 +138,11 @@ public class UpdateManager {
 
     /**镜像重写：仅作用于 github.com 的下载/直链地址，前缀即完整的镜像基地址（含尾斜杠）。*/
     public static String applyMirror(String githubUrl) {
-        String prefix = getMirrorPrefix();
+        return applyMirror(getMirrorPrefix(), githubUrl);
+    }
+
+    /** 指定前缀的镜像重写（检查更新时逐个探测内置镜像用） */
+    public static String applyMirror(String prefix, String githubUrl) {
         if (prefix != null && !prefix.isEmpty() && githubUrl.startsWith("https://github.com/"))
             return prefix + githubUrl;
         return githubUrl;
@@ -179,26 +183,16 @@ public class UpdateManager {
         UpdateInfo info = null;
         //元数据信任与镜像分离：update.json 永远先走 github.com 直连（镜像无法伪造直连拿到
         //的哈希），直连失败才退回镜像取元数据；即便镜像同时篡改了哈希与 APK 包体，
-        //安装前的签名校验（verifyApkSignature）仍会拦下伪造包
-        if (getMirrorPrefix().isEmpty()) {
+        //安装前的签名校验（verifyApkSignature）仍会拦下伪造包。
+        //候选源：直连 → 用户选择的镜像 → 没选镜像时依次试内置镜像
+        //（国内默认配置下直连几乎必然失败，不探测镜像的话"启动检查更新"等于不可用）
+        for (String prefix : checkSources()) {
             try {
-                info = fetchViaUpdateJson(false);
+                info = fetchViaUpdateJson(prefix);
             } catch (IOException ignored) {
-                //主通道失败：落到 API 兜底
+                //该源不可达：换下一个
             }
-        } else {
-            try {
-                info = fetchViaUpdateJson(false);
-            } catch (IOException ignored) {
-                //直连不可达（国内网络常态）：才允许镜像提供元数据
-            }
-            if (info == null) {
-                try {
-                    info = fetchViaUpdateJson(true);
-                } catch (IOException ignored) {
-                    //镜像也不可达：落到 API 兜底
-                }
-            }
+            if (info != null) break;
         }
         if (info != null) {
             cachedInfo = info;
@@ -209,9 +203,21 @@ public class UpdateManager {
         return info;
     }
 
-    /**release 资产 update.json。资产不存在/不含文件名时返回 null 走兜底。*/
-    private static UpdateInfo fetchViaUpdateJson(boolean useMirror) throws IOException {
-        String url = useMirror ? applyMirror(UPDATE_JSON_URL) : UPDATE_JSON_URL;
+    /** 检查更新的候选源：空串表示直连；配了镜像就只跟用户的选择（尊重手动设置） */
+    private static String[] checkSources() {
+        String user = getMirrorPrefix();
+        if (!user.isEmpty()) return new String[]{"", user};
+        java.util.List<String> list = new java.util.ArrayList<>();
+        list.add("");
+        for (String preset : MIRROR_PRESETS) {
+            if (!preset.isEmpty()) list.add(preset);
+        }
+        return list.toArray(new String[0]);
+    }
+
+    /**release 资产 update.json。prefix 为空表示直连。资产不存在/不含文件名时返回 null 走兜底。*/
+    private static UpdateInfo fetchViaUpdateJson(String prefix) throws IOException {
+        String url = applyMirror(prefix, UPDATE_JSON_URL);
         Request request = new Request.Builder().url(url).header("User-Agent", USER_AGENT).build();
         try (Response response = client().newCall(request).execute()) {
             try (ResponseBody body = response.body()) {
@@ -231,7 +237,11 @@ public class UpdateManager {
                 //unsigned 包无法覆盖安装：视为没有可用更新资产，走 API 兜底（同样会过滤）
                 if (info.versionName.isEmpty() || fileName.isEmpty() || fileName.toLowerCase(Locale.ROOT).contains("unsigned"))
                     return null;
-                info.apkUrl = applyMirror(RELEASE_LATEST_DOWNLOAD_DIR + fileName);
+                //下载地址：用户手动选了镜像就始终走用户的镜像（旧行为，下载更快也更容易成功）；
+                //没选镜像（自动探测）时才跟随本次真正取到元数据的那个源
+                String downloadPrefix = getMirrorPrefix();
+                if (downloadPrefix.isEmpty()) downloadPrefix = prefix;
+                info.apkUrl = applyMirror(downloadPrefix, RELEASE_LATEST_DOWNLOAD_DIR + fileName);
                 return info;
             } catch (org.json.JSONException e) {
                 return null;   //内容异常当资产缺失处理，走 API 兜底
@@ -329,7 +339,7 @@ public class UpdateManager {
      * 启动时的静默自动检查：进程内只执行一次；网络失败完全静默；
      * 发现新版本且用户没有忽略过该版本时，在当前页面弹一次性提示。
      */
-    public static void autoCheck(final BaseActivity activity) {
+    public static void autoCheck(final Activity activity) {
         if (autoChecked) return;
         autoChecked = true;
         CenterThreadPool.run(() -> {

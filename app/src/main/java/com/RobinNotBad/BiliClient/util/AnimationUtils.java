@@ -11,9 +11,14 @@ import androidx.annotation.NonNull;
 
 public class AnimationUtils {
 
+    /** 「关闭界面过渡动画」总开关：打开后所有渐入渐出都直接落位，不再播放 */
+    private static boolean animationsDisabled() {
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DISABLE_ANIMATION, false);
+    }
+
     public static void fadeIn(View view, final int duration) {
         if (view == null) return;
-        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LOAD_TRANSITION, true)) {
+        if (animationsDisabled() || !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LOAD_TRANSITION, true)) {
             view.setVisibility(View.VISIBLE);
             return;
         }
@@ -27,6 +32,10 @@ public class AnimationUtils {
 
     public static void fadeOut(final View view, final int duration) {
         if (view == null) return;
+        if (animationsDisabled()) {
+            runOnUiThread(() -> view.setVisibility(View.GONE));
+            return;
+        }
         runOnUiThread(() -> {
             ObjectAnimator fadeOut = ObjectAnimator.ofFloat(view, "alpha", 1f, 0f);
             fadeOut.setDuration(duration);
@@ -46,7 +55,7 @@ public class AnimationUtils {
 
     public static void crossFade(final View toHide, final View toShow, final int duration) {
         runOnUiThread(() -> {
-            if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LOAD_TRANSITION, true)) {
+            if (animationsDisabled() || !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LOAD_TRANSITION, true)) {
                 if (toHide != null) toHide.setVisibility(View.GONE);
                 if (toShow != null) toShow.setVisibility(View.VISIBLE);
                 return;

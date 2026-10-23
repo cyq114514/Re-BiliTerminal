@@ -31,17 +31,18 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
     final Context context;
     final ArrayList<String> folderList;
     final ArrayList<Boolean> chooseState;
-    final ArrayList<Long> fidList;
+    /** 收藏夹 media_id 列表（v3 的 add/del 只认 media_id，传老 fid 会被服务端拒绝） */
+    final ArrayList<Long> mediaIdList;
     final long aid;
     boolean adding;
     public boolean added;
     public boolean changed;
 
-    public FolderChooseAdapter(Context context, ArrayList<String> folderList, ArrayList<Long> fidList,
+    public FolderChooseAdapter(Context context, ArrayList<String> folderList, ArrayList<Long> mediaIdList,
                                ArrayList<Boolean> chooseState, long aid) {
         this.context = context;
         this.folderList = folderList;
-        this.fidList = fidList;
+        this.mediaIdList = mediaIdList;
         this.chooseState = chooseState;
         this.aid = aid;
     }
@@ -57,7 +58,7 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
     public void onBindViewHolder(@NonNull FolderHolder holder, int position) {
         if (position < 0 || position >= folderList.size())
             return;
-        if (position >= chooseState.size() || position >= fidList.size())
+        if (position >= chooseState.size() || position >= mediaIdList.size())
             return;
 
         MaterialCardView cardView = (MaterialCardView) holder.itemView;
@@ -66,7 +67,7 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
         setCardView(cardView, chooseState.get(position));
 
         holder.itemView.setOnClickListener(view -> {
-            if (!adding && position < chooseState.size() && position < fidList.size()) {
+            if (!adding && position < chooseState.size() && position < mediaIdList.size()) {
                 adding = true;
                 cardView.setStrokeColor(context.getResources().getColor(R.color.low_pink));
                 cardView.setStrokeWidth(ToolsUtil.dp2px(1f));
@@ -74,7 +75,7 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
                 if (chooseState.get(position)) {
                     CenterThreadPool.run(() -> {
                         try {
-                            int result = FavoriteApi.deleteFavorite(aid, fidList.get(position));
+                            int result = FavoriteApi.deleteFavorite(aid, mediaIdList.get(position));
                             adding = false;
                             if (result == 0) {
                                 chooseState.set(position, false);
@@ -94,7 +95,7 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
                     cardView.setStrokeWidth(ToolsUtil.dp2px(0.1f));
                     CenterThreadPool.run(() -> {
                         try {
-                            int result = FavoriteApi.addFavorite(aid, fidList.get(position));
+                            int result = FavoriteApi.addFavorite(aid, mediaIdList.get(position));
                             adding = false;
                             if (result == 0) {
                                 chooseState.set(position, true);

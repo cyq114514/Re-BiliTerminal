@@ -1,6 +1,9 @@
 package com.RobinNotBad.BiliClient.util;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Build;
 
 import androidx.annotation.NonNull;
@@ -540,8 +543,12 @@ public class NetWorkUtil {
         String h = host.toLowerCase(Locale.ROOT);
         //akamai 镜像必须用精确主机名：akamaized.net 是 Akamai 的共享域而非 B 站资产，
         //后缀放行等于允许任意 *.akamaized.net 收到带 Cookie 的跟随跳转、并向全局 Cookie 注入数据
+        //.bilivideo.cn 必须放行：B 站现在的 PCDN 音视频流大量走 *.mcdn.bilivideo.cn:8082，
+        //它是 B 站自有域名（与 .bilivideo.com 同级），既用于"媒体请求头"也用于下载候选判定。
+        //注意这不等于放行任意 CDN：第三方 PCDN（如 *.edge.mountaintoys.cn:4483）仍不在此列，
+        //那条路径由 DownloadService 用"不带 Cookie"的方式单独处理。
         return h.equals("b23.tv") || h.equals("bilibili.com") || h.endsWith(".bilibili.com")
-                || h.endsWith(".bilivideo.com") || h.endsWith(".hdslb.com")
+                || h.endsWith(".bilivideo.com") || h.endsWith(".bilivideo.cn") || h.endsWith(".hdslb.com")
                 || BILIBILI_AKAMAI_MIRROR_HOSTS.contains(h);
     }
 
@@ -635,6 +642,28 @@ public class NetWorkUtil {
     public static void refreshHeaders() {
         CookieGenerator.ensureCookies();
         updateWebHeaders();
+    }
+
+    /**
+     * 当前是否有可用网络（纯本地查询，不产生任何请求，毫秒级返回）。
+     *
+     * <p>用途：开屏页要在"联网"与"离线"之间做分叉。原实现靠真正发一次请求、等它超时来感知离线，
+     * 连接超时 8s、读超时 16s，断网冷启动就得干等这么久。这里先瞬时判断，
+     * 离线直接走本地兜底；判断不出来（无权限/异常）时按"有网"处理，退回原来的失败路径。
+     *
+     * <p>不用 API 23 的 NetworkCapabilities：那套类型在老系统上不存在，
+     * 方法体里引用它会连累整个方法在老机器上被校验拒绝。
+     */
+    @SuppressWarnings("deprecation")
+    public static boolean isNetworkAvailable(Context context) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return true;
+            NetworkInfo info = cm.getActiveNetworkInfo();
+            return info != null && info.isConnected();
+        } catch (Throwable t) {
+            return true;
+        }
     }
 
     /**
