@@ -268,26 +268,19 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     //弹幕跳转请求：弹幕尚未 prepare 时 DanmakuView.seekTo 会被丢弃，先记住位置等 prepared 回调补做
     private long pendingDanmakuSeekMs = -1;
-    /**
-     * 弹幕时间轴与播放器位置的允许偏差。
-     *
-     * <p>DFM 的时钟是"自己走"的（见 DrawHandler.syncTimer：按 SystemClock.uptimeMillis 与渲染帧率推进），
-     * 播放器位置才是唯一可信基准。偏差超过本值就由 {@link #updateTimer} 直接纠正，
-     * 否则低帧率设备上的"慢漂移"会一直累积（旧逻辑只在时间轴完全停住时才管，永远修不到慢漂移）。
-     */
-    private static final long DANMAKU_DRIFT_FIX_MS = 500;
-    //兜底通道（250ms tick）的容差与冷却，比 updateTimer 粗一档
-    private static final long DANMAKU_SYNC_TOLERANCE_MS = 800;
-    private static final long DANMAKU_SYNC_COOLDOWN_MS = 2000;
-    //连续多少次采样都超差才动手，避开 seek 后播放器尚未到位的过渡期
-    private static final int DANMAKU_DRIFT_CONFIRM = 2;
-    private int danmakuDriftHitCount = 0;
-    private int danmakuSyncTickCount = 0;
-    //弹幕校正冷却，避免偏差持续存在时每 250ms 触发一次 seek
+    //弹幕校正冷却：seekDanmakuTo 会刷新它，避免 seek 期间反被拉回旧位置
     private long lastDanmakuSyncMs = 0;
-    //上次观测到的弹幕时间轴位置与观测时刻（诊断用）
-    private long lastObservedDanmakuMs = -1;
-    private long lastObservedWallMs = 0;
+    //兜底纠偏：只有"极端偏差"（>2s）且持续 3 秒（12 个 250ms tick）才动一次手，20 秒内不再纠。
+    //阈值这么宽是因为每纠一次都会被用户看成"弹幕整体跳一下"——2s 以内的小偏差宁可不纠
+    private static final long DANMAKU_EXTREME_DRIFT_MS = 2000;
+    private static final int DANMAKU_EXTREME_CONFIRM = 12;
+    private static final long DANMAKU_EXTREME_COOLDOWN_MS = 20000;
+    private int danmakuExtremeTickCount = 0;
+    //停顿检测：DFM 的时钟是墙钟驱动的（mTimeBase + SystemClock），画面卡住（缓冲）时它照走，
+    //恢复后整场就多走一段、且不会自己回来。靠"播放器位置有没有前进"识别停顿，恢复时重 base 一次。
+    private long lastDanmakuTickPos = -1;
+    private long lastDanmakuTickWall = 0;
+    private boolean danmakuStalled = false;
     //同步诊断日志节流：每 5 秒一条，真机上直接看两个时间差多少
     private long lastDanmakuDiagMs = 0;
     //当前倍速缓存：DFM 的 prepared 回调跑在弹幕线程上，那里不能去读 SeekBar（跨线程碰 View）
@@ -2282,27 +2275,19 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void updateTimer(DanmakuTimer timer) {
-                //这里绝对不要读 ijkPlayer.getCurrentPosition()：回调跑在 DFM 的同步/绘制线程上，
-                //而 getCurrentPosition 是会拿播放器原生锁的 JNI 调用，一旦与 seek、release 并发，
-                //轻则弹幕时间轴被旧位置拽住不动（跳转后弹幕卡死），重则 DFM 线程彻底卡住，
-                //让主线程 release() 里的 join 永远等下去（退出播放后整个应用卡死）。
+                //这里**只读、绝不写**。两条红线：
+                //1) 不要读 ijkPlayer.getCurrentPosition()：回调跑在 DFM 的同步/绘制线程上，
+                //   而这个 JNI 调用会拿播放器原生锁，与 seek/release 并发时轻则时间轴被旧位置拽住，
+                //   重则 DFM 线程彻底卡住，让主线程 release() 里的 join 永远等下去。
+                //2) 不要在这里 timer.update(播放器位置) 强行改时间轴。DFM 的时钟是**墙钟驱动**的
+                //   （DrawHandler.syncTimer 每帧按 SystemClock 推进 timer，基准是 mTimeBase），
+                //   而 timer.update() 只改"当前值"、不改 base：下一帧 syncTimer 发现 timer 落后于墙钟，
+                //   又按 mCordonTime 一帧一帧把时钟推回去。于是形成死循环——
+                //   被拽回去（弹幕整体往右跳一下）→ 又被推回来（继续往左飘）→ 再拽……
+                //   这正是"每隔几秒弹幕整体右跳一次"的根因，写时钟这条路必须整条删掉。
                 //
-                //只读 250ms 进度定时器维护的 volatile 字段 video_now：把播放器位置作为弹幕时间轴的
-                //唯一基准。连续两次采样都超差才纠正——单帧抖动、seek 后播放器尚未到位都不该动手。
-                if (!hasDanmaku || !isPlaying || isSeeking) return;
-                long pos = video_now;
-                if (pos <= 0) return;
-                long drift = pos - timer.currMillisecond;
-                if (Math.abs(drift) <= DANMAKU_DRIFT_FIX_MS) {
-                    danmakuDriftHitCount = 0;
-                    return;
-                }
-                if (++danmakuDriftHitCount < DANMAKU_DRIFT_CONFIRM) return;
-                danmakuDriftHitCount = 0;
-                timer.update(pos);
-                lastDanmakuSyncMs = System.currentTimeMillis();
-                Logu.d("弹幕同步", "updateTimer 校正：player=" + pos
-                        + " 原弹幕=" + (pos - drift) + " 偏差=" + drift + "ms");
+                //真正的对齐只在**事件**上做：起播/prepared、用户跳转、隐藏后重新显示、卡顿恢复，
+                //这些都由 seekDanmakuTo() 完成（它会顺手 rebase DFM 的 mTimeBase）。
             }
 
             @Override
@@ -3432,9 +3417,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (positionMs < 0) positionMs = 0;
         //主动跳转后先进入冷却：播放器 seek 需要时间才真正到位，期间不能反过来把弹幕拉回旧位置
         lastDanmakuSyncMs = System.currentTimeMillis();
-        lastObservedDanmakuMs = -1;
-        danmakuSyncTickCount = 0;
-        danmakuDriftHitCount = 0;
+        resetDanmakuTick();
         if (mDanmakuView.isPrepared()) {
             //已经 prepared 就当场生效；pending 必须清掉，否则下次 reload 的 prepared 回调
             //会拿这个过期位置再跳一次（切P/换清晰度后弹幕莫名跳回旧位置就是这个原因）
@@ -3447,46 +3430,80 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
-     * 弹幕与播放器位置偏差校正（250ms tick 里的兜底通道）。
+     * 弹幕时间轴的纠偏（250ms tick，后台线程）。
      *
-     * <p>原判定是"弹幕时间轴停止推进，而播放器还在前进"——只能救"卡死"，救不了"慢漂移"：
-     * 时间轴一直在走、只是走得不准时永远不触发，偏差就永久留下。现在改成看**绝对偏差**，
-     * 连续 3 个 tick（750ms）都超差才动手，并在 {@code lastDanmakuSyncMs} 上留冷却，
-     * 避免 seek 后播放器尚未到位的过渡期被来回拽。
+     * <p>只在两类情况下动时间轴，其余一律不碰——每动一次用户都会看到"弹幕整体跳一下"：
+     * <ol>
+     *   <li><b>卡顿恢复</b>：DFM 的时钟是墙钟驱动的，画面缓冲时它照走；恢复播放后整场就多走
+     *       一段，而且不会自己回来。这个 tick 只在播放位置变化时才跑，所以"墙钟过了很久、
+     *       播放位置却几乎没变"就等于中间卡过，按当前播放位置重 base 一次即可。</li>
+     *   <li><b>极端偏差兜底</b>：>2s 且连续 3 秒都成立，才纠一次，20 秒冷却。</li>
+     * </ol>
+     *
+     * <p>以前的实现是"绝对偏差 >800ms 就 seek"，结果时间轴只要有一点点系统性偏移就被每 2 秒
+     * 拽一次，表现为"每隔几秒弹幕整体右跳一下"，已废弃。
      *
      * <p>只允许在后台定时任务里读播放器位置，绝不能在 DFM 的线程里读（见 updateTimer 的注释）。
      */
     private void syncDanmakuIfDrifted(long playerPositionMs) {
-        if (!isPrepared || !isPlaying || isSeeking || !isDanmakuVisible) return;
+        if (!isPrepared || !isPlaying || isSeeking || !isDanmakuVisible) {
+            resetDanmakuTick();
+            return;
+        }
         //未 prepared 时 getCurrentTime 固定返回 0，会误判；这种情况由 pendingDanmakuSeekMs 兜底
         if (!hasDanmaku || mDanmakuView == null || !mDanmakuView.isPrepared()) return;
 
-        long danmakuTime = mDanmakuView.getCurrentTime();
         long now = System.currentTimeMillis();
-        long diff = playerPositionMs - danmakuTime;
 
-        //同步诊断：每 5 秒一条，真机上直接看两个时间差了多少（旧版只能靠"感觉漂了"描述问题）
+        //---------- 卡顿恢复 ----------
+        if (lastDanmakuTickPos < 0) {
+            lastDanmakuTickPos = playerPositionMs;
+            lastDanmakuTickWall = now;
+            return;
+        }
+        long wallGap = now - lastDanmakuTickWall;
+        long posGap = playerPositionMs - lastDanmakuTickPos;
+        lastDanmakuTickPos = playerPositionMs;
+        lastDanmakuTickWall = now;
+        //tick 长时间没跑（暂停、缓冲、切页、隐藏弹幕）说明这期间时间轴由 pause/resume 那条链路负责，
+        //这里只重新建立基线，不要再补一次 seek——否则每次暂停恢复、缓冲结束都会看到弹幕抖一下
+        if (wallGap > 2000) {
+            return;
+        }
+        //正常情况下 250ms 一个 tick，墙钟与播放位置同步前进；缓冲时位置停住、墙钟照走，
+        //差值就是这段卡顿被弹幕时钟"白走"掉的时间（阈值 400ms 只为吃掉 tick 抖动）。
+        //posGap < 0（用户往回跳）不算卡顿，否则每次后退都会紧跟一次多余的 seek
+        if (posGap >= 0 && wallGap - posGap > 400) {
+            Logu.d("弹幕同步", "检测到卡顿 " + (wallGap - posGap) + "ms，按播放位置重对齐到 "
+                    + playerPositionMs + "ms");
+            seekDanmakuTo(playerPositionMs);
+            return;
+        }
+
+        //---------- 极端偏差兜底 ----------
+        long danmakuTime = mDanmakuView.getCurrentTime();
+        long diff = playerPositionMs - danmakuTime;
         if (now - lastDanmakuDiagMs >= 5000) {
             lastDanmakuDiagMs = now;
             Logu.d("弹幕同步", "player=" + playerPositionMs + " danmaku=" + danmakuTime + " diff=" + diff + "ms");
         }
-
-        if (Math.abs(diff) <= DANMAKU_SYNC_TOLERANCE_MS) {
-            danmakuSyncTickCount = 0;
-            lastObservedDanmakuMs = danmakuTime;
-            lastObservedWallMs = now;
+        if (Math.abs(diff) <= DANMAKU_EXTREME_DRIFT_MS) {
+            danmakuExtremeTickCount = 0;
             return;
         }
-        if (++danmakuSyncTickCount < 3) return;
-        danmakuSyncTickCount = 0;
-        if (now - lastDanmakuSyncMs < DANMAKU_SYNC_COOLDOWN_MS) return;
-
-        lastDanmakuSyncMs = now;
-        lastObservedDanmakuMs = danmakuTime;
-        lastObservedWallMs = now;
-        Logu.w("弹幕校正", "弹幕与播放器偏差 " + diff + "ms（danmaku=" + danmakuTime
+        if (++danmakuExtremeTickCount < DANMAKU_EXTREME_CONFIRM) return;
+        danmakuExtremeTickCount = 0;
+        if (now - lastDanmakuSyncMs < DANMAKU_EXTREME_COOLDOWN_MS) return;
+        Logu.w("弹幕校正", "极端偏差 " + diff + "ms（danmaku=" + danmakuTime
                 + "，player=" + playerPositionMs + "），重新对齐");
         seekDanmakuTo(playerPositionMs);
+    }
+
+    /** 清掉卡顿检测的基线（暂停/跳转/隐藏弹幕后重新开始采样） */
+    private void resetDanmakuTick() {
+        lastDanmakuTickPos = -1;
+        lastDanmakuTickWall = 0;
+        danmakuExtremeTickCount = 0;
     }
 
     /**
