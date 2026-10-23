@@ -160,10 +160,8 @@ public class BaseActivity extends AppCompatActivity {
         if (BackgroundManager.install(this, decor)) return;
         if (!ambientEnabled()) return;
         if (decor.getChildAt(0) instanceof AmbientBackground) return;
+        //背景风格不随「圆屏适配」变化：圆屏适配只改布局，视觉沿用直屏那套粉色径向光晕
         ambientBackground = new AmbientBackground(this);
-        ambientBackground.setMode(SharedPreferencesUtil.getBoolean("player_ui_round", false)
-                ? AmbientBackground.MODE_ROUND
-                : AmbientBackground.MODE_RADIAL);
         decor.addView(ambientBackground, 0,
                 new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }

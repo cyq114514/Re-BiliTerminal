@@ -70,14 +70,10 @@ public class SplashActivity extends Activity {
         splashTextView = findViewById(R.id.splashText);
 
         if (newUi) {
-            //方屏用顶部径向光晕、圆屏用双装饰圆环（与页面内 installAmbient 的选择口径一致），
+            //背景风格全局统一（顶部粉色径向光晕，圆屏适配也一样，详见 AmbientBackground），
             //加载期间做 alpha 呼吸，和列表页初始加载的观感对齐
             AmbientBackground ambient = findViewById(R.id.splash_ambient);
-            if (ambient != null) {
-                ambient.setMode(SharedPreferencesUtil.getBoolean("player_ui_round", false)
-                        ? AmbientBackground.MODE_ROUND : AmbientBackground.MODE_RADIAL);
-                ambient.setBreathing(true);
-            }
+            if (ambient != null) ambient.setBreathing(true);
         }
         splashText = SharedPreferencesUtil.getString("ui_splashtext", "欢迎使用\nRe：哔哩终端");
 
