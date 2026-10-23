@@ -157,7 +157,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private float subtitle_delta;
 
     private RelativeLayout layout_control, layout_top, layout_video, layout_card_bg, layout_audio_only;
-    private LinearLayout layout_speed, right_control, loading_info;
+    private LinearLayout layout_speed, layout_volume, right_control, loading_info;
     private RelativeLayout bottom_buttons;
     private HorizontalScrollView right_second;
     private LinearLayout card_subtitle, card_danmaku_send, card_page_selector, card_quality_selector, card_viewpoint_selector;
@@ -167,8 +167,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private ImageButton btn_control, btn_danmaku, btn_loop, btn_rotate, btn_menu, btn_subtitle, btn_danmaku_send,
             btn_audio_only, btn_page_selector, btn_auto_next, btn_quality, btn_viewpoint, btn_debug;
     private HighEnergyProgressBar seekbar_progress;
-    private SeekBar seekbar_speed;
-    private TextView text_progress, text_online, text_volume, loading_text0, loading_text1, text_speed, text_newspeed;
+    private SeekBar seekbar_speed, seekbar_volume;
+    private TextView text_progress, text_online, text_volume, loading_text0, loading_text1, text_speed, text_newspeed,
+            text_newvolume, button_seek_back, button_seek_forward;
     public TextView text_title, text_subtitle, text_audio_title, text_audio_subtitle;
 
     private Timer progressTimer, speedTimer, loadingTimer, onlineTimer, surfaceTimer;
@@ -188,6 +189,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     //video_now 由 progressTimer 在后台线程写，退出路径（onPause/onStop/onDestroy，主线程）要读它做兜底上报，
     //必须 volatile，否则主线程可能读到 0 或旧值，上报的位置就是错的
     private volatile int video_now;
+    //无极调音：0~1 的软件增益，和系统音量是乘算关系（系统音量 100% 时，50% 增益就是半音量）
+    //只在 ijk 侧出手，不碰系统音量——手表上系统音量往往只有 3~15 档，靠它调不出"35%"这种值
+    private float volumeGain = 1f;
     private long progress_history;
     private String progress_str;
 
@@ -632,8 +636,29 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         layout_speed = findViewById(R.id.layout_speed);
         seekbar_speed = findViewById(R.id.seekbar_speed);
         text_newspeed = findViewById(R.id.text_newspeed);
+        layout_volume = findViewById(R.id.layout_volume);
+        seekbar_volume = findViewById(R.id.seekbar_volume);
+        text_newvolume = findViewById(R.id.text_newvolume);
         bottom_buttons = findViewById(R.id.bottom_buttons);
+        button_seek_back = findViewById(R.id.button_seek_back);
+        button_seek_forward = findViewById(R.id.button_seek_forward);
         btn_debug = findViewById(R.id.btn_debug);
+
+        //无极调音：恢复上次的增益，并把 0~100 的滑条初始位置对上
+        volumeGain = Math.max(0f, Math.min(1f, SharedPreferencesUtil.getFloat("player_volume_gain", 100f) / 100f));
+        if (seekbar_volume != null) seekbar_volume.setProgress(Math.round(volumeGain * 100));
+        if (text_newvolume != null) text_newvolume.setText(Math.round(volumeGain * 100) + "%");
+
+        //±N 秒按钮：文案跟随「快进快退秒数」设置；直播没有可 seek 的进度条，直接藏掉
+        int seekStep = seekStepSeconds();
+        if (button_seek_back != null) {
+            button_seek_back.setText("-" + seekStep + "s");
+            if (isLiveMode) button_seek_back.setVisibility(View.GONE);
+        }
+        if (button_seek_forward != null) {
+            button_seek_forward.setText("+" + seekStep + "s");
+            if (isLiveMode) button_seek_forward.setVisibility(View.GONE);
+        }
 
         text_subtitle = findViewById(R.id.text_subtitle);
         text_audio_title = findViewById(R.id.audio_title);
@@ -1320,6 +1345,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         video_all = (int) ijkPlayer.getDuration();
 
         changeVideoSize();
+
+        //新实例必须重新套一遍软件增益：切清晰度/换P/听视频模式都会走这里重建播放器
+        applyVolumeGain();
 
         //记住倍速：上个会话手动调过速的话，新实例（含换P/换清晰度重建）自动应用；
         //长按 3x 属临时加速不走这里，不会污染记忆值；直播流不应用倍速（倍速按钮在直播本来就隐藏）
@@ -2475,15 +2503,84 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
         int show = (int) ((float) volumeNow / (float) volumeMax * 100);
 
-        text_volume.setVisibility(View.VISIBLE);
-        text_volume.setText("音量：" + show + "%");
-
-        text_volume.removeCallbacks(hideVolume);
-        text_volume.postDelayed(hideVolume, 3000);
+        flashCenterText("音量：" + show + "%");
         autohideReset();
     }
 
     private final Runnable hideVolume = () -> text_volume.setVisibility(View.GONE);
+
+    /** 屏幕中间闪一条提示（复用音量提示那个 TextView，3 秒后自动消失） */
+    private void flashCenterText(String text) {
+        if (text_volume == null) return;
+        text_volume.setVisibility(View.VISIBLE);
+        text_volume.setText(text);
+        text_volume.removeCallbacks(hideVolume);
+        text_volume.postDelayed(hideVolume, 3000);
+    }
+
+    // ---------------------------------------------------------------- 无极调音（软件增益）
+
+    /**
+     * 把 0~1 的软件增益应用到当前播放器。
+     *
+     * <p>ijk 的 {@code setVolume} 是采样级线性乘算（原生方法在 libijkplayer.so 里），
+     * 所以能做到 1% 一档、和系统音量档位无关——手表上系统音量常常只有 3~15 档，靠它调不出 35% 这种值。
+     * 上限卡在 1.0：超过 1.0 会削波失真，不做"增益放大"。
+     *
+     * <p>换清晰度/换P/切听视频模式都会重建播放器实例，所以 onPrepared 里要重新调一次。
+     */
+    private void applyVolumeGain() {
+        if (ijkPlayer != null) {
+            try {
+                ijkPlayer.setVolume(volumeGain, volumeGain);
+            } catch (Throwable t) {
+                Logu.e("volume", "应用软件音量失败：" + t);
+            }
+        }
+        if (text_newvolume != null) text_newvolume.setText(Math.round(volumeGain * 100) + "%");
+    }
+
+    private void persistVolumeGain() {
+        SharedPreferencesUtil.putFloat("player_volume_gain", volumeGain * 100f);
+    }
+
+    /** 长按底部音量按钮打开无极调音；4 秒无操作自动收起并落盘 */
+    private void showVolumePanel() {
+        if (layout_volume == null) return;
+        if (layout_speed != null) layout_speed.setVisibility(View.GONE);
+        if (seekbar_volume != null) seekbar_volume.setProgress(Math.round(volumeGain * 100));
+        if (text_newvolume != null) text_newvolume.setText(Math.round(volumeGain * 100) + "%");
+        layout_volume.setVisibility(View.VISIBLE);
+        layout_volume.removeCallbacks(hideVolumePanel);
+        layout_volume.postDelayed(hideVolumePanel, 4000);
+        autohideReset();
+    }
+
+    private final Runnable hideVolumePanel = () -> {
+        if (layout_volume != null) layout_volume.setVisibility(View.GONE);
+        persistVolumeGain();
+    };
+
+    // ---------------------------------------------------------------- ±N 秒快进/快退
+
+    /** 快进快退秒数：与「双击快进快退」共用同一个设置项，配成 0/负数时回落到 10 秒 */
+    private int seekStepSeconds() {
+        int step = SharedPreferencesUtil.getInt("player_doubletap_seek_seconds", 10);
+        return step > 0 ? step : 10;
+    }
+
+    /** direction：1 快进、-1 快退；走 seekToPosition，弹幕零点会跟着对齐 */
+    private void seekBySeconds(int direction) {
+        if (ijkPlayer == null || !isPrepared || isLiveMode) return;
+        int step = seekStepSeconds();
+        long target = video_now + (long) direction * step * 1000L;
+        if (target < 0) target = 0;
+        long duration = video_all > 0 ? video_all : ijkPlayer.getDuration();
+        if (duration > 0 && target > duration) target = duration;
+        seekToPosition(target);
+        flashCenterText((direction > 0 ? "快进 " : "快退 ") + step + " 秒");
+        autohideReset();
+    }
 
     /**
      * 软件旋屏，给某些特殊设备用的。
@@ -3123,6 +3220,21 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         findViewById(R.id.button_sound_add).setOnClickListener(view -> changeVolume(true));
         findViewById(R.id.button_sound_cut).setOnClickListener(view -> changeVolume(false));
+        //单击 = 系统音量 ±1 档（老习惯不变）；长按 = 打开无极调音面板（0~100% 软件增益）
+        findViewById(R.id.button_sound_add).setOnLongClickListener(view -> {
+            showVolumePanel();
+            return true;
+        });
+        findViewById(R.id.button_sound_cut).setOnLongClickListener(view -> {
+            showVolumePanel();
+            return true;
+        });
+
+        //±N 秒按钮
+        if (button_seek_back != null)
+            button_seek_back.setOnClickListener(view -> seekBySeconds(-1));
+        if (button_seek_forward != null)
+            button_seek_forward.setOnClickListener(view -> seekBySeconds(1));
 
         btn_menu.setOnClickListener(view -> {
             if (menu_opened) {
@@ -3245,6 +3357,37 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 };
                 speedTimer.schedule(timerTask, 200);
             }
+        });
+
+        seekbar_volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                volumeGain = progress / 100f;
+                applyVolumeGain();
+                //拖动期间持续续期，松手后再留 4 秒方便看数值
+                if (layout_volume != null) {
+                    layout_volume.removeCallbacks(hideVolumePanel);
+                    layout_volume.postDelayed(hideVolumePanel, 4000);
+                }
+                //拖动期间别让控制栏自动隐藏，否则面板会跟着一起消失
+                autohideReset();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                if (layout_volume != null) layout_volume.removeCallbacks(hideVolumePanel);
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                persistVolumeGain();
+            }
+        });
+
+        //点面板空白处收起（与倍速面板一致）
+        layout_volume.setOnClickListener(view -> {
+            layout_volume.removeCallbacks(hideVolumePanel);
+            hideVolumePanel.run();
         });
     }
 

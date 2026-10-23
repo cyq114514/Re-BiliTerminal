@@ -212,6 +212,24 @@
                         android:scaleType="fitCenter"
                         android:src="@mipmap/soundcut" />
 
+                    <!-- ±N 秒快退/快进：N 跟随「快进快退秒数」设置（默认 10），文字按钮比图标更不容易看错 -->
+                    <TextView
+                        android:id="@+id/button_seek_back"
+                        android:layout_width="wrap_content"
+                        android:layout_height="37dp"
+                        android:layout_marginStart="6dp"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:minWidth="32dp"
+                        android:paddingHorizontal="2dp"
+                        android:shadowColor="@color/bgblack"
+                        android:shadowDx="2.0"
+                        android:shadowDy="0.0"
+                        android:shadowRadius="3.0"
+                        android:text="-10s"
+                        android:textColor="@color/textwhite"
+                        android:textSize="11sp" />
+
                     <ImageButton
                         android:id="@+id/button_video"
                         android:layout_width="32dp"
@@ -221,6 +239,23 @@
                         android:background="?android:attr/selectableItemBackground"
                         android:scaleType="fitCenter"
                         android:src="@drawable/btn_player_play" />
+
+                    <TextView
+                        android:id="@+id/button_seek_forward"
+                        android:layout_width="wrap_content"
+                        android:layout_height="37dp"
+                        android:layout_marginStart="6dp"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:minWidth="32dp"
+                        android:paddingHorizontal="2dp"
+                        android:shadowColor="@color/bgblack"
+                        android:shadowDx="2.0"
+                        android:shadowDy="0.0"
+                        android:shadowRadius="3.0"
+                        android:text="+10s"
+                        android:textColor="@color/textwhite"
+                        android:textSize="11sp" />
 
                     <ImageButton
                         android:id="@+id/button_sound_add"
@@ -540,6 +575,57 @@
                 android:textColor="@color/divider_gray"
                 android:textSize="14sp"
                 app:layout_constraintTop_toBottomOf="@id/seekbar_speed" />
+
+        </LinearLayout>
+
+        <!-- 无极调音：0~100% 的软件增益（长按底部音量按钮打开） -->
+        <LinearLayout
+            android:id="@+id/layout_volume"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#50000000"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="无极调音（软件增益）"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/seekbar_volume"
+                style="@style/Widget.AppCompat.SeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="26dp"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="100" />
+
+            <TextView
+                android:id="@+id/text_newvolume"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="100%"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="14sp" />
 
         </LinearLayout>
 

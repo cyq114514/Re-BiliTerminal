@@ -242,7 +242,7 @@
                         android:layout_gravity="center"
                         android:layout_marginTop="6dp"
                         android:gravity="center"
-                        android:text="遇到问题欢迎提issue或者直接在B站私信开发者\n开发者目前还在高中坐牢，只有周末才能拿到电脑，有问题可能修复得慢一点\n由于本人忙于学习，目前没有交流群，遇到问题也可以加终端官方QQ群656364457并@「你滴勋宗」来反馈"
+                        android:text="遇到问题欢迎提issue或者直接在B站私信开发者\n开发者目前还在高中坐牢，只有周末才能拿到电脑，有问题可能修复得慢一点\nQQ群：1129816758（进群后@「你滴勋宗」反馈）\n该群聊是 Re：哔哩终端 和 RE：哔哩终端 的联合群聊——RE：哔哩终端 是另一位开发者用 Kotlin 重构的新分支，与本项目不是同一个项目，反馈时请说明你用的是哪一个"
                         android:textSize="11sp" />
 
                 </LinearLayout>
