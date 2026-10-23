@@ -63,10 +63,11 @@ public class SettingPrefActivity extends RefreshListActivity {
                         getString(R.string.desc_night_reminder), "true"));
                 add(new SettingSection("switch", "记住退出页面", SharedPreferencesUtil.RESUME_PAGE_ENABLE,
                         getString(R.string.desc_resume_page), "false"));
-                //冷启动自动检查更新：默认关闭（启动链路已经做过提速，这一项会额外发一次网络请求）
+                //冷启动自动检查更新：默认开启。检查放在首屏之后，不占启动关键路径；
+                //拉的是 release 的 update.json（体积很小），失败也只是静默放弃，不打扰使用
                 add(new SettingSection("switch", "启动时检查更新", SharedPreferencesUtil.UPDATE_CHECK_ON_START,
-                        "每次冷启动在后台从 GitHub（直连失败会依次尝试内置镜像）检查新版本，发现更新时弹窗提示；默认关闭",
-                        "false"));
+                        "每次冷启动在首屏之后从 GitHub（直连失败会依次尝试内置镜像）检查新版本，发现更新时弹窗提示；默认开启，不想让它联网可以关掉",
+                        "true"));
 
 
                 add(new SettingSection("title", "优化", "", "", ""));

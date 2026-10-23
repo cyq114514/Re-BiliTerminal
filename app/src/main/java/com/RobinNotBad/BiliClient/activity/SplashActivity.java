@@ -282,11 +282,11 @@ public class SplashActivity extends Activity {
      */
     private void scheduleStartupDialogs() {
         BiliTerminal.runAfterFirstPageResumed(() -> AppInfoApi.showStartupDialogs(BiliTerminal.context));
-        //「启动时检查更新」开关：默认关闭。开启后与检查更新页走同一条链路
+        //「启动时检查更新」开关：默认开启。与检查更新页走同一条链路
         //（GitHub 直连优先，失败依次试内置镜像），发现新版本时弹同一套自适应弹窗。
-        //放在首屏之后执行：不占启动关键路径，也不会和首屏抢着弹窗
+        //放在首屏之后执行：不占启动关键路径，也不会和首屏抢着弹窗；弱网失败只记日志，不打扰用户
         BiliTerminal.runAfterFirstPageResumed(activity -> {
-            if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.UPDATE_CHECK_ON_START, false)) return;
+            if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.UPDATE_CHECK_ON_START, true)) return;
             UpdateManager.autoCheck(activity);
         });
     }
