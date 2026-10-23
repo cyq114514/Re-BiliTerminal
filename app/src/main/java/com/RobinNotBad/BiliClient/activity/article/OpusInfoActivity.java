@@ -110,7 +110,9 @@ public class OpusInfoActivity extends BaseActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEvent(ReplyEvent event) {
-        //replyFragment.notifyReplyInserted(event);
+        //专栏页原先这里被注释掉了：发完评论只更新了"共 N 条评论"，列表里根本不插这条，
+        //要退出重进（还得等服务端索引）才看得到。视频页/动态页一直是转发给 Fragment 的
+        if (replyFragment != null) replyFragment.notifyReplyInserted(event);
     }
 
     @Override

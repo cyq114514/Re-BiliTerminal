@@ -401,16 +401,33 @@ public class ReplyFragment extends RefreshListFragment {
                 List<Reply> list = new ArrayList<>();
                 ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, seek, pagination, type, sort, list);
                 if (generation != loadGeneration) return;   //已被更新的刷新作废
+                //热度排序（mode=3）对"只有一两条新评论"的评论区经常返回空列表，而头部显示的
+                //"共 N 条评论"是另一个接口给的数字——于是表现成"读得到数量但加载不出来"。
+                //这里在"接口成功、列表为空、但确实说有 N 条"时，换时间排序再拉一次；
+                //拉到了就把排序状态一起切过去，保证后续翻页/下拉刷新的口径一致
+                if (result.isSuccess() && list.isEmpty() && count > 0 && seek <= 0 && sort != 2) {
+                    List<Reply> alt = new ArrayList<>();
+                    ReplyApi.ReplyResult altResult = ReplyApi.getRepliesLazyWithRetry(aid, seek, "", type, 2, alt);
+                    if (generation != loadGeneration) return;
+                    if (altResult.isSuccess() && !alt.isEmpty()) {
+                        Logu.d("ReplyFragment", "热度排序返回空但共 " + count + " 条，改用时间排序拉到 " + alt.size() + " 条");
+                        list = alt;
+                        result = altResult;
+                        sort = 2;
+                    }
+                }
                 if (result.isSuccess()) {
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
                     final List<Reply> unique = list;
+                    //上面可能把 result 换成"时间排序"那次的结果，lambda 里只能用 final 别名
+                    final ReplyApi.ReplyResult finalResult = result;
                     //分页状态（pagination/isEnd/bottom）统一在主线程的世代守卫内落库：
                     //后台线程直写会在新一代 refresh 重置之后到达，把新列表污染成"已到底/错游标"
                     runOnUiThread(() -> {
                         if (!isAdded()) return;
                         if (generation != loadGeneration) return;
-                        this.pagination = result.nextOffset;
-                        if (result.isEnd()) {
+                        this.pagination = finalResult.nextOffset;
+                        if (finalResult.isEnd()) {
                             Logu.d("ReplyFragment", "评论到底 type=" + type + " oid=" + aid);
                             isEnd = true;
                             bottom = true;
@@ -423,19 +440,22 @@ public class ReplyFragment extends RefreshListFragment {
                         if (replyAdapter == null) {
                             replyAdapter = createReplyAdapter();
                             replyAdapter.count = count;
+                            replyAdapter.sort = sort;   //换了排序口径时，适配器里的排序状态也要跟上
                             replyAdapter.isManager = isManager;
                             setOnSortSwitch();
                             setAdapter(replyAdapter);
                         } else {
+                            replyAdapter.sort = sort;   //排序口径可能刚被兜底切成时间排序，同步给适配器（按钮文案/行为）
                             replyAdapter.notifyDataSetChanged();
                         }
                         setRefreshing(false);
                     });
                 } else if (isAdded()) {
+                    final ReplyApi.ReplyResult errorResult = result;
                     runOnUiThread(() -> {
                         if (generation != loadGeneration) return;
                         setRefreshing(false);
-                        showLoadErrorMsg(result);
+                        showLoadErrorMsg(errorResult);
                     });
                 }
             } catch (Exception e) {
