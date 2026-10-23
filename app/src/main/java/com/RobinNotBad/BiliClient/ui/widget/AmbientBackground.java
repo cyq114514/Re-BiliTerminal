@@ -22,8 +22,9 @@ import com.RobinNotBad.BiliClient.util.ToolsUtil;
 /**
  * 氛围背景（移植自 Re-WearBili 的黑底氛围视觉）：
  * 纯黑底上铺一层克制的 B 站粉装饰，加载时以 alpha 呼吸（1 ↔ 0.35）。
- * MODE_RADIAL：方屏，顶部一枚柔和的粉色径向光晕；
- * MODE_ROUND：圆屏，右上/左下两枚 75% 宽的装饰圆环（对应 Re-WearBili 的装饰圆图）。
+ * 两种模式都先铺同一层「全局粉色径向光晕」——方屏/圆屏观感一致，
+ * 不会出现"圆屏下整页发黑、只有两枚线圈"的割裂感；
+ * MODE_ROUND 再额外叠右上/左下两枚 75% 宽的装饰圆环（对应 Re-WearBili 的装饰圆图）。
  * 只做静态绘制 + view alpha 动画，不逐帧重绘内容，照顾手表性能。
  */
 public class AmbientBackground extends View {
@@ -49,7 +50,7 @@ public class AmbientBackground extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private ValueAnimator breatheAnim;
 
-    /** 径向光晕的预渲染结果；仅 MODE_RADIAL 使用 */
+    /** 径向光晕的预渲染结果（两种模式共用，见 onDraw） */
     private Bitmap radialCache;
     private final Paint cachePaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
     private final Rect cacheDst = new Rect();
@@ -66,7 +67,11 @@ public class AmbientBackground extends View {
         this.mode = mode;
         //渐变的色带用 dither 缓解
         paint.setDither(true);
-        if (mode == MODE_RADIAL && getWidth() > 0) rebuildRadialCache(getWidth(), getHeight());
+        //光晕两种模式都要画，缓存与模式无关；尺寸还没测量时交给 onSizeChanged 建
+        if (getWidth() > 0) {
+            ensureRadialShader(getWidth(), getHeight());
+            rebuildRadialCache(getWidth(), getHeight());
+        }
         invalidate();
     }
 
@@ -108,17 +113,19 @@ public class AmbientBackground extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        if (mode == MODE_RADIAL && w > 0) {
-            float cx = w * 0.5f;
-            float cy = h * 0.14f;
-            float radius = Math.max(w, h) * 0.75f;
-            paint.setShader(new RadialGradient(cx, cy, radius,
-                    new int[]{ColorUtils.setAlphaComponent(COLOR_PINK, 0x59),
-                            ColorUtils.setAlphaComponent(COLOR_PINK, 0x00)},
-                    new float[]{0f, 1f}, Shader.TileMode.CLAMP));
+        if (w > 0) {
+            ensureRadialShader(w, h);
             rebuildRadialCache(w, h);
         }
         invalidate();
+    }
+
+    /** 光晕的渐变着色器（缓存图建不起来时直接绘制用） */
+    private void ensureRadialShader(int w, int h) {
+        paint.setShader(new RadialGradient(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f,
+                new int[]{ColorUtils.setAlphaComponent(COLOR_PINK, 0x59),
+                        ColorUtils.setAlphaComponent(COLOR_PINK, 0x00)},
+                new float[]{0f, 1f}, Shader.TileMode.CLAMP));
     }
 
     @Override
@@ -127,15 +134,16 @@ public class AmbientBackground extends View {
         final int w = getWidth();
         final int h = getHeight();
         if (w == 0 || h == 0) return;
-        if (mode == MODE_RADIAL) {
-            if (radialCache != null && !radialCache.isRecycled()) {
-                cacheDst.set(0, 0, w, h);
-                canvas.drawBitmap(radialCache, null, cacheDst, cachePaint);
-            } else if (paint.getShader() != null) {
-                //缓存建不起来时退回直接绘制：只是慢，不影响正确性
-                canvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, paint);
-            }
-        } else {
+        //全局粉色氛围：两种模式都铺一层，方屏/圆屏风格统一
+        if (radialCache != null && !radialCache.isRecycled()) {
+            cacheDst.set(0, 0, w, h);
+            canvas.drawBitmap(radialCache, null, cacheDst, cachePaint);
+        } else if (paint.getShader() != null) {
+            //缓存建不起来时退回直接绘制：只是慢，不影响正确性
+            canvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, paint);
+        }
+        //圆屏再叠两枚装饰圆环；光晕之上要稍微加重点描边，否则颜色接近看不清
+        if (mode == MODE_ROUND) {
             drawRing(canvas, w * 0.82f, h * 0.10f, w * 0.375f);
             drawRing(canvas, w * 0.18f, h * 0.90f, w * 0.375f);
         }
@@ -182,11 +190,12 @@ public class AmbientBackground extends View {
         paint.setShader(null);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(ToolsUtil.dp2px(1.5f));
-        paint.setColor(ColorUtils.setAlphaComponent(COLOR_PINK, 0x38));
+        //描边比原来（0x38）加重：圆屏模式下面已经铺了一层粉色光晕，同色细线不加重会糊进背景里
+        paint.setColor(ColorUtils.setAlphaComponent(COLOR_PINK, 0x66));
         canvas.drawCircle(cx, cy, radius, paint);
         //内侧一圈更淡的实心圆增加层次
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(ColorUtils.setAlphaComponent(COLOR_PINK, 0x12));
+        paint.setColor(ColorUtils.setAlphaComponent(COLOR_PINK, 0x10));
         canvas.drawCircle(cx, cy, radius - ToolsUtil.dp2px(2f), paint);
     }
 }
