@@ -189,6 +189,19 @@ public class MsgUtil {
         showMsgLong(output.toString());
     }
 
+    /**
+     * 接口错误提示：「显示详细接口错误」打开时把完整信息放进可滚动、可复制的详情页，
+     * 否则只弹一句短提示（默认行为不变）。
+     */
+    public static void apiErrorDetail(String shortMsg, String detail) {
+        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_ERROR_DETAIL, false)
+                && detail != null && !detail.isEmpty()) {
+            showText("接口错误详情", detail);
+        } else {
+            showMsgLong(shortMsg);
+        }
+    }
+
     public static void showText(String title, String text) {
         Context context = BiliTerminal.context;
         Intent testIntent = new Intent()

@@ -50,6 +50,8 @@ public class SharedPreferencesUtil {
     public static final String DISABLE_ANIMATION = "ui_disable_animation";
     //每次冷启动自动检查更新（GitHub 直连 + 内置镜像），只有打开后才在启动时探测，默认关闭
     public static final String UPDATE_CHECK_ON_START = "update_check_on_start";
+    //接口出错时是否展示可复制的完整详情（接口名、参数、B站返回码与原始返回片段），默认关闭
+    public static final String API_ERROR_DETAIL = "dev_api_error_detail";
 
     public static String cookies = "cookies";
     public static String mid = "mid";

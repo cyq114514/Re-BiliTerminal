@@ -66,6 +66,11 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
                 add(new SettingSection("title", "调试", "", "", ""));
                 //以下调试开关一律默认关闭，且与是否 debug 构建无关：
                 //它们会改变应用行为、产生额外请求或本地落盘，普通用户误开只会带来困扰
+                //排查接口问题用：把失败请求的接口名、参数、B站返回码与原始返回片段整理成可复制的详情页
+                add(new SettingSection("switch", "显示详细接口错误", SharedPreferencesUtil.API_ERROR_DETAIL,
+                        "打开后，接口出错时会弹出可滚动、可复制的详情页（接口名、请求参数、B站返回码、原始返回片段），"
+                                + "不再只弹一句短提示。排查加载不出来、读得到数量但列表是空的问题时打开，把详情页内容发给维护者即可。",
+                        "false"));
                 add(new SettingSection("switch", "允许Logu.v", "dev_logv", getString(R.string.setting_lab_logv),
                         "false"));
                 add(new SettingSection("switch", "允许Logu.d", "dev_logd", "", "false"));

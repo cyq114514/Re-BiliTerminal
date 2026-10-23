@@ -122,6 +122,10 @@ public class ReplyApi {
         public int apiCode = 0;
         /** 可向用户展示的错误描述 */
         public String message = "";
+        /** 实际走的接口（wbi/main、main 或降级链），排查用 */
+        public String endpoint = "";
+        /** 调试详情：原始返回片段、游标、条数等，只在「显示详细接口错误」开关打开时展示 */
+        public String detail = "";
 
         public boolean isSuccess() { return status == STATUS_HAS_MORE || status == STATUS_END; }
         public boolean isEnd() { return status == STATUS_END; }
@@ -199,16 +203,31 @@ public class ReplyApi {
         JSONObject root = NetWorkUtil.getJson(finalUrl, NetWorkUtil.webHeaders, 2);
         Logu.d("ReplyApi", "getRepliesLazy " + (useWbi ? "wbi" : "nowbi") + " type=" + type + " oid=" + oid + " sort=" + sort + " offset=" + pagination);
 
+        String endpoint = path + "?type=" + type + "&oid=" + oid + "&mode=" + sort
+                + (TextUtils.isEmpty(pagination) ? "" : "&offset=" + pagination);
         int code = root.optInt("code", -1);
         if (code != 0) {
             String msg = root.optString("message", "");
             Logu.w("ReplyApi", "getRepliesLazy api error code=" + code + " msg=" + msg);
-            return ReplyResult.apiError(code, msg);
+            ReplyResult err = ReplyResult.apiError(code, msg);
+            err.endpoint = endpoint;
+            err.detail = "endpoint=" + endpoint + "\n\nB站返回：\n" + truncateForDetail(root.toString());
+            return err;
         }
         JSONObject data = root.optJSONObject("data");
-        if (data == null) return ReplyResult.netError("data 字段缺失");
+        if (data == null) {
+            ReplyResult err = ReplyResult.netError("data 字段缺失");
+            err.endpoint = endpoint;
+            err.detail = "endpoint=" + endpoint + "\n\nB站返回：\n" + truncateForDetail(root.toString());
+            return err;
+        }
         JSONObject cursor = data.optJSONObject("cursor");
-        if (cursor == null) return ReplyResult.netError("cursor 字段缺失");
+        if (cursor == null) {
+            ReplyResult err = ReplyResult.netError("cursor 字段缺失");
+            err.endpoint = endpoint;
+            err.detail = "endpoint=" + endpoint + "\n\nB站返回：\n" + truncateForDetail(root.toString());
+            return err;
+        }
 
         boolean isBegin = cursor.optBoolean("is_begin", false);
         boolean isEnd = cursor.optBoolean("is_end", false);
@@ -227,8 +246,20 @@ public class ReplyApi {
             JSONArray topReplies = data.optJSONArray("top_replies");
             if (topReplies != null) analyzeReplyArray(true, topReplies, replyArrayList);
         }
-        if (isEnd || TextUtils.isEmpty(nextOffset)) return ReplyResult.end();
-        return ReplyResult.hasMore(nextOffset);
+        ReplyResult ok = (isEnd || TextUtils.isEmpty(nextOffset)) ? ReplyResult.end() : ReplyResult.hasMore(nextOffset);
+        ok.endpoint = endpoint;
+        ok.detail = "endpoint=" + endpoint
+                + "\n本次解析到 " + replyArrayList.size() + " 条"
+                + "\nis_begin=" + isBegin + " is_end=" + isEnd
+                + "\nnext_offset=" + nextOffset
+                + "\n\nB站返回（截断）：\n" + truncateForDetail(root.toString());
+        return ok;
+    }
+
+    /** 调试详情用的原文截断：太长会撑爆详情页，也会把整页 JSON 塞进日志 */
+    private static String truncateForDetail(String s) {
+        if (s == null) return "(null)";
+        return s.length() <= 800 ? s : s.substring(0, 800) + "…（共 " + s.length() + " 字符）";
     }
 
     /**单条路径的重试包装：网络/解析异常时指数退避重试。*/

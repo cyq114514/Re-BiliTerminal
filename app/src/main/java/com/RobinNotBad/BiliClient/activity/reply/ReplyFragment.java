@@ -274,9 +274,10 @@ public class ReplyFragment extends RefreshListFragment {
 
     /**根据 ReplyResult 的状态/API错误码给出用户友好的提示。网络错误时附带详情便于定位。*/
     private void showLoadErrorMsg(ReplyApi.ReplyResult result) {
+        String shortMsg = null;
         if (result.status == ReplyApi.ReplyResult.STATUS_NET_ERROR) {
             //网络/解析失败：WBI 与无签名降级均失败，展示详情便于定位根因
-            MsgUtil.showMsgLong("评论加载失败：" + result.message);
+            shortMsg = "评论加载失败：" + result.message;
         } else if (result.status == ReplyApi.ReplyResult.STATUS_API_ERROR) {
             String tip;
             switch (result.apiCode) {
@@ -286,8 +287,18 @@ public class ReplyFragment extends RefreshListFragment {
                 case 12014: tip = "评论已被风控，请稍后再试"; break;
                 default: tip = "评论加载失败（" + result.apiCode + "）" + (result.message != null && !result.message.isEmpty() ? "：" + result.message : ""); break;
             }
-            MsgUtil.showMsgLong(tip);
+            shortMsg = tip;
         }
+        if (shortMsg == null) return;
+        //「显示详细接口错误」打开时，把接口名、参数、返回码与原始返回片段一并给出（可复制）
+        String detail = "评论区加载失败\n\n"
+                + "type=" + type + "  oid=" + aid + "\n"
+                + "seek=" + seek + "  sort=" + sort + "  pagination=\"" + pagination + "\"\n"
+                + "status=" + result.status + "  apiCode=" + result.apiCode + "\n"
+                + "message=" + result.message + "\n\n"
+                + result.detail;
+        Logu.e("ReplyFragment", detail.replace("\n", " | "));
+        MsgUtil.apiErrorDetail(shortMsg, detail);
     }
 
     //由 EventBus MAIN 线程回调（VideoInfoActivity/DynamicInfoActivity 订阅），所有数据修改必须在主线程，
@@ -405,10 +416,14 @@ public class ReplyFragment extends RefreshListFragment {
                 //"共 N 条评论"是另一个接口给的数字——于是表现成"读得到数量但加载不出来"。
                 //这里在"接口成功、列表为空、但确实说有 N 条"时，换时间排序再拉一次；
                 //拉到了就把排序状态一起切过去，保证后续翻页/下拉刷新的口径一致
+                String altDetail = null;   //换排序重拉的结果，只有"详细接口错误"会用到
                 if (result.isSuccess() && list.isEmpty() && count > 0 && seek <= 0 && sort != 2) {
                     List<Reply> alt = new ArrayList<>();
                     ReplyApi.ReplyResult altResult = ReplyApi.getRepliesLazyWithRetry(aid, seek, "", type, 2, alt);
                     if (generation != loadGeneration) return;
+                    altDetail = "\n\n【改用时间排序重拉】\n"
+                            + "成功=" + altResult.isSuccess() + " 条数=" + alt.size() + "\n"
+                            + altResult.detail;
                     if (altResult.isSuccess() && !alt.isEmpty()) {
                         Logu.d("ReplyFragment", "热度排序返回空但共 " + count + " 条，改用时间排序拉到 " + alt.size() + " 条");
                         list = alt;
@@ -416,6 +431,7 @@ public class ReplyFragment extends RefreshListFragment {
                         sort = 2;
                     }
                 }
+                final String finalAltDetail = altDetail;
                 if (result.isSuccess()) {
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
                     final List<Reply> unique = list;
@@ -437,6 +453,18 @@ public class ReplyFragment extends RefreshListFragment {
                         replyList.addAll(unique);
                         //服务端还没返回的那几条本地评论补回顶部（见 mergeLocalReplies 注释）
                         mergeLocalReplies();
+                        //仍然是空的、但头部说有 N 条：把这次请求的接口与返回原样抛给用户（开关打开时）
+                        if (replyList.isEmpty() && count > 0) {
+                            String detail = "评论区一条都没拉到，但接口说共有 " + count + " 条。\n\n"
+                                    + "type=" + type + "  oid=" + aid + "\n"
+                                    + "seek=" + seek + "  sort=" + sort + "  pagination=\"" + pagination + "\"\n\n"
+                                    + finalResult.detail
+                                    + (finalAltDetail != null ? finalAltDetail : "");
+                            Logu.e("ReplyFragment", detail.replace("\n", " | "));
+                            if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_ERROR_DETAIL, false)) {
+                                MsgUtil.apiErrorDetail("评论区加载不出来（0 条，但显示共 " + count + " 条）", detail);
+                            }
+                        }
                         if (replyAdapter == null) {
                             replyAdapter = createReplyAdapter();
                             replyAdapter.count = count;
