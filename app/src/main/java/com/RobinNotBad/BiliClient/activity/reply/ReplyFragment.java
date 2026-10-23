@@ -60,6 +60,11 @@ public class ReplyFragment extends RefreshListFragment {
     //否则"发完又删掉"的那条会在之后每次刷新时被幽灵般补回来
     private static final long LOCAL_REPLY_MERGE_WINDOW_MS = 5 * 60 * 1000L;
     private final java.util.Map<Long, Long> localPostedAt = new java.util.HashMap<>();
+    //主类型拉不到、但头部说有 N 条时再试的评论类型（动态/专栏/视频共用同一个 oid 的历史遗留：
+    //接口给的 comment_type 和真正存放评论的类型不一定一致，实测专栏里的图片动态就出现过 type=11 全空）
+    private static final int[] FALLBACK_REPLY_TYPES = {17, 12, 1};
+    //"有计数却一条没拉到"的提示只弹一次，避免下拉刷新时反复打扰
+    private boolean emptyHintShown = false;
     //刷新/翻页世代号：refresh 时自增，旧任务的所有回调按世代丢弃，防止旧数据写进新列表造成通知错位
     private int loadGeneration = 0;
     //连续加载空页的总时长上限：弱网+重试瀑布下防止"翻页无反应"无限拖延，超时静默停在当前游标，下次下滑可续传
@@ -431,6 +436,27 @@ public class ReplyFragment extends RefreshListFragment {
                         sort = 2;
                     }
                 }
+                //换了排序还是一条没有：再按其它评论类型试一遍（接口给的 comment_type 未必是评论真正存放的类型）
+                if (result.isSuccess() && list.isEmpty() && count > 0 && seek <= 0) {
+                    for (int altType : FALLBACK_REPLY_TYPES) {
+                        if (altType == type) continue;
+                        List<Reply> typed = new ArrayList<>();
+                        ReplyApi.ReplyResult typedResult = ReplyApi.getRepliesLazyWithRetry(aid, seek, "", altType, sort, typed);
+                        if (generation != loadGeneration) return;
+                        altDetail = (altDetail == null ? "" : altDetail) + "\n\n【改用 type=" + altType + " 重拉】\n"
+                                + "成功=" + typedResult.isSuccess() + " 条数=" + typed.size() + "\n"
+                                + typedResult.detail;
+                        if (typedResult.isSuccess() && !typed.isEmpty()) {
+                            Logu.w("ReplyFragment", "评论类型兜底生效：type " + type + " → " + altType
+                                    + "，拉到 " + typed.size() + " 条");
+                            list = typed;
+                            result = typedResult;
+                            type = altType;
+                            replyType = altType;   //发评论/点赞也要跟着用真正存评论的类型
+                            break;
+                        }
+                    }
+                }
                 final String finalAltDetail = altDetail;
                 if (result.isSuccess()) {
                     ReplyApi.filterDuplicateReplies(list, loadedRpids);
@@ -463,6 +489,11 @@ public class ReplyFragment extends RefreshListFragment {
                             Logu.e("ReplyFragment", detail.replace("\n", " | "));
                             if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_ERROR_DETAIL, false)) {
                                 MsgUtil.apiErrorDetail("评论区加载不出来（0 条，但显示共 " + count + " 条）", detail);
+                            } else if (!emptyHintShown) {
+                                //开关没开时给一句人话，别让用户对着空白页猜（只提示一次）
+                                emptyHintShown = true;
+                                MsgUtil.showMsgLong("评论接口返回 0 条（共 " + count + " 条），"
+                                        + "可能评论仍在审核、已被折叠，或不属于当前评论区");
                             }
                         }
                         if (replyAdapter == null) {
