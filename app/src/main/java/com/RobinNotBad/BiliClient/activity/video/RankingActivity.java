@@ -85,9 +85,34 @@ public class RankingActivity extends InstanceActivity {
                 } else {
                     videoCardAdapter.notifyItemRangeInserted(videoCardList.size() - list.size(), list.size());
                 }
+                showEmptyTip(list.isEmpty() ? "排行榜暂时没有数据，下拉重试" : null);
             });
         } catch (Exception e) {
-            runOnUiThread(() -> MsgUtil.err(e));
+            runOnUiThread(() -> {
+                MsgUtil.err(e);
+                swipeRefreshLayout.setRefreshing(false);
+                refreshing = false;
+                //首次加载就失败时适配器还没建过：这里补上，否则下次下拉会在
+                //videoCardAdapter.notifyItemRangeRemoved 上空指针
+                if (firstRefresh) {
+                    firstRefresh = false;
+                    videoCardAdapter = new VideoCardAdapter(this, videoCardList);
+                    recyclerView.setAdapter(videoCardAdapter);
+                }
+                showEmptyTip("排行榜加载失败，下拉重试");
+            });
+        }
+    }
+
+    /** tip 为 null 时隐藏空态提示 */
+    private void showEmptyTip(String tip) {
+        TextView emptyTip = findViewById(R.id.emptyTip);
+        if (emptyTip == null) return;
+        if (tip == null) {
+            emptyTip.setVisibility(android.view.View.GONE);
+        } else {
+            emptyTip.setText(tip);
+            emptyTip.setVisibility(android.view.View.VISIBLE);
         }
     }
 }
