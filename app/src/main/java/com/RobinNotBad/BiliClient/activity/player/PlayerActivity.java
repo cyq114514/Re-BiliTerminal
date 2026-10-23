@@ -296,6 +296,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private GestureDetector doubleTapGestureDetector;
     private float previousX, previousY;
     private boolean gesture_moved, gesture_scaled, gesture_click_disabled;
+    //横滑调进度：单指水平拖动超过阈值才接管；画面被放大时让位给"拖动画布"（videoMoveBy）
+    private boolean seekDragActive = false;
+    private float seekDragStartX, seekDragStartY;
+    private long seekDragStartPos, seekDragTargetPos, seekDragSpanMs;
     private float video_origX, video_origY;
     private long timestamp_click;
     private long doubleTapSeekTimestamp;
@@ -727,6 +731,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (doubleTapSeekEnabled && doubleTapGestureDetector != null) {
                     doubleTapGestureDetector.onTouchEvent(event);
                 }
+                //横滑调进度优先：被它接管时后续的缩放/移动/单击都不再处理
+                if (handleSeekDrag(event)) return false;
                 int action = event.getActionMasked();
                 int pointerCount = event.getPointerCount();
                 boolean singleTouch = pointerCount == 1;
@@ -833,6 +839,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (doubleTapSeekEnabled && doubleTapGestureDetector != null) {
                     doubleTapGestureDetector.onTouchEvent(motionEvent);
                 }
+                //横滑调进度（不允许缩放的分支）：同样优先接管
+                if (handleSeekDrag(motionEvent)) return false;
                 //空降弹幕：同上，这里是不允许缩放时的分支
                 if (motionEvent.getAction() == MotionEvent.ACTION_UP && !gesture_moved && !gesture_scaled
                         && tryAirborneDanmaku(motionEvent)) {
@@ -920,6 +928,127 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             else
                 hidecon.run();
         }
+    }
+
+    // ---------------------------------------------------------------- 横滑调进度
+
+    /**
+     * 单指左右滑动调进度。
+     *
+     * <p>返回 true 表示这次事件已被进度拖动接管，调用方不要再走缩放/移动/单击那一套。
+     *
+     * <p>接管条件：单指、未放大画面、不是长按 3x、不是双指缩放；水平位移先超过 8dp，
+     * 且横向位移要达到纵向的 1.5 倍（防止斜着滑时误触）。放大画面后单指拖动仍然是拖动画布，
+     * 否则"缩放后想挪画面"就没法用了。
+     *
+     * <p>按下时记住当前播放位置，拖动中只更新提示文字，**松手才真正 seek**——
+     * 边拖边 seek 会让播放器不停重建缓冲，手表上直接卡成幻灯片。
+     */
+    private boolean handleSeekDrag(MotionEvent event) {
+        if (!SharedPreferencesUtil.getBoolean("player_swipe_seek", true)) return false;
+        if (isLiveMode || !isPrepared || ijkPlayer == null) return false;
+        final int action = event.getActionMasked();
+
+        if (action == MotionEvent.ACTION_DOWN) {
+            seekDragActive = false;
+            seekDragStartX = event.getX(0);
+            seekDragStartY = event.getY(0);
+            seekDragStartPos = video_now;
+            return false;
+        }
+
+        if (action == MotionEvent.ACTION_MOVE) {
+            if (event.getPointerCount() != 1) {    //中途多指：退出拖动状态，交给缩放分支
+                if (seekDragActive) {
+                    seekDragActive = false;
+                    hideVolume.run();
+                }
+                return false;
+            }
+            if (onLongClick || gesture_scaled) return false;
+            float dx = event.getX(0) - seekDragStartX;
+            float dy = event.getY(0) - seekDragStartY;
+            if (!seekDragActive) {
+                float slop = ToolsUtil.dp2px(8f);
+                if (Math.abs(dx) < slop || Math.abs(dx) < Math.abs(dy) * 1.5f) return false;
+                if (isVideoZoomed()) return false;
+                seekDragActive = true;
+                gesture_click_disabled = true;   //别让松手后的那次单击把控制栏切走
+                layout_control.removeCallbacks(hidecon);
+                seekDragSpanMs = computeSeekSpanMs();
+                Logu.d("gesture", "横滑调进度开始 pos=" + seekDragStartPos + " span=" + seekDragSpanMs);
+            }
+            long duration = currentDurationMs();
+            long target = seekDragStartPos
+                    + (long) (dx / Math.max(1f, layout_control.getWidth()) * seekDragSpanMs);
+            if (target < 0) target = 0;
+            if (duration > 0 && target > duration) target = duration;
+            seekDragTargetPos = target;
+            showSeekDragHint(duration);
+            return true;
+        }
+
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            if (!seekDragActive) return false;
+            seekDragActive = false;
+            if (action == MotionEvent.ACTION_UP) {
+                seekToPosition(seekDragTargetPos);
+                showCenterText("已跳转到 " + StringUtil.toTime((int) (seekDragTargetPos / 1000)));
+                Logu.d("gesture", "横滑调进度结束 target=" + seekDragTargetPos);
+            } else {
+                hideVolume.run();
+            }
+            gesture_click_disabled = true;
+            autohideReset();
+            return true;
+        }
+        return seekDragActive;
+    }
+
+    /** 满屏宽度对应的可拖动时长：短视频整屏就是全片，长视频按 1/6 且夹在 30s~300s */
+    private long computeSeekSpanMs() {
+        long duration = currentDurationMs();
+        if (duration <= 0) return 60000L;
+        return Math.max(30000L, Math.min(300000L, duration / 6));
+    }
+
+    private long currentDurationMs() {
+        long duration = video_all;
+        if (duration <= 0 && ijkPlayer != null) {
+            try {
+                duration = ijkPlayer.getDuration();
+            } catch (Throwable ignored) {
+            }
+        }
+        return Math.max(duration, 0);
+    }
+
+    /** 画面是否被放大过（放大后单指拖动要留给"拖动画布"） */
+    private boolean isVideoZoomed() {
+        return layout_video != null
+                && (layout_video.getScaleX() > 1.02f || layout_video.getScaleY() > 1.02f);
+    }
+
+    /** 拖动中的提示：目标时间 / 总时长（+/- 秒数） */
+    private void showSeekDragHint(long duration) {
+        if (text_volume == null) return;
+        long delta = seekDragTargetPos - seekDragStartPos;
+        String arrow = delta >= 0 ? "快进 " : "快退 ";
+        String text = arrow + StringUtil.toTime((int) (seekDragTargetPos / 1000));
+        if (duration > 0) text += " / " + StringUtil.toTime((int) (duration / 1000));
+        text += "（" + (delta >= 0 ? "+" : "-") + Math.abs(delta) / 1000 + "s）";
+        text_volume.setText(text);
+        text_volume.setVisibility(View.VISIBLE);
+        text_volume.removeCallbacks(hideVolume);
+    }
+
+    /** 中间闪一条提示（1.2 秒后自动消失），用于松手后的"已跳转到 xx" */
+    private void showCenterText(String text) {
+        if (text_volume == null) return;
+        text_volume.setText(text);
+        text_volume.setVisibility(View.VISIBLE);
+        text_volume.removeCallbacks(hideVolume);
+        text_volume.postDelayed(hideVolume, 1200);
     }
 
     private boolean isDoubleTapCenter(MotionEvent event) {

@@ -24,6 +24,9 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
             {
                 add(new SettingSection("switch", "长按倍速", "player_longclick", "", "true"));
                 add(new SettingSection("switch", "双击快进快退", "player_doubletap_seek", "", "false"));
+                add(new SettingSection("switch", "横滑调进度", "player_swipe_seek",
+                        "在播放画面上左右滑动调整进度，松手才跳转；画面放大后单指拖动仍然是拖动画布",
+                        "true"));
                 add(new SettingSection("input_int", "快进快退秒数", "player_doubletap_seek_seconds", "", "10"));
                 add(new SettingSection("switch", "双击优先还原缩放/移动", "player_doubletap_reset_first",
                         "开启后，双击会优先还原视频缩放与位置，再进行播放/暂停切换", "true"));
