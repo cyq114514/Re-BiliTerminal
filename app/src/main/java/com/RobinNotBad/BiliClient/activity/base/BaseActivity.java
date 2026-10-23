@@ -102,8 +102,7 @@ public class BaseActivity extends AppCompatActivity {
                 paddingB += scrH * 0.03;
             window_width = scrW - paddingH * 2;
             window_height = scrH - paddingT - paddingB;
-            View rootView = this.getWindow().getDecorView().getRootView();
-            rootView.setPadding(paddingH, paddingT, paddingH, paddingB);
+            applyContentPadding(paddingH, paddingT, paddingH, paddingB);
         } else {
             window_width = scrW;
             window_height = scrH;
@@ -171,6 +170,28 @@ public class BaseActivity extends AppCompatActivity {
 
     protected void setAmbientBreathing(boolean breathing) {
         if (ambientBackground != null) ambientBackground.setBreathing(breathing);
+    }
+
+    /**
+     * 「界面边距」加到内容容器上，而不是 DecorView。
+     *
+     * <p>氛围背景层与自定义背景底图都是挂在 DecorView 上的装饰层，而 ViewGroup 的子 View
+     * 一律排布在自己的 padding 之内——边距一旦加在 DecorView 上，装饰层就跟着被压进内容区，
+     * 页面四周只剩窗口底色（黑），看上去就是"新版美学 UI 没铺满屏幕"：左右各露出边距宽的黑边，
+     * 圆屏模式下内容区底边还会把左下那圈装饰圆硬切一刀（底部边距比顶部多 3%，切得最明显）。
+     *
+     * <p>把边距下沉到 {@code android.R.id.content}：内容依旧内缩，装饰层恢复整屏铺满。
+     * 另：Snackbar 也改挂到内容容器上（见 {@link #onEvent(SnackEvent)}），否则它会跟着跑到
+     * 贴屏底的位置，在圆屏设备上正好落进"下巴"。
+     */
+    private void applyContentPadding(int left, int top, int right, int bottom) {
+        View content = findViewById(android.R.id.content);
+        if (content == null) {
+            //理论上 super.onCreate 之后内容容器一定存在，兜底退回原来的做法
+            getWindow().getDecorView().getRootView().setPadding(left, top, right, bottom);
+            return;
+        }
+        content.setPadding(left, top, right, bottom);
     }
 
     @Override
@@ -309,7 +330,10 @@ public class BaseActivity extends AppCompatActivity {
     @Subscribe(threadMode = ThreadMode.MAIN, sticky = true)
     public void onEvent(SnackEvent event) {
         if (isDestroyed()) return;
-        MsgUtil.processSnackEvent(event, getWindow().getDecorView().getRootView());
+        //挂到内容容器上而不是 DecorView：内容容器带着「界面边距」的 padding，提示条才会跟着内缩，
+        //不会掉进圆屏设备的下巴里（DecorView 现在没有 padding 了，见 applyContentPadding）
+        View host = findViewById(android.R.id.content);
+        MsgUtil.processSnackEvent(event, host != null ? host : getWindow().getDecorView().getRootView());
     }
 
     protected boolean eventBusEnabled() {
