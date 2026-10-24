@@ -510,6 +510,11 @@
             android:label="人机验证"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.login.AppAuthActivity"
+            android:exported="false"
+            android:label="App 卡片授权"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.message.PrivateMsgActivity"
             android:exported="false"
             android:label="私信"

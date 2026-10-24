@@ -41,4 +41,6 @@
 
     <!-- 自适应弹窗底色：不透明深灰，叠在系统 dim 之上保证长文本可读 -->
     <color name="dialog_bg">#F21C1C1C</color>
+    <!-- 分享面板输入框/「更多」圆底：低不透明度白，压在深色面板上 -->
+    <color name="share_input_bg">#1FFFFFFF</color>
 </resources>

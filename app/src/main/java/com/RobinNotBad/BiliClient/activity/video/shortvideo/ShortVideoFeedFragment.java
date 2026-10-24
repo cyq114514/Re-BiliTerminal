@@ -30,6 +30,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.ListChooseActivity;
+import com.RobinNotBad.BiliClient.activity.message.ShareToMsgDialog;
 import com.RobinNotBad.BiliClient.api.LikeCoinFavApi;
 import com.RobinNotBad.BiliClient.api.PlayerApi;
 import com.RobinNotBad.BiliClient.api.ReplyApi;
@@ -1090,7 +1091,7 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         Intent intent = new Intent(getContext(), ListChooseActivity.class);
         intent.putExtra("title", "更多操作");
         ArrayList<String> options = new ArrayList<>(Arrays.asList(
-                "稍后再看", "投币 1 枚", "分享", "查看视频详情", "不感兴趣"));
+                "稍后再看", "投币 1 枚", "分享", "发送到消息", "查看视频详情", "不感兴趣"));
         intent.putExtra("items", options);
         startActivityForResult(intent, REQ_MORE);
     }
@@ -1133,6 +1134,12 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
                 share.putExtra(Intent.EXTRA_TEXT,
                         item.title + "  https://www.bilibili.com/video/" + (TextUtils.isEmpty(item.bvid) ? ("av" + item.aid) : item.bvid));
                 startActivity(Intent.createChooser(share, "分享视频"));
+                break;
+            }
+            case "发送到消息": {
+                ShareToMsgDialog.newInstance(item.aid, item.bvid, item.title, item.cover,
+                                item.authorName, item.authorMid)
+                        .show(getChildFragmentManager(), "share_to_msg");
                 break;
             }
             case "查看视频详情":

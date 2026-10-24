@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.text.SpannableStringBuilder;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -194,7 +195,9 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                     holder.tipTv.setVisibility(View.GONE);
                     //封面默认可见：复用上一个无 thumb 被 GONE 的 holder 后封面会永久消失
                     holder.videoCover.setVisibility(View.VISIBLE);
-                    long aid = msg.content.getLong("id");
+                    long aid = msg.content.optLong("id", 0);
+                    String cardBvid = msg.content.optString("bvid", "").trim();
+                    int cardSource = msg.content.optInt("source", 0);
 
                     Glide.with(BiliTerminal.context)
                             .asDrawable()
@@ -205,11 +208,20 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                             .into(holder.videoCover);
                     if (!msg.content.has("thumb")) holder.videoCover.setVisibility(View.GONE);
 
-                    if (aid < 1000000000) holder.videoCard.setOnClickListener(view -> CenterThreadPool.run(() -> TerminalContext.getInstance().enterOpusDetailPage(context, aid)));
-                    else holder.videoCard.setOnClickListener(view -> CenterThreadPool.run(() -> TerminalContext.getInstance().enterVideoDetailPage(context, aid, "", "video")));
+                    //分享卡片（msg_type=7）带 source=5 或 bvid：老视频的 av 号也可能小于 10 亿，
+                    //不能再用 aid 大小猜"视频/图文"，否则 av170001 会被当成 opus 打开
+                    holder.videoCard.setOnClickListener(view -> CenterThreadPool.run(() -> {
+                        if (cardSource == 5 || !TextUtils.isEmpty(cardBvid)) {
+                            TerminalContext.getInstance().enterVideoDetailPage(context, aid, cardBvid, "video");
+                        } else if (aid >= 1000000000L) {
+                            TerminalContext.getInstance().enterVideoDetailPage(context, aid, "", "video");
+                        } else if (aid > 0) {
+                            TerminalContext.getInstance().enterOpusDetailPage(context, aid);
+                        }
+                    }));
 
-                    holder.upNameTv.setText(msg.content.getString("author"));
-                    holder.videoTitleTv.setText(msg.content.getString("title"));
+                    holder.upNameTv.setText(msg.content.optString("author", ""));
+                    holder.videoTitleTv.setText(msg.content.optString("title", ""));
                     break;
                 case PrivateMessage.TYPE_SYSTEM:
                     holder.tipTv.setVisibility(View.VISIBLE);
@@ -243,7 +255,7 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
                 }
                 return false;
             });
-        } catch (JSONException err) {
+        } catch (Exception err) {
             Log.e(PrivateMessage.class.getName(), err.toString());
         }
     }

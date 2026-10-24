@@ -12,17 +12,25 @@ import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.activity.SplashActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.util.AccountManager;
+import com.RobinNotBad.BiliClient.util.AppAuthStore;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.QRCodeUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.UUID;
 
 import okhttp3.Response;
 
@@ -215,7 +223,190 @@ public class LoginApi {
         //多账号：凭证全部落盘后快照进账号列表（内部有网络请求，丢到线程池避免拖慢跳转）
         CenterThreadPool.run(AccountManager::saveCurrentAccount);
 
+        //「只登录一次」：Web 登录已落 Cookie，后台用当前 Cookie 静默确认一个 TV 二维码，
+        //直接把 access_key 也换回来（PiliPlus 的登录本身就是 TV 扫码，故一次扫码两样都有；
+        //这里保留 Web 登录/续期的同时补上 access_key）。失败不打扰用户，后续可手动扫码授权。
+        final long appAuthMid = loggedInMid;
+        CenterThreadPool.run(() -> {
+            try {
+                acquireAccessKeyFromCookie(appAuthMid);
+            } catch (Throwable ignored) {
+            }
+        });
+
         startSplash(context);
+    }
+
+    // ---------------------------------------------------------------- App/TV 扫码（获取 access_key）
+
+    /** 官方 HD 客户端 appkey/appsec（公开内置值，PiliPlus 同款），只用于换取 App access_key */
+    private static final String APP_KEY = "dfca71928277209b";
+    private static final String APP_SEC = "b5475a8825547a4fc26c7d518eaaa02e";
+    private static final String APP_UA =
+            "Mozilla/5.0 BiliDroid/2.0.1 (bbcallen@gmail.com) os/android model/android_hd "
+                    + "mobi_app/android_hd build/2001100 channel/master innerVer/2001100 "
+                    + "osVer/15 network/2";
+    private static final String TV_AUTH_CODE_URL =
+            "https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code";
+    private static final String TV_POLL_URL =
+            "https://passport.bilibili.com/x/passport-tv-login/qrcode/poll";
+
+    /**
+     * 申请 TV/App 扫码二维码。返回完整 JSON（code/data.auth_code/data.url）。
+     * 与网页扫码不同，这条链路成功后能拿到 access_key，App gRPC 发卡片需要它。
+     */
+    public static JSONObject getTVAuthCode() throws IOException, JSONException {
+        LinkedHashMap<String, String> params = new LinkedHashMap<>();
+        params.put("local_id", "0");
+        params.put("platform", "android");
+        params.put("mobi_app", "android_hd");
+        String query = signAppParams(params);
+        Response response = NetWorkUtil.post(TV_AUTH_CODE_URL + "?" + query, "", tvHeaders());
+        try {
+            return new JSONObject(response.body().string());
+        } finally {
+            response.close();
+        }
+    }
+
+    /**
+     * 轮询 TV/App 扫码状态。code=0 时 data.token_info.access_token 即 access_key；
+     * 86038 过期 / 86090 已扫码待确认 / 86101 未扫码。
+     */
+    public static JSONObject pollTVAuthCode(String authCode) throws IOException, JSONException {
+        LinkedHashMap<String, String> params = new LinkedHashMap<>();
+        params.put("auth_code", authCode);
+        params.put("local_id", "0");
+        String query = signAppParams(params);
+        Response response = NetWorkUtil.post(TV_POLL_URL + "?" + query, "", tvHeaders());
+        try {
+            return new JSONObject(response.body().string());
+        } finally {
+            response.close();
+        }
+    }
+
+    /** 用当前 Web Cookie 确认 TV 二维码（等价于用户在手机上点"确认登录"） */
+    private static JSONObject confirmTVAuthCode(String authCode) throws IOException, JSONException {
+        String cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "");
+        String csrf = NetWorkUtil.getLoginCsrf();
+        String form = new NetWorkUtil.FormData()
+                .put("auth_code", authCode)
+                .put("csrf", csrf)
+                .put("scanning_type", "1")
+                .toString();
+        ArrayList<String> headers = tvHeaders();
+        headers.add("Cookie");
+        headers.add(cookies);
+        headers.add("Origin");
+        headers.add("https://passport.bilibili.com");
+        headers.add("Referer");
+        headers.add("https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/auth?auth_code="
+                + authCode + "&mobi_app=android_hd");
+        Response response = NetWorkUtil.post(
+                "https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/confirm",
+                form, headers);
+        try {
+            return new JSONObject(response.body().string());
+        } finally {
+            response.close();
+        }
+    }
+
+    /**
+     * 用当前登录 Cookie 静默换取 App access_key（不弹二维码）。
+     *
+     * <p>流程：申请 TV 二维码 → 用 Web Cookie + csrf 调 H5 confirm（模拟用户点确认）
+     * → 轮询拿到 token_info.access_token。T 站 H5 的"确认 TV 登录"就是这个接口，
+     * 因此已登录的 Web 会话可以直接完成，不需要第二次扫码。
+     *
+     * <p><b>必须在后台线程调用</b>（内部有网络请求与短 sleep）。
+     *
+     * @return true 表示已拿到并保存 access_key（或本来就有）
+     */
+    public static boolean acquireAccessKeyFromCookie(long mid) {
+        if (mid <= 0) return false;
+        if (AppAuthStore.hasAccessKey(mid)) return true;
+        if (TextUtils.isEmpty(SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")))
+            return false;
+        if (TextUtils.isEmpty(NetWorkUtil.getLoginCsrf())) return false;
+        try {
+            JSONObject qr = getTVAuthCode();
+            if (qr.optInt("code", -1) != 0) return false;
+            JSONObject qrData = qr.optJSONObject("data");
+            String authCode = qrData == null ? "" : qrData.optString("auth_code", "");
+            if (authCode.isEmpty()) return false;
+
+            JSONObject confirm = confirmTVAuthCode(authCode);
+            if (confirm.optInt("code", -1) != 0) return false;
+
+            for (int i = 0; i < 6; i++) {
+                JSONObject poll = pollTVAuthCode(authCode);
+                int code = poll.optInt("code", -1);
+                if (code == 0) {
+                    JSONObject data = poll.optJSONObject("data");
+                    JSONObject token = data == null ? null : data.optJSONObject("token_info");
+                    String access = token == null ? "" : token.optString("access_token", "");
+                    String refresh = token == null ? "" : token.optString("refresh_token", "");
+                    if (access.isEmpty() && data != null) access = data.optString("access_token", "");
+                    if (refresh.isEmpty() && data != null) refresh = data.optString("refresh_token", "");
+                    long pollMid = data == null ? 0 : data.optLong("mid", 0);
+                    if (pollMid <= 0 && token != null) pollMid = token.optLong("mid", 0);
+                    if (access.isEmpty()) return false;
+                    if (pollMid > 0 && pollMid != mid) return false;
+                    AppAuthStore.save(mid, access, refresh);
+                    return true;
+                }
+                if (code == 86039 || code == 86090) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                    continue;
+                }
+                return false;
+            }
+        } catch (Throwable ignored) {
+            //静默失败：不影响登录，用户仍可在分享面板走二维码授权
+        }
+        return false;
+    }
+
+    /** App 接口签名：参数按 key 排序拼接 + appsec 做 MD5；sign 附在最后 */
+    private static String signAppParams(LinkedHashMap<String, String> params) throws IOException {
+        params.put("appkey", APP_KEY);
+        params.put("ts", String.valueOf(System.currentTimeMillis() / 1000));
+        List<String> keys = new ArrayList<>(params.keySet());
+        Collections.sort(keys);
+        StringBuilder raw = new StringBuilder();
+        for (String key : keys) {
+            String value = params.get(key);
+            if (value == null) continue;
+            if (raw.length() > 0) raw.append('&');
+            raw.append(URLEncoder.encode(key, "UTF-8")).append('=')
+                    .append(URLEncoder.encode(value, "UTF-8"));
+        }
+        return raw + "&sign=" + ToolsUtil.md5(raw + APP_SEC);
+    }
+
+    private static ArrayList<String> tvHeaders() {
+        String buvid = NetWorkUtil.getInfoFromCookie("buvid3",
+                SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+        if (TextUtils.isEmpty(buvid)) buvid = SharedPreferencesUtil.getString("buvid3", "");
+        if (TextUtils.isEmpty(buvid))
+            buvid = "XY" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+        ArrayList<String> headers = new ArrayList<>();
+        headers.add("User-Agent");
+        headers.add(APP_UA);
+        headers.add("buvid");
+        headers.add(buvid);
+        headers.add("env");
+        headers.add("prod");
+        headers.add("app-key");
+        headers.add("android_hd");
+        return headers;
     }
 
     /**

@@ -204,6 +204,8 @@ public class CookieRefresher {
      * 清空本地登录态。只在服务端明确判定凭证失效时调用，不可用于「刷新失败」的兜底。
      */
     public static void resetLogin() {
+        //App 卡片 access_key 也是账号凭证，网页登录态失效/退出时一并清掉
+        AppAuthStore.clear(SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L));
         SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, 0L);
         SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, "");
         SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, "");

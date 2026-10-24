@@ -37,6 +37,17 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
         this.userList = userList;
     }
 
+    /** 「分享至消息 → 更多」选人模式：只回传选中的用户，不打开用户主页 */
+    public interface OnUserPickListener {
+        void onUserPick(UserInfo user);
+    }
+
+    private OnUserPickListener onUserPickListener;
+
+    public void setOnUserPickListener(OnUserPickListener listener) {
+        this.onUserPickListener = listener;
+    }
+
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -76,13 +87,18 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
             holder.desc.setSingleLine(true);
         }
 
-        if (user.mid != -1) {
+        if (onUserPickListener != null) {
+            holder.itemView.setOnClickListener(view -> onUserPickListener.onUserPick(user));
+        } else if (user.mid != -1) {
             holder.itemView.setOnClickListener(view -> {
                 Intent intent = new Intent()
                         .setClass(context, UserInfoActivity.class)
                         .putExtra("mid", user.mid);
                 context.startActivity(intent);
             });
+        } else {
+            //复用 Holder 时必须清掉上一条数据的点击回调
+            holder.itemView.setOnClickListener(null);
         }
     }
 

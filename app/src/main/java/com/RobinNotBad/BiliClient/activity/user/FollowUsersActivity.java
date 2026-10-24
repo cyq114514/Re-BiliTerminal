@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.activity.user;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -29,6 +30,8 @@ public class FollowUsersActivity extends RefreshListActivity {
     private FollowGroupAdapter groupAdapter;
     private int mode;
     private boolean groupMode;
+    /** 「分享至消息 → 更多」：点某个用户直接回传，不打开主页 */
+    private boolean pickMode;
 
     @SuppressLint("MissingInflatedId")
     @Override
@@ -37,6 +40,7 @@ public class FollowUsersActivity extends RefreshListActivity {
 
         mode = getIntent().getIntExtra("mode", 0);
         mid = getIntent().getLongExtra("mid", -1);
+        pickMode = getIntent().getBooleanExtra("pick_mode", false);
 
         if (mode < 0 || mode > 1 || mid == -1) {
             finish();
@@ -44,9 +48,11 @@ public class FollowUsersActivity extends RefreshListActivity {
         }
 
         long currentUserMid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0);
-        groupMode = mode == 0 && mid == currentUserMid && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.FOLLOW_GROUP_MODE, false);
+        //选人模式固定用平铺列表（分组模式是折叠面板，点选语义不同）
+        groupMode = !pickMode && mode == 0 && mid == currentUserMid
+                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.FOLLOW_GROUP_MODE, false);
 
-        setPageName(mode == 0 ? "关注列表" : "粉丝列表");
+        setPageName(pickMode ? "选择用户" : (mode == 0 ? "关注列表" : "粉丝列表"));
 
         recyclerView.setHasFixedSize(true);
 
@@ -64,6 +70,16 @@ public class FollowUsersActivity extends RefreshListActivity {
             try {
                 int result = mode == 0 ? FollowApi.getFollowingList(mid, page, userList) : FollowApi.getFollowerList(mid, page, userList);
                 adapter = new UserListAdapter(this, userList);
+                if (pickMode) {
+                    adapter.setOnUserPickListener(user -> {
+                        Intent data = new Intent();
+                        data.putExtra("mid", user.mid);
+                        data.putExtra("name", user.name);
+                        data.putExtra("avatar", user.avatar);
+                        setResult(RESULT_OK, data);
+                        finish();
+                    });
+                }
                 setOnLoadMoreListener(this::continueLoading);
                 setRefreshing(false);
                 setAdapter(adapter);

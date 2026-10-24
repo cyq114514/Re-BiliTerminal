@@ -55,4 +55,26 @@
     <style name="Theme.NoSwipe.AppCompat" parent="Theme.BiliClient">
         <item name="android:windowSwipeToDismiss" tools:ignore="NewApi">false</item>
     </style>
+
+    <!-- 「分享至消息」底部面板：全应用深色，默认的 Light.BottomSheetDialog 会白底 -->
+    <style name="Theme.BiliClient.BottomSheet" parent="Theme.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.BiliClient.BottomSheet</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/bgblack</item>
+        <item name="colorPrimary">@color/textwhite</item>
+        <item name="colorOnPrimary">@color/textwhite</item>
+    </style>
+
+    <style name="Widget.BiliClient.BottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="backgroundTint">@color/dialog_bg</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.BiliClient.BottomSheet</item>
+    </style>
+
+    <style name="ShapeAppearance.BiliClient.BottomSheet" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
 </resources>

@@ -158,6 +158,9 @@ public class MySpaceActivity extends InstanceActivity {
                         logout.setOnClickListener(view -> {
                             if (confirmLogout) {
                                 CenterThreadPool.run(UserInfoApi::exitLogin);
+                                //App 卡片 access_key 也是账号凭证：退出登录时一并清掉
+                                com.RobinNotBad.BiliClient.util.AppAuthStore.clear(
+                                        SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
                                 SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookies);
                                 SharedPreferencesUtil.removeValue(SharedPreferencesUtil.mid);
                                 SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf);

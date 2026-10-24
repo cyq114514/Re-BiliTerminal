@@ -320,16 +320,23 @@ public class MenuActivity extends BaseActivity {
     }
 
     private void killAndJump(String name) {
-        if (btnNames.containsKey(name) && !Objects.equals(name, from)) {
-            InstanceActivity instance = BiliTerminal.getInstanceActivityOnTop();
-            if (instance != null && instance.getLifecycle().getCurrentState() != Lifecycle.State.DESTROYED)
-                instance.finish();
+        if (btnNames.containsKey(name)) {
+            Class<? extends InstanceActivity> target = Objects.requireNonNull(btnNames.get(name)).second;
+            InstanceActivity top = BiliTerminal.getInstanceActivityOnTop();
+            //只有「点的正是菜单打开时所在的那一页，且那一页真的还活着」才只关菜单回旧页。
+            //页面若已 self-finish（如短视频页 exitToMenu），instance 会是已销毁对象或另一页：
+            //此时必须按普通跳转处理，否则只 finish 菜单 → 任务栈为空 → 用户看到应用直接退出。
+            boolean canReturnToExisting = Objects.equals(name, from)
+                    && top != null && !top.isDestroyed() && target.isInstance(top);
+            if (!canReturnToExisting) {
+                if (top != null && !top.isDestroyed()) top.finish();
 
-            Intent intent = new Intent();
-            intent.setClass(MenuActivity.this, Objects.requireNonNull(btnNames.get(name)).second);
-            intent.putExtra("from", name);
-            startActivity(intent);
-            Glide.get(BiliTerminal.context).clearMemory();
+                Intent intent = new Intent();
+                intent.setClass(MenuActivity.this, target);
+                intent.putExtra("from", name);
+                startActivity(intent);
+                Glide.get(BiliTerminal.context).clearMemory();
+            }
         } else {
             switch (name) {
                 case "exit": //退出按钮

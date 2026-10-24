@@ -39,6 +39,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseFragment;
 import com.RobinNotBad.BiliClient.activity.dynamic.send.SendDynamicActivity;
+import com.RobinNotBad.BiliClient.activity.message.ShareToMsgDialog;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.user.WatchLaterActivity;
@@ -58,6 +59,7 @@ import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
@@ -492,20 +494,8 @@ public class VideoInfoFragment extends BaseFragment {
             return true;
         });
 
-        //转发
-        relay.setOnClickListener((view1) -> {
-            Intent intent = new Intent();
-            intent.setClass(requireContext(), SendDynamicActivity.class);
-            //转发自动引用所需信息，SendDynamicActivity完成时会原样回传
-            if (!videoInfo.staff.isEmpty()) {
-                intent.putExtra("forwardAuthorName", videoInfo.staff.get(0).name);
-                intent.putExtra("forwardAuthorMid", videoInfo.staff.get(0).mid);
-            }
-            intent.putExtra("forwardContentText", videoInfo.title);
-            //标记转发内容，SendDynamicActivity据此显示视频预览卡并隐藏带图/发布选项入口
-            TerminalContext.getInstance().setForwardContent(videoInfo);
-            writeDynamicLauncher.launch(intent);
-        });
+        //转发：点击后二选一（转发动态 / 发送到消息），长按仍是复制链接
+        relay.setOnClickListener((view1) -> showForwardChooser());
         relay.setOnLongClickListener(v -> {
             StringUtil.copyText(requireContext(), "https://www.bilibili.com/" + videoInfo.bvid);
             MsgUtil.showMsg("视频完整链接已复制");
@@ -580,6 +570,51 @@ public class VideoInfoFragment extends BaseFragment {
             }
             return false;
         });
+    }
+
+    /**
+     * 点击「转发」后的二选一菜单。
+     * 原来点击直接进动态转发页，现在先让用户选：转发动态 / 发送到消息。
+     */
+    private void showForwardChooser() {
+        if (!isAdded() || videoInfo == null) return;
+        //复用检查更新同款自适应弹窗：深色卡片、圆角、字号放大/圆屏下按钮不会被裁
+        new AdaptiveDialog.Builder(requireContext())
+                .setTitle("转发")
+                .setSingleChoiceItems(new String[]{"转发动态", "发送到消息"}, -1,
+                        (dialog, which) -> {
+                            dialog.dismiss();
+                            if (which == 0) relayToDynamic();
+                            else showShareToMsg();
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 转发到动态（原「转发」按钮的逻辑，原样保留） */
+    private void relayToDynamic() {
+        if (!isAdded() || videoInfo == null) return;
+        Intent intent = new Intent();
+        intent.setClass(requireContext(), SendDynamicActivity.class);
+        //转发自动引用所需信息，SendDynamicActivity完成时会原样回传
+        if (!videoInfo.staff.isEmpty()) {
+            intent.putExtra("forwardAuthorName", videoInfo.staff.get(0).name);
+            intent.putExtra("forwardAuthorMid", videoInfo.staff.get(0).mid);
+        }
+        intent.putExtra("forwardContentText", videoInfo.title);
+        //标记转发内容，SendDynamicActivity据此显示视频预览卡并隐藏带图/发布选项入口
+        TerminalContext.getInstance().setForwardContent(videoInfo);
+        writeDynamicLauncher.launch(intent);
+    }
+
+    /** 打开「分享至消息」底部面板：不离开当前页面，发送后也留在这里 */
+    private void showShareToMsg() {
+        if (!isAdded() || videoInfo == null) return;
+        String authorName = videoInfo.staff.isEmpty() ? "" : videoInfo.staff.get(0).name;
+        long authorMid = videoInfo.staff.isEmpty() ? 0 : videoInfo.staff.get(0).mid;
+        ShareToMsgDialog.newInstance(videoInfo.aid, videoInfo.bvid, videoInfo.title,
+                        videoInfo.cover, authorName, authorMid)
+                .show(getChildFragmentManager(), "share_to_msg");
     }
 
     private void cancelTripleAction() {

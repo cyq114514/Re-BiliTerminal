@@ -135,8 +135,9 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
      */
     private void exitToMenu() {
         try {
-            //InstanceActivity.menuClick：startActivity(MenuActivity) + 转场
-            menuClick.run();
+            //本页马上 finish，菜单里没有"旧的短视频页"可回；不能再继承本页的 from，
+            //否则菜单点「短视频」会命中 killAndJump 的回旧页分支，只关菜单 → 任务栈清空
+            openMenuWithoutFrom();
         } catch (Throwable e) {
             android.util.Log.w("short-video", "回菜单失败：" + e);
         }
