@@ -203,6 +203,18 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px;
 }
 .branch .links { margin-top: auto; display: flex; gap: 16px; font-size: 13px; }
+
+/* ---------- 友情链接 ---------- */
+.friend-links { margin-top: 26px; }
+.friend-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--accent); letter-spacing: .06em;
+  margin: 0 0 12px;
+}
+.friend-title::before {
+  content: ""; width: 3px; height: 14px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent), transparent);
+}
 .branch .links .disabled { color: #5a5a63; cursor: not-allowed; }
 .branch .here {
   position: absolute; top: 14px; right: 14px; font-size: 11px;
