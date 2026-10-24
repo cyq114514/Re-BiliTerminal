@@ -34,8 +34,13 @@ public class ImageViewerActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        //必须在 super.onCreate 之前：基类 onCreate 会调 findViewById（界面边距那条路径），
+        //而 AppCompat 的 findViewById 会强制安装 subDecor，要求主题是 AppCompat 后代；
+        //看图页在 Manifest 里挂的是 Theme.NoSwipe（parent 是 android:Theme.Black），
+        //放在 super 之后等于"基类在旧主题下先崩了"，用户侧表现就是点开图片直接闪退。
+        //Manifest 主题保持不变：它仍用于排除氛围背景/自定义底图（读的是清单里的 theme）。
         setTheme(R.style.Theme_BiliClient);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_image_viewer);
         Intent intent = getIntent();
         ArrayList<String> imageList = intent.getStringArrayListExtra("imageList");

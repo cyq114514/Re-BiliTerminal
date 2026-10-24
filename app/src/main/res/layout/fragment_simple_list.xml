@@ -15,10 +15,12 @@
         android:src="@mipmap/loading_2233"
         android:visibility="gone" />
 
+    <!-- FrameLayout 里用 layout_gravity 居中，高度必须 wrap_content（原因见 activity_simple_refresh） -->
     <TextView
         android:id="@+id/emptyTip"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
         android:text="啥都木有~"
         android:textAlignment="center"
         android:gravity="center"

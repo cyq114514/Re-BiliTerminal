@@ -28,6 +28,12 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                         "在播放画面上左右滑动调整进度，松手才跳转；画面放大后单指拖动仍然是拖动画布",
                         "true"));
                 add(new SettingSection("input_int", "快进快退秒数", "player_doubletap_seek_seconds", "", "10"));
+                add(new SettingSection("switch", "显示快进快退按钮", "player_seek_buttons",
+                        "在播放页左侧（倍速那一列）显示 ±N 秒按钮；关掉后只保留双击/横滑调进度", "true"));
+                //无极调音：和播放页长按音量按钮弹出的滑条共用 player_volume_gain（0~100 的百分比）
+                add(new SettingSection("input_float", "无极调音（0-100）", "player_volume_gain",
+                        "软件增益，100 为原音量。系统音量档位很少的设备（手表/点读笔）用它可以调出 35 这种精确档位；"
+                                + "与播放页长按音量按钮打开的滑条是同一个值", "100"));
                 add(new SettingSection("switch", "双击优先还原缩放/移动", "player_doubletap_reset_first",
                         "开启后，双击会优先还原视频缩放与位置，再进行播放/暂停切换", "true"));
                 add(new SettingSection("switch", "洗脑循环", "player_loop", "", "false"));
@@ -116,6 +122,9 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "显示分P按钮", "player_ui_showPageBtn",
                         "", "true"));
                 add(new SettingSection("input_float", "互动选项字体大小", "player_interaction_choice_size", "", "17.0"));
+                add(new SettingSection("switch", "互动选项自动竖屏", "player_interaction_portrait",
+                        "横屏播放互动视频时，弹出选项的瞬间自动转成竖屏，选完再转回横屏。"
+                                + "低分辨率设备横屏放不下全部选项时很有用（页面本来就是竖屏则不动）", "false"));
             }
         };
 

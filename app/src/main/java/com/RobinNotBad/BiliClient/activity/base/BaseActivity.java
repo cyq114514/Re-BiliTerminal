@@ -183,7 +183,23 @@ public class BaseActivity extends AppCompatActivity {
      * 贴屏底的位置，在圆屏设备上正好落进"下巴"。
      */
     private void applyContentPadding(int left, int top, int right, int bottom) {
-        View content = findViewById(android.R.id.content);
+        View content = null;
+        try {
+            //AppCompat 页面靠这一次 findViewById 把 subDecor 装好（后面的 setContentView 才有地方放）。
+            //但主题不是 AppCompat 后代时它会抛 IllegalStateException（看图页那种 NoSwipe 页），
+            //一个"界面边距"设置就能让整页启动即崩——这里必须兜住。
+            content = findViewById(android.R.id.content);
+        } catch (Throwable t) {
+            Logu.e("padding", "取内容容器失败（主题可能不是 AppCompat）：" + t);
+        }
+        if (content == null) {
+            try {
+                //退化路径：不经主题代理，直接从窗口取内容容器。非 AppCompat 页面本来也就只有这一个。
+                View decor = getWindow() != null ? getWindow().getDecorView() : null;
+                if (decor != null) content = decor.findViewById(android.R.id.content);
+            } catch (Throwable ignored) {
+            }
+        }
         if (content == null) {
             //理论上 super.onCreate 之后内容容器一定存在，兜底退回原来的做法
             getWindow().getDecorView().getRootView().setPadding(left, top, right, bottom);

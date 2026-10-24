@@ -150,16 +150,25 @@ public class SplashActivity extends Activity {
                 }
             }
 
-            // ===== 第二步：本地决策完成就立刻进首屏（不再 postDelayed 100ms） =====
+            //「启动时等待请求完成」：默认关闭，开屏秒进（1.2.3 起的行为）。
+            //打开后推迟进首屏，等下面第三步的三项启动校验跑完 + 开屏打字动画播完再走，
+            //弱网/断网最多多停 6 秒，不会把人扣在开屏页上。
+            final boolean waitForRequests = SharedPreferencesUtil.getBoolean("splash_wait_requests", false);
+            if (waitForRequests) {
+                waitStartupChecksAndSplash(splashStartMs);
+                if (isFinishing() || isDestroyed()) return;
+            }
+
+            // ===== 第二步：本地决策完成就进首屏（不再 postDelayed 100ms） =====
             if (resumeIntents != null && !resumeIntents.isEmpty()) startRestoreChain(resumeIntents);
             else startMainPage();
 
             Log.d("startup", "进入首屏：距离开屏 onCreate "
                     + (android.os.SystemClock.uptimeMillis() - splashStartMs) + "ms（online=" + online
-                    + "，bootstrap=" + needCookieBootstrap + "）");
+                    + "，bootstrap=" + needCookieBootstrap + "，wait=" + waitForRequests + "）");
 
-            // ===== 第三步：网络校验全部挪到首屏之后，不再挡开屏 =====
-            CenterThreadPool.run(this::runStartupChecks);
+            // ===== 第三步：网络校验全部挪到首屏之后，不再挡开屏（等待模式下这里已经跑过了） =====
+            if (!waitForRequests) CenterThreadPool.run(this::runStartupChecks);
         });
     }
 
@@ -272,6 +281,37 @@ public class SplashActivity extends Activity {
         } catch (Throwable t) {
             Log.e("startup", "更新检查失败", t);
         }
+    }
+
+    /**
+     * 「启动时等待请求完成」：先把启动校验（Cookie 续期 / Cookie 刷新 / 终端接口）跑完，
+     * 再保证开屏打字动画播完，然后才进首屏。
+     *
+     * <p>校验放到临时线程并带硬超时：三个请求串行、各自还有 OkHttp 自己的超时，
+     * 弱网下能拖到几十秒。超时就先走，校验线程继续在后台跑完（只往日志里留痕），
+     * 绝不能因为一个接口把用户扣在开屏页。
+     *
+     * <p>动画时长按「每个字 100ms、封顶 4 秒」估算，与 onCreate 里的打字 Timer 同一口径。
+     */
+    private void waitStartupChecksAndSplash(long splashStartMs) {
+        final long requestTimeoutMs = 6000L;
+        try {
+            Thread worker = new Thread(this::runStartupChecks, "splash-wait-checks");
+            worker.start();
+            worker.join(requestTimeoutMs);
+        } catch (Throwable t) {
+            Log.e("startup", "等待启动校验失败", t);
+        }
+        long animMs = Math.min(4000L, splashText.length() * 100L + 200L);
+        long remain = animMs - (android.os.SystemClock.uptimeMillis() - splashStartMs);
+        if (remain > 0) {
+            try {
+                Thread.sleep(remain);
+            } catch (InterruptedException ignored) {
+            }
+        }
+        Log.d("startup", "等待模式：校验与开屏动画结束，距离开屏 onCreate "
+                + (android.os.SystemClock.uptimeMillis() - splashStartMs) + "ms");
     }
 
     /**

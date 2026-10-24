@@ -67,6 +67,10 @@ public class SearchActivity extends InstanceActivity {
     private int suggestionGeneration;
     private String defaultSearchContent;
     private boolean defaultSearchContentEnabled;
+    //热搜开关：默认关闭。用户反馈「点搜索框热搜卡把搜索历史盖住、找不到自己的历史」，
+    //所以默认把位置让给历史记录；想要热搜的去 设置→偏好设置→功能 打开。
+    //关闭时连接口都不请求（省一次网络），空输入时永远显示历史卡。
+    private boolean hotSearchEnabled;
 
     //搜索结果只存在于内存（Fragment 的列表 + Adapter），页面被系统回收重建时必然丢失；
     //关键词本身有两条持久化路径：EditText 的 freezesText（savedInstanceState）与搜索历史（SP）。
@@ -241,7 +245,9 @@ public class SearchActivity extends InstanceActivity {
             suggestionsRecyclerview.setAdapter(searchSuggestionsAdapter);
 
             //热搜词：进页拉一次；输入框为空时与历史记录一同展示，点击复用建议列表的搜索逻辑
-            CenterThreadPool.run(() -> {
+            //（开关关闭就完全不请求，空输入时只显示搜索历史）
+            hotSearchEnabled = SharedPreferencesUtil.getBoolean("search_hot_enable", false);
+            if (hotSearchEnabled) CenterThreadPool.run(() -> {
                 try {
                     ArrayList<String> hot = SearchApi.getHotSearch();
                     runOnUiThread(() -> {
@@ -401,7 +407,8 @@ public class SearchActivity extends InstanceActivity {
      * 否则不透明底板会把下面的搜索结果盖掉。
      */
     private void showKeywordPanel() {
-        if (!hotSearchList.isEmpty()) {
+        //热搜开关关闭时一律显示历史卡：两张卡同位叠放互斥，给历史让位就等于关掉热搜面板
+        if (hotSearchEnabled && !hotSearchList.isEmpty()) {
             showHotSearch();
         } else {
             historyRecyclerview.setVisibility(View.VISIBLE);

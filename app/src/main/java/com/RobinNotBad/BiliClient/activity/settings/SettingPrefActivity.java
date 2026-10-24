@@ -43,6 +43,10 @@ public class SettingPrefActivity extends RefreshListActivity {
                         getString(R.string.desc_search_suggestions_enable), "true"));
                 add(new SettingSection("switch", "默认搜索内容", SharedPreferencesUtil.SEARCH_DEFAULT_CONTENT_ENABLE,
                         getString(R.string.desc_search_default_content_enable), "false"));
+                //热搜面板：默认关闭。点搜索框时空输入会优先弹热搜卡，把搜索历史卡盖住（两张卡同位叠放互斥），
+                //「找不到自己的搜索记录」就是它。关闭后连热搜接口都不请求
+                add(new SettingSection("switch", "搜索页显示热搜", "search_hot_enable",
+                        "打开后点搜索框、输入框为空时会弹出热搜词；关闭则只显示自己的搜索历史（默认关闭）", "false"));
                 add(new SettingSection("switch", "识别链接", "link_enable", getString(R.string.desc_link_enable), "true"));
                 //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换。
                 //默认值必须与 RecommendApi.getRecommend 里的默认值一致（true），否则会重演
@@ -93,6 +97,11 @@ public class SettingPrefActivity extends RefreshListActivity {
 
                 add(new SettingSection("switch", "新版开屏动画", SharedPreferencesUtil.SPLASH_NEW_UI,
                         "新版开屏为「图标+粉色短线+氛围光晕」，觉得图标不协调可关闭，回到纯黑+文字的旧开屏", "true"));
+                //启动时等待请求：默认关闭（开屏秒进，与 1.2.3 一致）。
+                //打开后开屏会等 Cookie 续期/刷新与终端接口跑完、并等打字动画播完再进首页（最多 6 秒）
+                add(new SettingSection("switch", "启动时等待请求完成", "splash_wait_requests",
+                        "打开后启动会先等 Cookie 续期/刷新与终端接口返回、并等开屏打字动画播完再进首页，"
+                                + "开屏动画能完整看到；弱网最多多等 6 秒。默认关闭（开屏立刻进入）", "false"));
                 add(new SettingSection("title", "表冠", "", "", ""));
                 add(new SettingSection("switch", "启用表冠适配", "ui_rotatory_enable",
                         getString(R.string.setting_lab_ui_rotatory), "false"));

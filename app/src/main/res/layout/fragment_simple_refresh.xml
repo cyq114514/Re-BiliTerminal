@@ -16,10 +16,12 @@
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+    <!-- 图标同理：drawableTop 只在视图上沿画，撑满高度就会和文字上下分开 -->
     <TextView
         android:id="@+id/emptyTip"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
         android:gravity="center"
         android:text="啥都木有~"
         android:textAlignment="center"

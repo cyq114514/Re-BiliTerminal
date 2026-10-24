@@ -71,10 +71,12 @@
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+    <!-- 同上：视图按内容定高并整体居中，图标才会跟着文字一起居中 -->
     <TextView
         android:id="@+id/emptyTip"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
         android:gravity="center"
         android:text="啥都木有~"
         android:textAlignment="center"

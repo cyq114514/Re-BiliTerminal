@@ -49,10 +49,14 @@
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+    <!-- 高度必须 wrap_content：TextView 的 drawableTop 是贴着「视图上沿」画的，
+         而文字是按 gravity 居中的——高度撑满父容器时，图标跑到屏幕最顶上（压住标题栏），
+         文字却留在中间，看起来就是"图标和文字错位"。让视图自身按内容定高并整体居中即可 -->
     <TextView
         android:id="@+id/emptyTip"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
         android:gravity="center"
         android:text="啥都木有~"
         android:textAlignment="center"

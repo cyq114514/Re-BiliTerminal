@@ -42,10 +42,12 @@
         android:layout_height="match_parent"
         android:layout_below="@id/top" />
 
+    <!-- 同 activity_simple_refresh：drawableTop 贴视图上沿画，高度撑满时图标会与文字错位 -->
     <TextView
         android:id="@+id/emptyTip"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
         android:gravity="center"
         android:text="啥都木有~"
         android:textAlignment="center"

@@ -37,6 +37,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -157,7 +158,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private float subtitle_delta;
 
     private RelativeLayout layout_control, layout_top, layout_video, layout_card_bg, layout_audio_only;
-    private LinearLayout layout_speed, layout_volume, right_control, loading_info;
+    private LinearLayout layout_speed, layout_volume, right_control, loading_info, left_control;
     private RelativeLayout bottom_buttons;
     private HorizontalScrollView right_second;
     private LinearLayout card_subtitle, card_danmaku_send, card_page_selector, card_quality_selector, card_viewpoint_selector;
@@ -192,6 +193,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     //无极调音：0~1 的软件增益，和系统音量是乘算关系（系统音量 100% 时，50% 增益就是半音量）
     //只在 ijk 侧出手，不碰系统音量——手表上系统音量往往只有 3~15 档，靠它调不出"35%"这种值
     private float volumeGain = 1f;
+    //切后台回来黑屏：surface 在后台被销毁后播放器停在暂停态，读线程不会自己吐帧，
+    //必须在 surface 重建后重新挂载并强解一帧（见 repaintPausedFrame）
+    private volatile boolean surfaceLostWhileBackground;
     private long progress_history;
     private String progress_str;
 
@@ -343,6 +347,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private InteractionVideoData.InteractionQuestion currentQuestion = null;
     private boolean questionShown = false;
     private LinearLayout interactionChoiceLayout;
+    //选项外层套的 ScrollView：选项一多就超出屏高，裸 LinearLayout 会把超出部分直接裁掉
+    private ScrollView interactionChoiceScroll;
+    //「互动选项自动竖屏」是否正由本功能临时转着竖屏（选完整要还原回横屏）
+    private boolean interactionPortraitTemp = false;
 
     @Override
     public void onBackPressed() {
@@ -482,6 +490,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (isLocalAudioFile) {
             isAudioOnlyMode = true;
         }
+        //initUI 在读取这几个默认值之前就跑过了，监听/听视频模式下 ±N 秒按钮要按最终状态再刷一次
+        updateSeekButtons();
         img_loading.setImageResource(R.drawable.loading_tv_shaking);
         anim_loading = (AnimationDrawable) img_loading.getDrawable();
         anim_loading.start();
@@ -639,6 +649,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         bottom_buttons = findViewById(R.id.bottom_buttons);
         button_seek_back = findViewById(R.id.button_seek_back);
         button_seek_forward = findViewById(R.id.button_seek_forward);
+        left_control = findViewById(R.id.left_control);
         btn_debug = findViewById(R.id.btn_debug);
 
         //无极调音：恢复上次的增益，并把 0~100 的滑条初始位置对上
@@ -646,16 +657,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (seekbar_volume != null) seekbar_volume.setProgress(Math.round(volumeGain * 100));
         if (text_newvolume != null) text_newvolume.setText(Math.round(volumeGain * 100) + "%");
 
-        //±N 秒按钮：文案跟随「快进快退秒数」设置；直播没有可 seek 的进度条，直接藏掉
-        int seekStep = seekStepSeconds();
-        if (button_seek_back != null) {
-            button_seek_back.setText("-" + seekStep + "s");
-            if (isLiveMode) button_seek_back.setVisibility(View.GONE);
-        }
-        if (button_seek_forward != null) {
-            button_seek_forward.setText("+" + seekStep + "s");
-            if (isLiveMode) button_seek_forward.setVisibility(View.GONE);
-        }
+        //±N 秒按钮：文案跟随「快进快退秒数」设置，显隐跟随「显示快进快退按钮」；直播没有可 seek 的进度条
+        updateSeekButtons();
 
         text_subtitle = findViewById(R.id.text_subtitle);
         text_audio_title = findViewById(R.id.audio_title);
@@ -1075,7 +1078,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void fadeControls(boolean show) {
         controlsShown = show;
-        View[] controls = {right_control, layout_top, bottom_buttons, seekbar_progress};
+        //左侧纵列（±N 秒 + 倍速）跟控制栏一起显隐：点一下画面出来、再点收回，
+        //不再常驻挡在画面上（原来是独立于控制栏的常驻元素）
+        View[] controls = {right_control, layout_top, bottom_buttons, seekbar_progress, left_control};
         for (View control : controls) {
             if (control == null) continue;
             control.animate().cancel();
@@ -1170,6 +1175,67 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * 重建必须排在 release 之后；放回主线程是因为重建要触碰 View。*/
     private void runAfterPlayerReleased(Runnable r) {
         PLAYER_OPS.execute(() -> runOnUiThread(r));
+    }
+
+    // ---------------------------------------------------------------- 回前台画面恢复
+
+    /** 把某个 SurfaceHolder 重新挂到播放器上；实例可能已被释放，所有入口都做空值/异常保护。 */
+    private void attachSurface(SurfaceHolder holder) {
+        if (destroyed || ijkPlayer == null || holder == null) return;
+        try {
+            ijkPlayer.setDisplay(holder);
+        } catch (Throwable t) {
+            Logu.e("surface", "重新挂载 surface 失败：" + t);
+        }
+    }
+
+    /**
+     * 暂停态下把当前帧重画一遍。
+     *
+     * <p>切后台回来时 surface 被销毁重建、播放器还停在暂停态：读线程不跑，谁都不会去画新 surface，
+     * 于是整块画面黑着（声音和进度都正常）。这里用 seek 到「当前位置 ±1ms」逼解码器从关键帧重解一次，
+     * 帧就会重新吐到新 surface 上。偏移 1ms 是为了绕开部分 ijk 版本对"位置没变就不做"的 seek 优化。
+     */
+    private void repaintPausedFrame() {
+        if (destroyed || ijkPlayer == null || !isPrepared || isPlaying || isLiveMode) return;
+        long duration = video_all > 0 ? video_all : ijkPlayer.getDuration();
+        long target = video_now;
+        if (duration > 0 && target < duration - 1) target += 1;
+        else if (target > 1) target -= 1;
+        try {
+            ijkPlayer.seekTo(target);
+            Logu.v("surface", "暂停态强制重画：" + target);
+        } catch (Throwable t) {
+            Logu.e("surface", "强制重画失败：" + t);
+        }
+    }
+
+    /**
+     * 回到前台后的画面自愈：surface 若在后台被销毁，重新挂载 + 强解一帧。
+     * 由 onResume 延迟 250ms 调起，等窗口重新布局完再挂，避免挂到尺寸还是 0 的窗口上。
+     */
+    private void recoverSurfaceAfterResume() {
+        if (destroyed || ijkPlayer == null || !isPrepared) return;
+        if (isAudioOnlyMode) return;
+        try {
+            if (textureView != null) {
+                if (mSurfaceTexture != null) {
+                    Surface surface = new Surface(mSurfaceTexture);
+                    Surface oldSurface = ijkSurface;
+                    ijkSurface = surface;
+                    ijkPlayer.setSurface(surface);
+                    if (oldSurface != null) oldSurface.release();
+                }
+            } else if (surfaceView != null) {
+                SurfaceHolder holder = surfaceView.getHolder();
+                if (holder != null && holder.getSurface() != null && holder.getSurface().isValid()) {
+                    attachSurface(holder);
+                }
+            }
+        } catch (Throwable t) {
+            Logu.e("surface", "回前台重挂 surface 失败：" + t);
+        }
+        repaintPausedFrame();
     }
 
     private void setDisplay() {
@@ -1272,22 +1338,27 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                                 public void surfaceCreated(@NonNull SurfaceHolder surfaceHolder) {
                                     if (!destroyed) {
                                         Logu.v("surface", "重新设置Holder");
-                                        ijkPlayer.setDisplay(surfaceHolder);
-                                        if (isPrepared) {
-                                            ijkPlayer.seekTo(seekbar_progress.getProgress());
-                                        }
+                                        attachSurface(surfaceHolder);
+                                        //暂停态下 surface 重建后画面是黑的：读线程停着不会吐帧，
+                                        //这里让解码器按当前进度重解一帧，把暂停帧画回来
+                                        repaintPausedFrame();
                                     }
                                 }
 
                                 @Override
-                                public void surfaceChanged(@NonNull SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+                                public void surfaceChanged(@NonNull SurfaceHolder surfaceHolder, int format, int width, int height) {
+                                    //真正可用的窗口尺寸要等这里才有。只在 surfaceCreated 里挂载时，
+                                    //解码器可能绑在一个 0×0 的窗口上，表现就是有声音没画面
+                                    if (!destroyed) attachSurface(surfaceHolder);
                                 }
 
                                 @Override
                                 public void surfaceDestroyed(@NonNull SurfaceHolder surfaceHolder) {
                                     Logu.v("surface", "Holder没了");
-                                    if (isPrepared && !destroyed)
-                                        ijkPlayer.setDisplay(null);
+                                    if (destroyed) return;
+                                    //记下"surface 是在后台丢的"，回前台时据此决定要不要补一次重画
+                                    surfaceLostWhileBackground = true;
+                                    if (isPrepared && ijkPlayer != null) ijkPlayer.setDisplay(null);
                                 }
                             });
                             Logu.v("添加callback成功！");
@@ -2683,6 +2754,27 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         return step > 0 ? step : 10;
     }
 
+    /**
+     * ±N 秒按钮的文案与显隐。
+     *
+     * <p>按钮已从底部那一行挪到左侧纵列（和倍速同一列）：底部一排按钮在小屏上放不下，
+     * ±N 秒这种文字按钮会被压成竖排、只露半个字。显隐由「显示快进快退按钮」控制，
+     * 直播（没有可 seek 的时间轴）与听视频模式一律不显示。
+     */
+    private void updateSeekButtons() {
+        boolean show = !isLiveMode && !isAudioOnlyMode
+                && SharedPreferencesUtil.getBoolean("player_seek_buttons", true);
+        int seekStep = seekStepSeconds();
+        if (button_seek_back != null) {
+            button_seek_back.setText("-" + seekStep + "s");
+            button_seek_back.setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+        if (button_seek_forward != null) {
+            button_seek_forward.setText("+" + seekStep + "s");
+            button_seek_forward.setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+    }
+
     /** direction：1 快进、-1 快退；走 seekToPosition，弹幕零点会跟着对齐 */
     private void seekBySeconds(int direction) {
         if (ijkPlayer == null || !isPrepared || isLiveMode) return;
@@ -2803,6 +2895,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         screen_height = displayMetrics.heightPixels;// 获取屏高
         changeVideoSize();
 
+        //「互动选项自动竖屏」会在这里才真正完成转向：选项面板的高度上限要按新方向重新算一遍，
+        //否则竖屏下仍按横屏的 55% 屏高夹取，面板会偏矮、白白多出滚动
+        if (questionShown && interactionChoiceScroll != null
+                && interactionChoiceScroll.getVisibility() == View.VISIBLE) {
+            clampInteractionChoiceHeight();
+        }
+
         Logu.v("旋转屏幕结束");
     }
 
@@ -2871,7 +2970,21 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         Logu.v("onResume");
         //回到前台，后台播放通知没有存在的意义了
         PlaybackService.stop(this);
+        //切后台再回来黑屏：surface 在后台被销毁，播放器又停在暂停态，谁都不会去画新 surface。
+        //等窗口重新布局完再挂回去并强解一帧（详见 repaintPausedFrame）
+        if (!destroyed && !isAudioOnlyMode && surfaceLostWhileBackground) {
+            View root = findViewById(R.id.root_layout);
+            if (root != null) {
+                root.removeCallbacks(recoverSurfaceRunnable);
+                root.postDelayed(recoverSurfaceRunnable, 250);
+            }
+        }
     }
+
+    private final Runnable recoverSurfaceRunnable = () -> {
+        surfaceLostWhileBackground = false;
+        recoverSurfaceAfterResume();
+    };
 
     @Override
     protected void onStop() {
@@ -3291,6 +3404,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         ijkSurface = surface;
                         ijkPlayer.setSurface(surface);
                         if (oldSurface != null) oldSurface.release();
+                        //同 SurfaceView：暂停态下 textured 重建后也要强解一帧，否则画面停在黑屏
+                        repaintPausedFrame();
                     }
                 }
 
@@ -3302,6 +3417,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 @Override
                 public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surfaceTexture) {
                     Logu.v("surfacetexture", "destroyed");
+                    if (!destroyed) surfaceLostWhileBackground = true;
                     mSurfaceTexture = null;
                     if (ijkPlayer != null)
                         ijkPlayer.setSurface(null);
@@ -3716,6 +3832,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 text_speed.setVisibility(View.GONE);
                 btn_debug.setVisibility(View.GONE);
                 btn_danmaku.setVisibility(View.GONE);
+                //听视频模式没有画面，快进快退按钮也没必要占着左侧一列
+                updateSeekButtons();
                 layout_video.setVisibility(View.GONE);
                 layout_audio_only.setVisibility(View.VISIBLE);
                 if (mDanmakuView != null) {
@@ -3728,6 +3846,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             } else {
                 // 退出听视频模式
                 text_speed.setVisibility(View.VISIBLE);
+                updateSeekButtons();
                 updateDebugButtonVisibility();
                 //与 initUI/onPrepared 同一口径：用户关掉"显示弹幕按钮"时，退出听视频模式也不能把它放回来
                 btn_danmaku.setVisibility(SharedPreferencesUtil.getBoolean("player_ui_showDanmakuBtn", true)
@@ -3931,7 +4050,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     currentQuestion = null;
                     questionShown = false;
                     if (interactionChoiceLayout != null) {
-                        interactionChoiceLayout.setVisibility(View.GONE);
+                        setInteractionChoicesVisible(false);
                         interactionChoiceLayout.removeAllViews();
                     }
 
@@ -4165,7 +4284,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         questionShown = false;
                         currentQuestion = null;
                         if (interactionChoiceLayout != null) {
-                            interactionChoiceLayout.setVisibility(View.GONE);
+                            setInteractionChoicesVisible(false);
                             interactionChoiceLayout.removeAllViews();
                         }
                     });
@@ -4260,6 +4379,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 btn_control.setImageResource(R.drawable.btn_player_play);
             }
 
+            //低分辨率设备横屏时选项会被截断，先按设置把屏幕临时转成竖屏
+            enterPortraitForInteractionIfNeeded();
+
             if (interactionChoiceLayout == null) {
                 createInteractionChoiceLayout();
             }
@@ -4280,9 +4402,65 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
 
             if (interactionChoiceLayout.getChildCount() > 0) {
-                interactionChoiceLayout.setVisibility(View.VISIBLE);
+                clampInteractionChoiceHeight();
+                setInteractionChoicesVisible(true);
             }
         });
+    }
+
+    private void setInteractionChoicesVisible(boolean visible) {
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        if (interactionChoiceScroll != null) interactionChoiceScroll.setVisibility(visibility);
+        else if (interactionChoiceLayout != null) interactionChoiceLayout.setVisibility(visibility);
+    }
+
+    /**
+     * 选项总高超过屏幕一半时给外层 ScrollView 定高，让它内部滚动；没超就按内容自然高度。
+     *
+     * <p>互动视频一道题最多能有五六个选项，小屏横屏时这一列会顶到屏幕上沿并继续被裁掉，
+     * 排在最前面的选项连点都点不到。定高 + 滚动至少保证每一个都能选。
+     */
+    private void clampInteractionChoiceHeight() {
+        if (interactionChoiceLayout == null || interactionChoiceScroll == null) return;
+        View root = findViewById(R.id.root_layout);
+        int width = root != null ? root.getWidth() : 0;
+        if (width <= 0) width = getResources().getDisplayMetrics().widthPixels;
+        int maxHeight = Math.round(getResources().getDisplayMetrics().heightPixels * 0.55f);
+        try {
+            interactionChoiceLayout.measure(
+                    View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.AT_MOST),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int contentHeight = interactionChoiceLayout.getMeasuredHeight();
+            ViewGroup.LayoutParams lp = interactionChoiceScroll.getLayoutParams();
+            lp.height = contentHeight > maxHeight ? maxHeight : ViewGroup.LayoutParams.WRAP_CONTENT;
+            interactionChoiceScroll.setLayoutParams(lp);
+        } catch (Throwable t) {
+            Logu.e("互动视频", "计算选项高度失败：" + t);
+        }
+    }
+
+    /**
+     * 「互动选项自动竖屏」：显示选项前把横屏切成竖屏，让选项有足够的竖向空间。
+     * 只在开关打开、当前确实横屏、且没用软件旋屏（自己转 View，不跟系统方向走）时才动。
+     */
+    private void enterPortraitForInteractionIfNeeded() {
+        if (interactionPortraitTemp || destroyed) return;
+        if (!SharedPreferencesUtil.getBoolean("player_interaction_portrait", false)) return;
+        if (!screen_landscape) return;
+        if (SharedPreferencesUtil.getBoolean("dev_player_rotate_software", false)) return;
+        interactionPortraitTemp = true;
+        screen_landscape = false;
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        Logu.v("互动视频", "显示选项，临时切竖屏");
+    }
+
+    /** 选项收起后把方向还原回横屏；只有临时切过才还原，用户自己的方向不动 */
+    private void restoreLandscapeAfterInteraction() {
+        if (!interactionPortraitTemp || destroyed) return;
+        interactionPortraitTemp = false;
+        screen_landscape = true;
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        Logu.v("互动视频", "选项收起，还原横屏");
     }
 
     private TextView createChoiceView(InteractionVideoData.InteractionChoice choice) {
@@ -4296,20 +4474,29 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void createInteractionChoiceLayout() {
         RelativeLayout rootLayout = findViewById(R.id.root_layout);
-        interactionChoiceLayout = new LinearLayout(this);
-        interactionChoiceLayout.setOrientation(LinearLayout.VERTICAL);
-        interactionChoiceLayout.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        
+
+        //外层 ScrollView：选项一多就往外滚，容器本身仍然贴着底部、按内容或 55% 屏高定高
+        ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
-            RelativeLayout.LayoutParams.MATCH_PARENT,
-            RelativeLayout.LayoutParams.WRAP_CONTENT
+                RelativeLayout.LayoutParams.MATCH_PARENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
         );
         params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         params.setMargins(0, 0, 0, 100);
-        
-        interactionChoiceLayout.setLayoutParams(params);
-        interactionChoiceLayout.setVisibility(View.GONE);
-        rootLayout.addView(interactionChoiceLayout);
+        scroll.setLayoutParams(params);
+        scroll.setVisibility(View.GONE);
+
+        interactionChoiceLayout = new LinearLayout(this);
+        interactionChoiceLayout.setOrientation(LinearLayout.VERTICAL);
+        interactionChoiceLayout.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        scroll.addView(interactionChoiceLayout, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        interactionChoiceScroll = scroll;
+        rootLayout.addView(scroll);
     }
 
     private boolean evaluateCondition(String condition) {
@@ -4412,11 +4599,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void hideInteractionChoices() {
         runOnUiThread(() -> {
-            if (interactionChoiceLayout != null) {
-                interactionChoiceLayout.setVisibility(View.GONE);
-            }
+            setInteractionChoicesVisible(false);
             questionShown = false;
             currentQuestion = null;
+            //选完就把方向还原回横屏；没临时转过的话这里什么都不做
+            restoreLandscapeAfterInteraction();
         });
     }
 
@@ -4489,7 +4676,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     currentQuestion = null;
                     questionShown = false;
                     if (interactionChoiceLayout != null) {
-                        interactionChoiceLayout.setVisibility(View.GONE);
+                        setInteractionChoicesVisible(false);
                         interactionChoiceLayout.removeAllViews();
                     }
                     
