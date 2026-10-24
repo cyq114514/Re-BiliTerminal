@@ -64,7 +64,23 @@ public class GlideUtil {
         }
     }
 
+    /**
+     * 加载前的最后一道判活。
+     *
+     * <p>{@code Glide.with(view)} 拿到的是 View 的 context，只要宿主 Activity 已经
+     * destroy（网络回调比页面活得久），Glide 内部 {@code assertNotDestroyed} 会直接抛
+     * {@code IllegalArgumentException: You cannot start a load for a destroyed activity}。
+     * 这类崩溃本身没有任何业务含义——图不要了就行，不能让它把进程带走。
+     *
+     * <p>只在入口判活、不改调用方语义：真正的修法是各页面回调里也判活（见各 Activity 的
+     * observe 回调），这里是最广的一层兜底（列表/详情/评论区共 40+ 个调用点）。
+     */
+    private static boolean skipIfHostDead(ImageView view) {
+        return view == null || !ToolsUtil.isHostAlive(view.getContext());
+    }
+
     public static void request(ImageView view, String url, int placeholder) {
+        if (skipIfHostDead(view)) return;
         Glide.with(view).asDrawable().load(url(url))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .format(DecodeFormat.PREFER_RGB_565)
@@ -74,6 +90,7 @@ public class GlideUtil {
     }
 
     public static void requestRound(ImageView view, String url, int placeholder) {
+        if (skipIfHostDead(view)) return;
         Glide.with(view).asDrawable().load(url(url))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .format(DecodeFormat.PREFER_RGB_565)
@@ -115,6 +132,7 @@ public class GlideUtil {
     //列表封面统一入口：新版美学下 16:10 CenterCrop + 6dp 圆角（Re-WearBili 语言）；
     //关闭新版时恢复旧版 fitCenter 自适应 + 5dp 圆角
     public static void requestCover(ImageView view, String url, int placeholder) {
+        if (skipIfHostDead(view)) return;
         boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
         if (view instanceof RatioImageView) {
             ((RatioImageView) view).setRatio(newUi ? COVER_RATIO : 0f);
@@ -141,7 +159,24 @@ public class GlideUtil {
         }
     }
 
+    /**
+     * 带圆角的普通加载。
+     *
+     * <p>{@code roundCorners <= 0} 时不能套 {@link RoundedCorners}：它的构造器要求半径大于 0，
+     * 传 0 会抛 {@code IllegalArgumentException: roundingRadius must be greater than 0}
+     * （短视频全屏封面就是这么崩的）。0 现在表示"不要圆角"。
+     */
     public static void request(ImageView view, String url, int roundCorners, int placeholder) {
+        if (skipIfHostDead(view)) return;
+        if (roundCorners <= 0) {
+            Glide.with(view).asDrawable().load(url(url))
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .format(DecodeFormat.PREFER_RGB_565)
+                    .transition(GlideUtil.getTransitionOptions())
+                    .placeholder(placeholder)
+                    .into(view);
+            return;
+        }
         Glide.with(view).asDrawable().load(url(url))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .format(DecodeFormat.PREFER_RGB_565)

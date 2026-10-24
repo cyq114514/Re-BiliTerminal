@@ -57,6 +57,20 @@ public class SplashActivity extends Activity {
         super.onCreate(savedInstanceState);
         setTheme(R.style.Theme_BiliClient);
 
+        //不是任务根 = 应用还在后台任务里活着，桌面图标又把 MAIN/LAUNCHER intent 发了一遍。
+        //不拦住的话这里会再压一个新的开屏页到已有页面栈顶上，走完动画就 startMainPage()，
+        //用户看到的就是「切后台再回来直接回到推荐、刚才那页没了」（返回键还能翻回去，更像 bug）。
+        //标准做法：不是任务根就立刻关掉自己，把前台让回原来的页面
+        if (!isTaskRoot()) {
+            Intent reentry = getIntent();
+            if (reentry != null && Intent.ACTION_MAIN.equals(reentry.getAction())
+                    && reentry.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+                Log.d("startup", "开屏页不是任务根：应用仍在栈中，直接归还给原页面");
+                finish();
+                return;
+            }
+        }
+
         //开屏页跟随「新版美学设计」总开关（与页面内氛围背景同一口径）：
         //新版用黑底 + 粉色氛围光晕 + 图标 + 粉色短线，旧版保持原来的纯黑 + 文字。
         //两个布局共用 @id/splashText，所以下面的打字机逻辑无需分支。

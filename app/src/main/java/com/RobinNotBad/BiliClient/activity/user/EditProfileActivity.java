@@ -13,6 +13,7 @@ import android.util.Log;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.api.ImageApi;
 import com.RobinNotBad.BiliClient.api.UserInfoApi;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
@@ -128,30 +129,12 @@ public class EditProfileActivity extends BaseActivity {
 
         CenterThreadPool.run(() -> {
             try {
-                InputStream inputStream = getContentResolver().openInputStream(imageUri);
-                if (inputStream == null) {
-                    runOnUiThread(() -> {
-                        isUploading = false;
-                        MsgUtil.showMsg("无法读取图片");
-                    });
-                    return;
-                }
-
-                Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
-                inputStream.close();
-                
-                if (bitmap == null) {
-                    runOnUiThread(() -> {
-                        isUploading = false;
-                        MsgUtil.showMsg("无法解码图片");
-                    });
-                    return;
-                }
-
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos);
-                byte[] imageData = baos.toByteArray();
-                String fileName = "avatar_" + System.currentTimeMillis() + ".jpg";
+                //原图全尺寸解码在低内存设备/手表上必然 OOM（OutOfMemoryError 是 Error，
+                //外层 catch(Exception) 接不住，表现就是"选张照片就闪退"）。
+                //头像统一按最长边 1080 采样并重编码为 jpeg。
+                ImageApi.PreparedImage prepared = ImageApi.prepareAvatar(this, imageUri);
+                byte[] imageData = prepared.data;
+                String fileName = prepared.fileName;
 
                 Log.e("AvatarUpload", "File name: " + fileName + ", size: " + imageData.length);
                 JSONObject result = UserInfoApi.uploadAvatar(imageData, fileName);
@@ -161,6 +144,9 @@ public class EditProfileActivity extends BaseActivity {
 
                 runOnUiThread(() -> {
                     isUploading = false;
+                    //上传期间页面可能已经销毁：此时再动 View / 起 Glide 加载没有意义，
+                    //Glide 还会抛 "You cannot start a load for a destroyed activity"
+                    if (isFinishing() || isDestroyed()) return;
 
                     if (code == 0) {
                         MsgUtil.showMsg("头像上传成功，等待审核");
@@ -199,10 +185,16 @@ public class EditProfileActivity extends BaseActivity {
                         MsgUtil.showMsg(errorMsg + " (错误码:" + code + ")");
                     }
                 });
-            } catch (Exception e) {
+            } catch (java.io.IOException e) {
                 runOnUiThread(() -> {
                     isUploading = false;
-                    MsgUtil.err("上传头像失败", e);
+                    MsgUtil.showMsgLong("上传头像失败：" + e.getMessage());
+                });
+            } catch (Throwable e) {
+                //含 OutOfMemoryError：兜住后至少给出提示，不让进程直接死掉
+                runOnUiThread(() -> {
+                    isUploading = false;
+                    MsgUtil.err("上传头像失败（图片可能过大）", e);
                 });
             }
         });

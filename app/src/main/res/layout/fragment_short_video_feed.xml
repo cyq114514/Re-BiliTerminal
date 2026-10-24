@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  短视频信息流：竖向 RecyclerView + PagerSnapHelper，一屏一条。
+  播放器不在这一页里 —— 它是一个盖在 RecyclerView 之下的 SurfaceView（见 ShortVideoFeedFragment），
+  当前那页的封面隐藏后才能看到画面，因此翻页过程中不会露出上一条视频的画面。
+-->
+<com.RobinNotBad.BiliClient.activity.video.shortvideo.FeedGestureLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/feedRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bgblack">
+
+    <!--
+      播放窗：用 TextureView 而不是 SurfaceView。SurfaceView 的画面在独立 surface 层上，
+      和窗口背景/同级 View 的层级关系很容易踩坑（第一版整片全黑就是这么来的）；
+      TextureView 是普通 View，画在窗口里，RecyclerView 当前页透明就能透出画面。
+    -->
+    <TextureView
+        android:id="@+id/videoTexture"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:overScrollMode="never"
+        android:scrollbars="none" />
+
+    <!-- 左上角返回：跟着控制栏一起显隐 -->
+    <ImageView
+        android:id="@+id/btnBack"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="2dp"
+        android:layout_marginTop="2dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:padding="6dp"
+        android:src="@drawable/arrow_back" />
+
+    <!-- 播放状态/失败提示：加载中与失败时显示，出画后消失（不是调试信息，属于正常加载态 UI） -->
+    <TextView
+        android:id="@+id/textPlayHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="44dp"
+        android:background="#B3000000"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:textColor="@color/textwhite"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+    <!-- 调试状态行：只有「设置 → 实验室 → 调试 → 允许Logu.d」打开时才显示 -->
+    <TextView
+        android:id="@+id/textStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="150dp"
+        android:background="#66000000"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:textColor="@color/textwhite"
+        android:textSize="10sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/loadingLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <ProgressBar
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:indeterminate="true" />
+
+        <TextView
+            android:id="@+id/loadingText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:alpha="0.8"
+            android:text="加载短视频…"
+            android:textColor="@color/textwhite"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/errorLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/errorText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:maxWidth="240dp"
+            android:text="获取视频列表失败"
+            android:textColor="@color/textwhite"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/retryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="重试" />
+
+    </LinearLayout>
+
+</com.RobinNotBad.BiliClient.activity.video.shortvideo.FeedGestureLayout>

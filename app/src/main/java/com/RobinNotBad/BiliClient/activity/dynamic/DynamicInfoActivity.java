@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
@@ -55,6 +56,7 @@ public class DynamicInfoActivity extends BaseActivity {
         TutorialHelper.showTutorialList(this, R.array.tutorial_dynamic_info, 6);
         TerminalContext.getInstance().getDynamicById(id)
                 .observe(this, (dynamicResult) -> dynamicResult.onSuccess((dynamic) -> {
+                    if (!ToolsUtil.isHostAlive(this)) return;
                     List<Fragment> fragmentList = new ArrayList<>();
                     DynamicInfoFragment diFragment = DynamicInfoFragment.newInstance(id);
                     fragmentList.add(diFragment);
@@ -73,8 +75,9 @@ public class DynamicInfoActivity extends BaseActivity {
                     ((ImageView) findViewById(R.id.loading)).setImageResource(R.mipmap.loading_2233_error);
                     MsgUtil.showMsgLong("动态信息获取失败！\n可能已被删除？");
                     Logu.e("DynamicInfoActivity", "getDynamic failed: " + e.getMessage());
+                    //"没在关闭中"才关（原写法条件永假，失效动态页永远不会自动关闭）
                     CenterThreadPool.runOnUIThreadAfter(2L, java.util.concurrent.TimeUnit.SECONDS, () -> {
-                        if (isFinishing()) finish();
+                        if (!isFinishing() && !isDestroyed()) finish();
                     });
                 }));
 

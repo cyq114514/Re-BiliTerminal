@@ -25,6 +25,7 @@ import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class CollectionInfoActivity extends RefreshListActivity {
         setPageName("合集详情");
 
         TerminalContext.getInstance().getVideoInfoByAidOrBvId(from_aid, null).observe(this, result -> result.onSuccess((videoInfo -> {
+            if (!ToolsUtil.isHostAlive(this)) return;
             collection = videoInfo.collection;
 
             RecyclerView.Adapter<RecyclerView.ViewHolder> adapter;

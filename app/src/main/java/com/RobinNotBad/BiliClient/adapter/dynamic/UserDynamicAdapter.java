@@ -20,6 +20,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.ConstraintSet;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -178,8 +179,10 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         public void setFollowed(boolean followed) {
             msgBtn.setVisibility((followed ? View.VISIBLE : View.GONE));
-            followBtn.setBackgroundTintList(ColorStateList
-                    .valueOf((followed ? Color.argb(0xDD, 0x26, 0x26, 0x26) : Color.argb(0xFE, 0xF0, 0x5D, 0x8E))));
+            //颜色走资源：关注=主题粉、已关注=卡片灰。原来是硬编码 ARGB，
+            //既对不上 @color/bili_pink，也和 ButtonStyle 的卡片语言不一致
+            followBtn.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(
+                    itemView.getContext(), followed ? R.color.btn_followed_bg : R.color.bili_pink)));
             followBtn.setText((followed ? "已关注" : "关注"));
         }
 

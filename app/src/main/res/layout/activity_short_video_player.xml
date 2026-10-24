@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  竖屏短视频外壳：横向 ViewPager，4 页 = 短视频流 / 视频详情 / 评论 / 相关推荐。
+  没有顶栏：短视频页自己有返回按钮（跟控制栏一起显隐），右侧三页用右滑或返回键退回。
+-->
+<!--
+  外壳本身**不加背景**：新版美学的氛围层/自定义底图是挂在 DecorView 最底下的，
+  这里铺一层黑色就等于把它整片盖住——右侧三页（详情/评论/相关推荐）看起来就是"没吃到 UI 背景"。
+  第 0 页（视频流）自己铺黑底（fragment_short_video_feed.xml），不受影响。
+-->
+<androidx.viewpager.widget.ViewPager xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pager"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

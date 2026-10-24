@@ -33,6 +33,7 @@ import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
 import com.google.android.material.button.MaterialButton;
 
@@ -87,6 +88,7 @@ public class LiveInfoActivity extends BaseActivity {
 
             AnimationUtils.crossFade(loading, scrollView);
             TerminalContext.getInstance().getLiveInfoByRoomId(room_id).observe(this, (liveInfoResult) -> liveInfoResult.onSuccess((liveInfo) -> {
+                if (!ToolsUtil.isHostAlive(this)) return;   //页面已销毁：回调里再动 View 会把 Glide 的"destroyed activity"异常带出来
                 room = liveInfo.getLiveRoom();
                 UserInfo userInfo = liveInfo.getUserInfo();
                 playInfo = liveInfo.getLivePlayInfo();

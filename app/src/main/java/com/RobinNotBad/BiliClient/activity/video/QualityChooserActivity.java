@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +44,7 @@ public class QualityChooserActivity extends BaseActivity {
 
         TerminalContext.getInstance().getVideoInfoByAidOrBvId(aid, bvid).observe(this,
                 result -> result.onSuccess((videoInfo -> {
+                    if (!ToolsUtil.isHostAlive(this)) return;
 
                     QualityChooseAdapter adapter = new QualityChooseAdapter(this);
                     int page = getIntent().getIntExtra("page", 0);

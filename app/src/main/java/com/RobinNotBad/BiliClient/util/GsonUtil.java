@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.util;
 
+import com.RobinNotBad.BiliClient.model.DashData;
 import com.RobinNotBad.BiliClient.model.LiveRoom;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -26,6 +27,7 @@ public class GsonUtil {
             .registerTypeAdapter(long.class, new LongOrStringAdapter())
             .registerTypeAdapter(Long.class, new LongOrStringAdapter())
             .registerTypeAdapter(LiveRoom.class, new LiveRoomDeserializer())
+            .registerTypeAdapter(DashData.class, new DashDataDeserializer())
             .create();
 
     public static Gson getGson() {
@@ -106,6 +108,26 @@ public class GsonUtil {
         @Override
         public JsonElement serialize(Long src, Type typeOfSrc, com.google.gson.JsonSerializationContext context) {
             return new JsonPrimitive(src);
+        }
+    }
+
+    /**
+     * DASH 数据的反序列化：B 站 JSON 的键是 {@code dash.video/dash.audio/dash.dolby/dash.flac}，
+     * 而模型字段叫 videoStreams/audioStreams——此前直接交给 Gson 反射映射，名字对不上，
+     * 结果 dash 对象非空但两个列表恒为空，"仅音频下载"永远拿不到流（静默失效）。
+     *
+     * <p>这里改为复用已有的手写解析 {@link DashData#fromJson(org.json.JSONObject)}：它同时兼容
+     * baseUrl/base_url 两套命名，并正确处理 dolby/flac 的嵌套结构，比给字段逐个加注解更完整。
+     */
+    private static class DashDataDeserializer implements JsonDeserializer<DashData> {
+        @Override
+        public DashData deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+            if (json == null || !json.isJsonObject()) return new DashData();
+            try {
+                return DashData.fromJson(new org.json.JSONObject(json.getAsJsonObject().toString()));
+            } catch (Exception e) {
+                throw new JsonParseException("DASH 数据解析失败：" + e.getMessage(), e);
+            }
         }
     }
 

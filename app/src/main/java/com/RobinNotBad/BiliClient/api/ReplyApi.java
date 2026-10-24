@@ -355,7 +355,7 @@ public class ReplyApi {
         String url = "https://api.bilibili.com/x/v2/reply/add";
         String arg = "oid=" + oid + "&type=" + type + (root == 0 ? "" : ("&root=" + root + "&parent=" + parent))
                 //参数值必须编码：评论含 &/+/% 时裸拼接会截断或改写参数
-                + "&message=" + NetWorkUtil.urlEncode(text) + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+                + "&message=" + NetWorkUtil.urlEncode(text) + "&jsonp=jsonp&csrf=" + NetWorkUtil.getLoginCsrf();
         JSONObject result = parsePostJson(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body());
         int code = result.optInt("code", -1);
         JSONObject data = result.optJSONObject("data");
@@ -379,7 +379,7 @@ public class ReplyApi {
                 //参数值必须编码：评论含 &/+/% 时裸拼接会截断或改写参数
                 + "&message=" + NetWorkUtil.urlEncode(text == null ? "" : text)
                 + "&pictures=" + NetWorkUtil.urlEncode(pictures.toString())
-                + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+                + "&jsonp=jsonp&csrf=" + NetWorkUtil.getLoginCsrf();
         JSONObject result = parsePostJson(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body());
         int code = result.optInt("code", -1);
         JSONObject data = result.optJSONObject("data");
@@ -405,13 +405,13 @@ public class ReplyApi {
     //原来硬编码为 1，给动态/专栏的评论点赞会被服务端拒绝
     public static int likeReply(long oid, long root, int type, boolean action) throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/v2/reply/action";
-        String arg = "oid=" + oid + "&type=" + type + "&rpid=" + root + "&action=" + (action ? "1" : "0") + "&jsonp=jsonp&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        String arg = "oid=" + oid + "&type=" + type + "&rpid=" + root + "&action=" + (action ? "1" : "0") + "&jsonp=jsonp&csrf=" + NetWorkUtil.getLoginCsrf();
         return new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string()).optInt("code", -1);
     }
 
     public static int deleteReply(long oid, long rpid, int type) throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/v2/reply/del";
-        String reqBody = new NetWorkUtil.FormData().put("type", type).put("oid", oid).put("rpid", rpid).put("csrf", SharedPreferencesUtil.getString("csrf", "")).toString();
+        String reqBody = new NetWorkUtil.FormData().put("type", type).put("oid", oid).put("rpid", rpid).put("csrf", NetWorkUtil.getLoginCsrf()).toString();
         return new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, reqBody, NetWorkUtil.webHeaders).body()).string()).optInt("code", -1);
     }
 

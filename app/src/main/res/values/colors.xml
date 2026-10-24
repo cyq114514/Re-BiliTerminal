@@ -13,10 +13,19 @@
     <!-- 新版美学（移植自 Re-WearBili 设计语言，可在设置中关闭） -->
     <color name="bili_pink">#FE679A</color>
     <color name="bili_blue">#00A1D6</color>
+    <!--
+        卡片/按钮底色：30% 灰 + 0.5dp 描边 = 新版美学的"透明描边卡片"（见「关于」页），
+        背后的粉色氛围光晕要透出来。调高不透明度会变成"全覆盖的黑块"，
+        与设计语言冲突，所以这里保持低不透明度；
+        「四周一圈暗影」由 CardStyle 的 cardElevation=0dp 解决（Material 默认 1dp 阴影，
+        暗底上就是卡片四周的一圈脏黑边）。
+    -->
     <color name="card_bg_new">#4D262626</color>
     <color name="card_border_new">#363636</color>
     <!-- 嵌套卡片（评论的子卡/浮层面板）底：比主卡片略实一点，保证在卡片之上仍可辨层次 -->
     <color name="card_bg_nested">#66262626</color>
+    <!-- 关注按钮已关注态：与卡片同语言的灰底（原先是代码里的 Color.argb(0xDD,0x26,0x26,0x26) 硬编码） -->
+    <color name="btn_followed_bg">#DD262626</color>
     <color name="card_bg_highlight">#1AE75688</color>
     <color name="meta_text">#B3FFFFFF</color>
 

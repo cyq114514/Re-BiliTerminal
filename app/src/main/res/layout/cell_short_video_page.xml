@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  竖屏短视频的一页（全屏）。播放器画面由 ShortVideoFeedFragment 里的单个 SurfaceView 承担，
+  这一页只负责「封面 / 文案 / 右侧操作栏 / 底部进度」。每页根布局都是不透明黑底：
+  翻页过程中后面那页还盖着封面，不会露出上一条视频的最后一帧。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pageRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bgblack">
+
+    <ImageView
+        android:id="@+id/coverImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop" />
+
+    <ProgressBar
+        android:id="@+id/buffering"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_centerInParent="true"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/playIcon"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_centerInParent="true"
+        android:alpha="0.75"
+        android:src="@drawable/icon_play_16"
+        android:visibility="gone" />
+
+    <!-- 右侧操作栏：点赞 / 收藏 / 评论 / 更多（双击画面显隐） -->
+    <LinearLayout
+        android:id="@+id/actionColumn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
+        android:layout_centerVertical="true"
+        android:layout_marginEnd="4dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/actionLike"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
+
+            <ImageView
+                android:id="@+id/iconLike"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/icon_like_0" />
+
+            <TextView
+                android:id="@+id/textLike"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.9"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowRadius="3.0"
+                android:textColor="@color/textwhite"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/actionFav"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
+
+            <ImageView
+                android:id="@+id/iconFav"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/icon_fav_0" />
+
+            <TextView
+                android:id="@+id/textFav"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.9"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowRadius="3.0"
+                android:text="收藏"
+                android:textColor="@color/textwhite"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/actionComment"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/icon_reply" />
+
+            <TextView
+                android:id="@+id/textComment"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.9"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowRadius="3.0"
+                android:text="评论"
+                android:textColor="@color/textwhite"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- 「更多」：进一个动作面板（稍后再看 / 投币 / 分享 / 进详情 / 不感兴趣） -->
+        <LinearLayout
+            android:id="@+id/actionMore"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@mipmap/morehide" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.9"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowRadius="3.0"
+                android:text="更多"
+                android:textColor="@color/textwhite"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- 底部信息：作者 / 标题 / 进度（双击画面显隐） -->
+    <LinearLayout
+        android:id="@+id/bottomInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_toStartOf="@+id/actionColumn"
+        android:orientation="vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/textAuthor"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="@color/bgblack"
+            android:shadowDx="2.0"
+            android:shadowRadius="3.0"
+            android:textColor="@color/textwhite"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/textMeta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:alpha="0.75"
+            android:shadowColor="@color/bgblack"
+            android:shadowDx="2.0"
+            android:shadowRadius="3.0"
+            android:textColor="@color/textwhite"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/textTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:shadowColor="@color/bgblack"
+            android:shadowDx="2.0"
+            android:shadowRadius="3.0"
+            android:textColor="@color/textwhite"
+            android:textSize="12sp" />
+
+        <SeekBar
+            android:id="@+id/seekBar"
+            style="@style/Widget.AppCompat.SeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="20dp"
+            android:layout_marginTop="2dp"
+            android:progressTint="@color/bili_pink"
+            android:secondaryProgressTint="#88FFFFFF"
+            android:thumb="@drawable/player_selector_progress"
+            android:thumbOffset="8dp" />
+
+        <TextView
+            android:id="@+id/textTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:alpha="0.8"
+            android:shadowColor="@color/bgblack"
+            android:shadowDx="2.0"
+            android:shadowRadius="3.0"
+            android:text="00:00 / 00:00"
+            android:textColor="@color/textwhite"
+            android:textSize="10sp" />
+
+    </LinearLayout>
+
+</RelativeLayout>

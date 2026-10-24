@@ -47,6 +47,9 @@ public class DownloadActivity extends BaseActivity {
 
     boolean finish = false;
 
+    //用户按返回后置位：读循环逐块检查它，做到"点了取消就真的停"
+    volatile boolean canceled = false;
+
     boolean no_bili_headers = false;
 
     final Timer timer = new Timer();
@@ -131,10 +134,14 @@ public class DownloadActivity extends BaseActivity {
             int len;
             byte[] bytes = new byte[1024 * 10];
             long TotalFileSize = Objects.requireNonNull(response.body()).contentLength();
-            while ((len = inputStream.read(bytes)) != -1) {
+            while ((len = inputStream.read(bytes)) != -1 && !canceled) {
                 fileOutputStream.write(bytes, 0, len);
                 long CompleteFileSize = file.length();
                 dldPercent = TotalFileSize > 0 ? 1.0f * CompleteFileSize / TotalFileSize : 0;
+            }
+            if (canceled) {
+                //页面已离开，静默收尾；文件由 onDestroy 统一清理
+                return;
             }
             if (exitOnFinish) {
                 runOnUiThread(() -> MsgUtil.showMsg("下载完成"));
@@ -148,9 +155,13 @@ public class DownloadActivity extends BaseActivity {
                 }, 200);
             }
         } catch (IOException e) {
-            runOnUiThread(() -> MsgUtil.showMsg("下载失败"));
             e.printStackTrace();
-            finish();
+            //取消场景静默；其余情况切主线程并判活，不再从后台线程直接 finish()
+            runOnUiThread(() -> {
+                if (canceled || isFinishing() || isDestroyed()) return;
+                MsgUtil.showMsg("下载失败");
+                finish();
+            });
         } finally {
             //中断/异常路径原来不关流，文件句柄和响应连接都泄漏
             try {
@@ -179,7 +190,9 @@ public class DownloadActivity extends BaseActivity {
                 bufferedSink.close();
             } catch (Exception e) {
                 e.printStackTrace();
-                finish();
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed()) finish();
+                });
             } finally {
                 if (bufferedSink != null) {
                     bufferedSink.close();
@@ -188,9 +201,12 @@ public class DownloadActivity extends BaseActivity {
             if (response.body() != null) response.body().close();
             response.close();
         } catch (IOException e) {
-            runOnUiThread(() -> MsgUtil.showMsg("弹幕下载失败！"));
-            finish();
             e.printStackTrace();
+            runOnUiThread(() -> {
+                if (canceled || isFinishing() || isDestroyed()) return;
+                MsgUtil.showMsg("弹幕下载失败！");
+                finish();
+            });
         }
     }
 
@@ -228,6 +244,8 @@ public class DownloadActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        //先置取消位再删文件：后台读循环会立刻退出，不会出现"用户以为取消、其实还在下整包流量"
+        canceled = true;
         timer.cancel();
         if (!finish) {
             if (type != 0 && downPath != null) FileUtil.deleteFolder(downPath);

@@ -41,32 +41,24 @@ public class SortSettingActivity extends BaseActivity {
 
         setPageName("菜单排序");
 
+        //与 MenuActivity.parseSortConf 同一口径：先按用户保存的顺序放已知项，
+        //版本升级新增的菜单项（如「短视频」）按默认顺序补在末尾，不再整份打回默认。
         String sortConf = SharedPreferencesUtil.getString(SharedPreferencesUtil.MENU_SORT, "");
-        String[] splitName;
-        if (!TextUtils.isEmpty(sortConf) && (splitName = sortConf.split(";")).length == MenuActivity.btnNames.size()) {
-            for (String name : splitName) {
-                if (!MenuActivity.btnNames.containsKey(name)) {
-                    data.clear();
-                    displayKeyMap.clear();
-                    for (Map.Entry<String, Pair<String, Class<? extends InstanceActivity>>> entry : MenuActivity.btnNames.entrySet()) {
-                        String displayText = entry.getValue().first;
-                        data.add(displayText);
-                        displayKeyMap.put(displayText, entry.getKey());
-                    }
-                    break;
-                } else {
-                    String displayText = Objects.requireNonNull(MenuActivity.btnNames.get(name)).first;
-                    data.add(displayText);
-                    displayKeyMap.put(displayText, name);
-                }
-            }
-        } else {
-            for (Map.Entry<String, Pair<String, Class<? extends InstanceActivity>>> entry : MenuActivity.btnNames.entrySet()) {
-                String key = entry.getKey();
-                String displayText = entry.getValue().first;
+        if (!TextUtils.isEmpty(sortConf)) {
+            for (String name : sortConf.split(";")) {
+                if (TextUtils.isEmpty(name) || !MenuActivity.btnNames.containsKey(name)) continue;
+                String displayText = Objects.requireNonNull(MenuActivity.btnNames.get(name)).first;
+                if (displayKeyMap.containsKey(displayText)) continue;
                 data.add(displayText);
-                displayKeyMap.put(displayText, key);
+                displayKeyMap.put(displayText, name);
             }
+        }
+        for (Map.Entry<String, Pair<String, Class<? extends InstanceActivity>>> entry : MenuActivity.btnNames.entrySet()) {
+            String key = entry.getKey();
+            String displayText = entry.getValue().first;
+            if (displayKeyMap.containsKey(displayText)) continue;
+            data.add(displayText);
+            displayKeyMap.put(displayText, key);
         }
 
         RecyclerView recyclerView = findViewById(R.id.recyclerView);

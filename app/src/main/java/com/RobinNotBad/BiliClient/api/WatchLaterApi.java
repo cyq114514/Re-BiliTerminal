@@ -48,12 +48,12 @@ public class WatchLaterApi {
     }
 
     public static int delete(long aid) throws IOException, JSONException {
-        String per = "aid=" + aid + "&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        String per = "aid=" + aid + "&csrf=" + NetWorkUtil.getLoginCsrf();
         return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post("https://api.bilibili.com/x/v2/history/toview/del", per, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
     }
 
     public static int add(long aid) throws IOException, JSONException {
-        String per = "aid=" + aid + "&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        String per = "aid=" + aid + "&csrf=" + NetWorkUtil.getLoginCsrf();
         return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post("https://api.bilibili.com/x/v2/history/toview/add", per, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
     }
 }

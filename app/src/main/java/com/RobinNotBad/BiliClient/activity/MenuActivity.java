@@ -32,6 +32,7 @@ import com.RobinNotBad.BiliClient.activity.video.PreciousActivity;
 import com.RobinNotBad.BiliClient.activity.video.HotSearchActivity;
 import com.RobinNotBad.BiliClient.activity.video.RankingActivity;
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
+import com.RobinNotBad.BiliClient.activity.video.shortvideo.ShortVideoPlayerActivity;
 import com.RobinNotBad.BiliClient.activity.video.TimelineActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.adapter.MenuGridAdapter;
@@ -68,6 +69,7 @@ public class MenuActivity extends BaseActivity {
      */
     public static final Map<String, Pair<String, Class<? extends InstanceActivity>>> btnNames = new LinkedHashMap<>() {{
         put("recommend", new Pair<>("推荐", RecommendActivity.class));
+        put("short_video", new Pair<>("短视频", ShortVideoPlayerActivity.class));
         put("popular", new Pair<>("热门", PopularActivity.class));
         put("hotsearch", new Pair<>("热搜", HotSearchActivity.class));
         put("precious", new Pair<>("入站必刷", PreciousActivity.class));
@@ -109,24 +111,7 @@ public class MenuActivity extends BaseActivity {
         String sortConf = SharedPreferencesUtil.getString(SharedPreferencesUtil.MENU_SORT, "");
         Log.e("debug_sort", sortConf);
 
-        if (!TextUtils.isEmpty(sortConf)) {
-            String[] splitName = sortConf.split(";");
-            if (splitName.length != btnNames.size()) {
-                btnList = getDefaultSortList();
-            } else {
-                btnList = new ArrayList<>();
-                for (String name : splitName) {
-                    if (!btnNames.containsKey(name)) {
-                        btnList = getDefaultSortList();
-                        break;
-                    } else {
-                        btnList.add(name);
-                    }
-                }
-            }
-        } else {
-            btnList = getDefaultSortList();
-        }
+        btnList = parseSortConf(sortConf);
 
         if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0) {
             btnList.add(0, "login");
@@ -135,6 +120,8 @@ public class MenuActivity extends BaseActivity {
             btnList.remove("myspace");
         }
 
+        //短视频是本次新增的入口：默认显示，可在「设置 → 菜单」里关掉
+        if (!SharedPreferencesUtil.getBoolean("menu_short_video", true)) btnList.remove("short_video");
         if (!SharedPreferencesUtil.getBoolean("menu_popular", true)) btnList.remove("popular");
         if (!SharedPreferencesUtil.getBoolean("menu_hotsearch", true)) btnList.remove("hotsearch");
         if (!SharedPreferencesUtil.getBoolean("menu_precious", false)) btnList.remove("precious");
@@ -298,6 +285,8 @@ public class MenuActivity extends BaseActivity {
         switch (key) {
             case "recommend":
                 return R.drawable.icon_home;
+            case "short_video":
+                return R.drawable.icon_play_16;
             case "popular":
                 return R.drawable.icon_fire;
             case "hotsearch":
@@ -361,9 +350,31 @@ public class MenuActivity extends BaseActivity {
         finish();
     }
 
+    /**
+     * 解析「菜单排序」配置。
+     *
+     * <p>老实现要求「配置项数 == btnNames.size()」，于是每加一个菜单项，所有人的自定义顺序都会被打回
+     * 默认顺序。这里改成：只校验每一项都是已知 key（脏配置才回默认），然后把本次新增的项按默认顺序
+     * 补到末尾——加「短视频」入口不会再把老用户的排序清掉。
+     */
+    private List<String> parseSortConf(String sortConf) {
+        if (TextUtils.isEmpty(sortConf)) return getDefaultSortList();
+        List<String> parsed = new ArrayList<>();
+        for (String name : sortConf.split(";")) {
+            if (TextUtils.isEmpty(name)) continue;
+            if (!btnNames.containsKey(name)) return getDefaultSortList();
+            if (!parsed.contains(name)) parsed.add(name);
+        }
+        for (String name : getDefaultSortList()) {
+            if (!parsed.contains(name)) parsed.add(name);
+        }
+        return parsed;
+    }
+
     private List<String> getDefaultSortList() {
         return new ArrayList<>() {{
             add("recommend");
+            add("short_video");
             add("popular");
             add("hotsearch");
             add("precious");

@@ -69,6 +69,10 @@ public class NetWorkUtil {
         while (INSTANCE.get() == null) {
             INSTANCE.compareAndSet(null, setOkHttpSsl(new OkHttpClient.Builder())
                     .followRedirects(false)
+                    //OkHttp 默认 retryOnConnectionFailure=true：连接被重置时会自行重发一次请求，
+                    //而项目承诺"POST（点赞/投币/发评论/发弹幕）不重试"——弱网下服务端可能已执行成功
+                    //但响应丢失，自动重发等于重复执行。幂等 GET 的重试由应用层 executeWithDoctypeRetry 负责
+                    .retryOnConnectionFailure(false)
                     .addInterceptor(chain -> {
                         //手动跟跳必须在拦截器内循环：followRedirects(false) 时网络层把每个 302
                         //原样交回，chain.proceed 不会重入本拦截器，靠 request tag 累计跳数数不清
@@ -527,6 +531,13 @@ public class NetWorkUtil {
                 //不打印完整 cookie 串（含 SESSDATA 等登录凭证）
                 Logu.d("save-result", "cookie jar updated, " + oldCookies.size() + " items");
                 SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, setCookies.substring(0, setCookies.length() - 2));
+                //csrf（bili_jct）会随 Set-Cookie 轮换，而写操作读的是本地快照：
+                //不同步就会出现"Cookie 里是新值、表单里是旧值"，服务端一律返回 -111（csrf 校验失败）。
+                //这里与 Cookie 同锁写入，避免轮换后一段时间内的写操作必然失败
+                String freshCsrf = getInfoFromCookie("bili_jct",
+                        SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+                if (freshCsrf != null && !freshCsrf.isEmpty())
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, freshCsrf);
                 //只重建请求头，不触发 ensureCookies：本方法跑在 OkHttp 拦截器线程上，
                 //嵌套网络请求会在弱网下递归占用请求线程并拖慢所有接口
                 updateWebHeaders();

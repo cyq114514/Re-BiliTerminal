@@ -104,9 +104,12 @@ public class CookieRefreshApi {
         int refreshCode = result.optInt("code", -1);
         if (refreshCode != 0) {
             Logu.e("Cookie刷新失败", "刷新时返回:" + refreshCode);
+            //-111 是 csrf 校验失败：本地 bili_jct 与 Cookie 里的实时值不一致（切号、只落了部分
+            //Set-Cookie、并发刷新）就会命中，与 refresh_token 是否有效无关，必须按可重试处理；
+            //此前归入 REFRESH_REJECTED 会直接 resetLogin()，一次抖动就强制用户重新登录
+            if (refreshCode == -111) return CookieRefreshResult.CSRF_MISMATCH;
             //只有服务端明确否定凭证本身才判为失效；风控(-412)/限流(-509)/服务端错误等都属于可重试
-            if (refreshCode == -101 || refreshCode == -111)
-                return CookieRefreshResult.REFRESH_REJECTED;
+            if (refreshCode == -101) return CookieRefreshResult.REFRESH_REJECTED;
             return CookieRefreshResult.REFRESH_RETRYABLE;
         }
 

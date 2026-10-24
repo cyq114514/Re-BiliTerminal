@@ -9,6 +9,9 @@
         <item name="strokeColor">@color/card_border_new</item>
         <item name="strokeWidth">@dimen/card_stroke_new</item>
         <item name="rippleColor" tools:ignore="PrivateResource">@android:color/transparent</item>
+        <!-- 不要投影：暗底上 MaterialCardView 的 elevation 只会在卡片四周糊一圈脏黑边，
+             和"半透明卡片透出背景"叠在一起就是用户说的"中间亮、四周很暗" -->
+        <item name="cardElevation">0dp</item>
         <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>

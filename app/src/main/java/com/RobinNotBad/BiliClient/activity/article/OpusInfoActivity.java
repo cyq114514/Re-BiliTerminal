@@ -22,6 +22,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -62,6 +63,7 @@ public class OpusInfoActivity extends BaseActivity {
 
         TerminalContext.getInstance().getOpusById(oid)
                 .observe(this, (result) -> result.onSuccess((opus) -> {
+                    if (!ToolsUtil.isHostAlive(this)) return;
                     if (opus.type == Opus.TYPE_DYNAMIC_OLD_STYLE) {
                         Intent intent1 = new Intent(this, DynamicInfoActivity.class);
                         intent1.putExtra("id", oid);
@@ -95,8 +97,10 @@ public class OpusInfoActivity extends BaseActivity {
                     MsgUtil.showMsgLong("专栏信息获取失败！\n可能已被删除？");
                     Logu.e("OpusInfoActivity", "getOpus failed: " + error.getMessage());
                     AnimationUtils.fadeOut(loadingView, 100);
+                    //注意是"没在关闭中"才关：写成 isFinishing() 时条件永假（页面还活着时它是 false），
+                    //自动关闭永远不会发生（同 VideoInfoActivity 的正确写法）
                     CenterThreadPool.runOnUIThreadAfter(2L, java.util.concurrent.TimeUnit.SECONDS, () -> {
-                        if (isFinishing()) finish();
+                        if (!isFinishing() && !isDestroyed()) finish();
                     });
                 }));
 

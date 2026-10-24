@@ -422,13 +422,22 @@
         <!-- 左侧纵列：快退 / 倍速 / 快进 竖着排。
              原先 ±N 秒按钮跟底部那一排挤在一起，小屏（点读笔、手表）上会被压成竖排、
              只露出半个字，现在它们和倍速共用最左边这一列，宽度管够；
-             「显示快进快退按钮」关掉 / 直播 / 听视频模式时两个按钮一起收起 -->
+             「显示快进快退按钮」关掉 / 直播 / 听视频模式时两个按钮一起收起。
+
+             必须夹在顶栏与进度文字之间：只写 centerVertical 时这一列按"整个控制层"垂直居中，
+             矮屏（控制区 200dp 上下）上列底边正好落到进度条上，+10s 的 34dp 触控区压住
+             进度条左端——拖进度时抬手就是误触。below/above 同时写等于"在这两条边界之间居中"，
+             底边永远不会越过进度文字；高度再不够由 PlayerActivity.clampSeekColumnHeight() 兜底压缩 -->
+        <!-- 高度写 match_parent 和 right_control 同一个套路：below/above 把可用区间算出来，
+             gravity="center" 再把三行内容在区间里垂直居中。用 wrap_content 时纵向居中全靠
+             RelativeLayout 的 centerVertical 与锚点协商，行为不如 gravity 直观 -->
         <LinearLayout
             android:id="@+id/left_control"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_alignParentLeft="true"
-            android:layout_centerVertical="true"
+            android:layout_above="@+id/text_progress"
+            android:layout_below="@+id/top"
             android:layout_marginStart="4dp"
             android:gravity="center"
             android:orientation="vertical">

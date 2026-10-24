@@ -79,7 +79,7 @@ public class DynamicApi {
         String url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/create";
         Response resp = Objects.requireNonNull(NetWorkUtil.post(url, new NetWorkUtil.FormData()
                 .put("dynamic_id", 0).put("type", 4).put("rid", 0).put("content", content)
-                .put("csrf", SharedPreferencesUtil.getString("csrf", "")).toString(), NetWorkUtil.webHeaders));
+                .put("csrf", NetWorkUtil.getLoginCsrf()).toString(), NetWorkUtil.webHeaders));
         try {
             ResponseBody body = resp.body();
             if (body == null) return -1;
@@ -94,7 +94,7 @@ public class DynamicApi {
     }
 
     public static long publishComplex(@NonNull JSONArray contents, JSONArray pics, JSONObject option, JSONObject topic, int scene, Map<String, Object> otherArgs) throws IOException, JSONException {
-        String url = "https://api.bilibili.com/x/dynamic/feed/create/dyn?csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        String url = "https://api.bilibili.com/x/dynamic/feed/create/dyn?csrf=" + NetWorkUtil.getLoginCsrf();
         JSONObject reqBody = new JSONObject()
                 .put("content", new JSONObject().put("contents", contents))
                 .put("scene", scene)
@@ -208,7 +208,7 @@ public class DynamicApi {
     public static long relayDynamic(String text, long dyid) throws IOException {
         String url = "https://api.vc.bilibili.com/dynamic_repost/v1/dynamic_repost/repost";
         Response resp = Objects.requireNonNull(NetWorkUtil.post(url, new NetWorkUtil.FormData()
-                .put("dynamic_id", dyid).put("content", text).put("csrf_token", SharedPreferencesUtil.getString("csrf", "")).toString(), NetWorkUtil.webHeaders));
+                .put("dynamic_id", dyid).put("content", text).put("csrf_token", NetWorkUtil.getLoginCsrf()).toString(), NetWorkUtil.webHeaders));
         try {
             ResponseBody body = resp.body();
             if (body == null) return -1;
@@ -273,7 +273,7 @@ public class DynamicApi {
     public static int likeDynamic(long dyid, boolean up) throws IOException {
         String url = "https://api.vc.bilibili.com/dynamic_like/v1/dynamic_like/thumb";
         Response resp = Objects.requireNonNull(NetWorkUtil.post(url, new NetWorkUtil.FormData()
-                .put("dynamic_id", dyid).put("up", up ? 1 : 2).put("csrf_token", SharedPreferencesUtil.getString("csrf", "")).toString(), NetWorkUtil.webHeaders));
+                .put("dynamic_id", dyid).put("up", up ? 1 : 2).put("csrf_token", NetWorkUtil.getLoginCsrf()).toString(), NetWorkUtil.webHeaders));
         try {
             ResponseBody body = resp.body();
             if (body == null) return -1;
@@ -284,7 +284,7 @@ public class DynamicApi {
     public static int deleteDynamic(long dyid) throws IOException {
         String url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/rm_dynamic";
         Response resp = Objects.requireNonNull(NetWorkUtil.post(url, new NetWorkUtil.FormData()
-                .put("dynamic_id", dyid).put("csrf_token", SharedPreferencesUtil.getString("csrf", "")).toString(), NetWorkUtil.webHeaders));
+                .put("dynamic_id", dyid).put("csrf_token", NetWorkUtil.getLoginCsrf()).toString(), NetWorkUtil.webHeaders));
         try {
             ResponseBody body = resp.body();
             if (body == null) return -1;
@@ -295,7 +295,7 @@ public class DynamicApi {
     /**置顶/取消置顶自己的动态（新版 /x/dynamic/feed/space 接口，表单字段为dyn_str）*/
     public static int setTop(long dyid, boolean top) throws IOException {
         String url = "https://api.bilibili.com/x/dynamic/feed/space/" + (top ? "set_top" : "rm_top")
-                + "?csrf=" + SharedPreferencesUtil.getString("csrf", "");
+                + "?csrf=" + NetWorkUtil.getLoginCsrf();
         Response resp = Objects.requireNonNull(NetWorkUtil.post(url, new NetWorkUtil.FormData()
                 .put("dyn_str", String.valueOf(dyid)).toString(), NetWorkUtil.webHeaders));
         try {
@@ -307,7 +307,7 @@ public class DynamicApi {
 
     /**切换动态可见范围：privatePub=true 仅自己可见，false 所有人可见*/
     public static int setPrivatePub(long dyid, boolean privatePub) throws IOException, JSONException {
-        String url = "https://api.bilibili.com/x/dynamic/feed/dyn/private_pub_setting?platform=web&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+        String url = "https://api.bilibili.com/x/dynamic/feed/dyn/private_pub_setting?platform=web&csrf=" + NetWorkUtil.getLoginCsrf();
         JSONObject body = new JSONObject()
                 .put("object_id", new JSONObject().put("dyn_id", String.valueOf(dyid)).toString())
                 .put("action", privatePub ? "private_pub" : "public_pub");
@@ -329,7 +329,7 @@ public class DynamicApi {
 
     /**参与投票，votes为选项下标(0起)列表，返回刷新后的投票信息*/
     public static VoteInfo doVote(long voteId, List<Integer> votes, boolean anonymous, long dynamicId) throws IOException, JSONException {
-        String csrf = SharedPreferencesUtil.getString("csrf", "");
+        String csrf = NetWorkUtil.getLoginCsrf();
         String url = "https://api.bilibili.com/x/vote/do_vote?csrf=" + csrf;
         JSONArray voteArr = new JSONArray();
         for (int v : votes) voteArr.put(v);
@@ -394,7 +394,7 @@ public class DynamicApi {
         String uploadId = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) + "_"
                 + (System.currentTimeMillis() / 1000) + "_" + (int) (Math.random() * 9000 + 1000);
         //query参数与web端一致（w_开头的是参与WBI签名的请求元信息）
-        String url = "https://api.bilibili.com/x/dynamic/feed/edit/dyn?platform=web&csrf=" + SharedPreferencesUtil.getString("csrf", "")
+        String url = "https://api.bilibili.com/x/dynamic/feed/edit/dyn?platform=web&csrf=" + NetWorkUtil.getLoginCsrf()
                 + "&x-bili-device-req-json=" + java.net.URLEncoder.encode("{\"platform\":\"web\",\"device\":\"pc\",\"spmid\":\"333.1368\"}", "UTF-8")
                 + "&w_dyn_req.upload_id=" + java.net.URLEncoder.encode(uploadId, "UTF-8")
                 + "&w_dyn_req.meta=" + java.net.URLEncoder.encode("{\"app_meta\":{\"from\":\"create.dynamic.web\",\"mobi_app\":\"web\"}}", "UTF-8");

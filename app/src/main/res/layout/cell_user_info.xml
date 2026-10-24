@@ -274,12 +274,16 @@
         app:layout_constraintStart_toEndOf="@+id/uidIcon"
         app:layout_constraintTop_toBottomOf="@id/userOfficial" />
 
+    <!-- 关注/私信是这一页仅有的两个主操作按钮，必须吃主题色：
+         原先两个都没写 backgroundTint，落回 ButtonStyle 的半透明灰，看起来"没适配主题"。
+         默认给主题粉，已关注态由 UserDynamicAdapter.setFollowed() 换成 btn_followed_bg -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/followBtn"
         android:layout_width="0dp"
         android:layout_height="38dp"
         android:layout_marginTop="4dp"
         android:insetTop="0dp"
+        app:backgroundTint="@color/bili_pink"
         app:strokeWidth="0dp"
         android:insetBottom="0dp"
         android:layout_marginEnd="2dp"
@@ -293,6 +297,7 @@
         android:layout_width="0dp"
         android:layout_height="38dp"
         android:layout_marginStart="2dp"
+        app:backgroundTint="@color/bili_pink"
         app:strokeWidth="0dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"

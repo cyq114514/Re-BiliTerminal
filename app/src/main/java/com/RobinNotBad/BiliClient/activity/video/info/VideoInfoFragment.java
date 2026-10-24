@@ -190,7 +190,8 @@ public class VideoInfoFragment extends BaseFragment {
             if (videoInfo == null) {
                 Activity activity = getActivity();
                 if (activity == null) return;
-                activity.finish();
+                //只有在详情页自己当宿主时才能关页面：短视频外壳里关掉会把整个短视频页一起带走
+                if (activity instanceof VideoInfoActivity) activity.finish();
                 return;
             }
 
@@ -250,7 +251,8 @@ public class VideoInfoFragment extends BaseFragment {
                     if (activity == null || activity.isFinishing()) return;
                     activity.runOnUiThread(() -> {
                         TerminalContext.getInstance().enterVideoDetailPage(activity, mdid, null, "media");
-                        activity.finish();
+                        //同上：外壳里只跳转，不关掉宿主页面
+                        if (activity instanceof VideoInfoActivity) activity.finish();
                     });
                 } catch (Exception e) {
                     MsgUtil.err(e);
@@ -712,6 +714,15 @@ public class VideoInfoFragment extends BaseFragment {
             Activity activity = getActivity();
             if (activity instanceof VideoInfoActivity) {
                 ((VideoInfoActivity) activity).crossFade(getView());
+            } else {
+                //宿主不是详情页（短视频外壳里嵌的就是这种）：没有 loading 遮罩可淡入，
+                //而 initView() 一进来就先 setVisibility(GONE) 等这里恢复——
+                //不接管的话整页永远空白（表现为"滑过去是一个空页面"）
+                View view = getView();
+                if (view != null) {
+                    view.setVisibility(View.VISIBLE);
+                    view.setAlpha(1f);
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();

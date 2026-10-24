@@ -224,7 +224,7 @@ public class PrivateMsgApi {
                 "msg[dev_id]=" + getDevId()
                         + "&msg[msg_type]=" + msgType
                         + "&msg[content]=" + NetWorkUtil.urlEncode(content)
-                        + "&msg[receiver_type]=1&csrf=" + SharedPreferencesUtil.getString("csrf", "")
+                        + "&msg[receiver_type]=1&csrf=" + NetWorkUtil.getLoginCsrf()
                         + "&msg[sender_uid]=" + senderUid
                         + "&msg[receiver_id]=" + receiverUid
                         + "&msg[timestamp]=" + timestamp;
@@ -253,7 +253,7 @@ public class PrivateMsgApi {
     public static JSONObject updateAck(long talkerId, int sessionType, long ackSeqno)
             throws IOException, JSONException {
         String url = "https://api.vc.bilibili.com/session_svr/v1/session_svr/update_ack";
-        String csrf = SharedPreferencesUtil.getString("csrf", "");
+        String csrf = NetWorkUtil.getLoginCsrf();
         StringBuilder per = new StringBuilder();
         per.append("talker_id=").append(talkerId);
         per.append("&session_type=").append(sessionType);

@@ -21,6 +21,7 @@ import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -98,6 +99,7 @@ public class VideoInfoActivity extends BaseActivity {
 
         setPageName("视频详情");
         TerminalContext.getInstance().getVideoInfoByAidOrBvId(aid, bvid).observe(this, (result) -> result.onSuccess((videoInfo) -> {
+            if (!ToolsUtil.isHostAlive(this)) return;
             aid = videoInfo.aid;
             bvid = videoInfo.bvid;
             fragmentList = new ArrayList<>(3);

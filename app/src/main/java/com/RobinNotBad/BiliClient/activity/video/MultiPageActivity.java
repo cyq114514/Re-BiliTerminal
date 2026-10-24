@@ -17,6 +17,7 @@ import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import java.io.File;
 
@@ -42,6 +43,7 @@ public class MultiPageActivity extends BaseActivity {
         playerData = intent.getParcelableExtra("data");
 
         TerminalContext.getInstance().getVideoInfoByAidOrBvId(playerData.aid, "").observe(this, result -> result.onSuccess((videoInfo -> {
+            if (!ToolsUtil.isHostAlive(this)) return;
             this.videoInfo = videoInfo;
             PageChooseAdapter adapter = new PageChooseAdapter(this, videoInfo.pagenames);
 

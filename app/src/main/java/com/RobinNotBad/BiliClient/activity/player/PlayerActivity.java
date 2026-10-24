@@ -196,6 +196,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     //切后台回来黑屏：surface 在后台被销毁后播放器停在暂停态，读线程不会自己吐帧，
     //必须在 surface 重建后重新挂载并强解一帧（见 repaintPausedFrame）
     private volatile boolean surfaceLostWhileBackground;
+    /**
+     * 用户是否主动处于暂停态。
+     *
+     * <p>不能用 isPlaying 代替：onPrepared 里 isPlaying 要到最后才置 true，起播那一刻它也是 false。
+     * DFM 的 start()/seekTo() 在 DrawHandler 里都会落到 RESUME 分支、把绘制线程重新拉起来，
+     * 所以暂停态下每次动它的时间轴之后，都要按这个标记把它再压回去——否则就是"暂停了弹幕还在滚"。
+     */
+    private boolean userPaused = false;
+    /** 暂停态跳转的目标位置：部分 ijk 版本对"暂停中 seek"只记住不落地，恢复播放前再补一次 */
+    private long pendingPausedSeekMs = -1;
     private long progress_history;
     private String progress_str;
 
@@ -1402,10 +1412,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 //而请求头带着全量登录 Cookie，同网段嗅探即可截获 SESSDATA。B 站媒体 CDN（bilivideo/
                 //bilivideo.cn/akamai 镜像）均支持 https，这里统一升级，老视频返回的 http:// 地址不再明文传输
                 String playUrl = upgradeMediaUrlToHttps(nowurl);
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Referer", "https://www.bilibili.com/");
-                headers.put("Cookie", CookieGenerator.getCookieString(true));
-                ijkPlayer.setDataSource(playUrl, headers);
+                //请求头统一走 PlayerApi.mediaHeadersFor：登录 Cookie 只发给 B 站自有媒体域，
+                //第三方 PCDN 地址不再携带 SESSDATA/bili_jct（下载链路一直这么做，播放器此前遗漏）
+                ijkPlayer.setDataSource(playUrl, PlayerApi.mediaHeadersFor(playUrl));
             } else
                 ijkPlayer.setDataSource(nowurl);
         } catch (IOException e) {
@@ -1421,6 +1430,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 checkEndInteractionQuestions();
                 if (questionShown) {
                     isPlaying = false;
+                    userPaused = true;
                     if (hasDanmaku && mDanmakuView != null) {
                         mDanmakuView.pause();
                     }
@@ -1437,6 +1447,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 switchToPage(currentPageIndex + 1);
             } else {
                 isPlaying = false;
+                userPaused = true;   //播完之后再横滑：弹幕不能跟着跑起来
                 //看完上报：官方口径 played_time=-1（已看完）。不报的话服务端只知道"看到最后一秒"，
                 //官方客户端的"已看完/未看完"标记与续播入口都会不一致。
                 //只对番剧(PGC)用这个约定值，普通投稿视频的 history/report 没有 -1 语义。
@@ -1466,6 +1477,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 MsgUtil.showMsgLong(EReport);
                 runOnUiThread(() -> {
                     isPlaying = false;
+                    userPaused = true;
                     if (hasDanmaku && mDanmakuView != null) {
                         mDanmakuView.pause();
                     }
@@ -1529,6 +1541,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         isPrepared = true;
+        //新实例准备完就自动开播（本方法末尾会 start()），暂停态已不复存在：
+        //不重置的话，上一段播放里按下的暂停会让新实例刚 prepared 就把弹幕压住（声音在走、弹幕不动）
+        userPaused = false;
+        pendingPausedSeekMs = -1;
         PlayerSentinel.stage("首帧就绪");
         //换清晰度/切听视频会复用同一个 video_now 字段：重建期间它还是旧实例的位置，
         //不清掉的话新实例刚 prepared 的头 250ms 里，updateTimer 会拿旧位置把弹幕拽过去、
@@ -1568,6 +1584,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
             Logu.d("弹幕同步", "start 锚点=" + danmakuAnchor + "ms（progress_history=" + progress_history + "）");
             mDanmakuView.start(danmakuAnchor);
+            //起播时 isPlaying 还是 false（本方法最后才置 true），只有用户主动暂停过才需要压回去
+            pauseDanmakuIfUserPaused();
         }
         if (SharedPreferencesUtil.getBoolean("player_ui_showDanmakuBtn", true)) {
             isDanmakuVisible = !SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true);
@@ -2467,6 +2485,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 //prepare() 之后 handler 才 isPrepared，此前 onPrepared 里的 setSpeed 会被静默丢弃，
                 //倍速播放时弹幕时钟就停在 1x——这里补一次
                 mDanmakuView.setSpeed(currentPlayerSpeed());
+                //弹幕通常晚于取流加载完：如果用户在这之前就按了暂停，上面的 seekTo 会顺带把
+                //绘制线程拉起来（DFM 内部 SEEK_POS → RESUME），这里再压一次
+                pauseDanmakuIfUserPaused();
                 String msg = protobufSegments != null
                         ? "弹幕君准备完毕～(是新来的哦～)"
                         : "弹幕君准备完毕～(*≧ω≦)";
@@ -2773,6 +2794,50 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             button_seek_forward.setText("+" + seekStep + "s");
             button_seek_forward.setVisibility(show ? View.VISIBLE : View.GONE);
         }
+        //显隐一变列高就变，重新夹一次（post 到下一帧，等布局稳定）
+        if (left_control != null) left_control.post(this::clampSeekColumnHeight);
+    }
+
+    // ---------------------------------------------------------------- 左侧纵列的小屏保护
+
+    /**
+     * 左侧纵列（±N 秒 + 倍速）在小屏上的高度夹取。
+     *
+     * <p>布局里已经用 below="top" + above="text_progress" 把整列夹在顶栏和进度文字之间；
+     * 但控制区再矮一档时（点读笔/手表 240×180 这一级），三行内容照样会顶出可用区间，
+     * 顶出去的那截就是压住进度条、拖进度时误触的元凶。这里按实际可用高度把两个秒数
+     * 按钮一起压矮（下限 22dp），保证整列始终落在进度文字上方。
+     *
+     * <p>每次都从 34dp 的默认值重新算，反复调用（旋转 / 显隐切换 / 重新布局）不会越压越小。
+     */
+    private void clampSeekColumnHeight() {
+        if (left_control == null || layout_top == null || text_progress == null) return;
+        if (left_control.getVisibility() != View.VISIBLE) return;
+
+        int available = text_progress.getTop() - layout_top.getBottom();
+        if (available <= 0) return;   //还没完成布局
+        int budget = available - ToolsUtil.dp2px(4f);
+
+        int defaultHeight = ToolsUtil.dp2px(34f);
+        boolean speedVisible = text_speed != null && text_speed.getVisibility() == View.VISIBLE;
+        //倍速文字是 wrap_content：还没量到高度时按「一行 14sp + 上下 5dp」估
+        int speedHeight = speedVisible ? Math.max(text_speed.getHeight(), ToolsUtil.dp2px(24f)) : 0;
+
+        int buttonHeight = defaultHeight;
+        if (defaultHeight * 2 + speedHeight > budget) {
+            buttonHeight = Math.max(ToolsUtil.dp2px(22f), (budget - speedHeight) / 2);
+        }
+        applySeekButtonHeight(button_seek_back, buttonHeight, defaultHeight);
+        applySeekButtonHeight(button_seek_forward, buttonHeight, defaultHeight);
+    }
+
+    private void applySeekButtonHeight(TextView button, int height, int defaultHeight) {
+        if (button == null) return;
+        ViewGroup.LayoutParams params = button.getLayoutParams();
+        if (params == null || params.height == height) return;
+        params.height = height;
+        button.setLayoutParams(params);
+        button.setTextSize(height < defaultHeight ? 11f : 12f);
     }
 
     /** direction：1 快进、-1 快退；走 seekToPosition，弹幕零点会跟着对齐 */
@@ -2856,6 +2921,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void playerPause() {
         isPlaying = false;
+        userPaused = true;
         if (ijkPlayer != null && isPrepared) {
             ijkPlayer.pause();
             if (hasDanmaku && mDanmakuView != null) {
@@ -2871,7 +2937,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void playerResume() {
         isPlaying = true;
+        userPaused = false;
         if (ijkPlayer != null && isPrepared) {
+            //暂停期间的跳转可能只在暂停态"记了个位置"：start() 之前补发一次，
+            //保证恢复后画面从用户拖动的位置继续，而不是回到暂停前的位置
+            if (pendingPausedSeekMs >= 0) {
+                try {
+                    ijkPlayer.seekTo(pendingPausedSeekMs);
+                } catch (Throwable ignored) {
+                }
+                pendingPausedSeekMs = -1;
+            }
             ijkPlayer.start();
             if (hasDanmaku && mDanmakuView != null) {
                 mDanmakuView.resume();
@@ -2894,6 +2970,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         screen_width = displayMetrics.widthPixels;// 获取屏宽
         screen_height = displayMetrics.heightPixels;// 获取屏高
         changeVideoSize();
+
+        //横竖切换后控制区高度完全变了，左侧纵列要重新夹一次
+        if (left_control != null) left_control.post(this::clampSeekColumnHeight);
 
         //「互动选项自动竖屏」会在这里才真正完成转向：选项面板的高度上限要按新方向重新算一遍，
         //否则竖屏下仍按横屏的 55% 屏高夹取，面板会偏矮、白白多出滚动
@@ -3389,6 +3468,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
         layout_top.setOnClickListener(view -> finish());
 
+        //左侧纵列的小屏保护：进度文字每次重新布局（首次布局/旋转/字号或按钮显隐变化）都重算一次
+        if (text_progress != null)
+            text_progress.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                                     oldLeft, oldTop, oldRight, oldBottom)
+                    -> clampSeekColumnHeight());
+
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT);
         if (SharedPreferencesUtil.getBoolean("player_display", Build.VERSION.SDK_INT < 26)) {
@@ -3541,9 +3626,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             public void onStopTrackingTouch(SeekBar seekBar) {
                 isSeeking = false;
                 if (isPrepared && !destroyed) {
-                    int seekPos = seekbar_progress.getProgress();
-                    ijkPlayer.seekTo(seekPos);
-                    seekDanmakuTo(seekPos);
+                    //统一走 seekToPosition：暂停态下它会同步进度条/时间文字并记下待恢复位置
+                    seekToPosition(seekbar_progress.getProgress());
                     autohideReset();
                 }
             }
@@ -3647,8 +3731,30 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void seekToPosition(long position) {
         if (ijkPlayer != null && isPrepared) {
+            if (position < 0) position = 0;
+            int duration = video_all > 0 ? video_all : (int) Math.max(0, currentDurationMs());
+            if (duration > 0 && position > duration) position = duration;
+
             ijkPlayer.seekTo(position);
             seekDanmakuTo(position);
+
+            //播放中由 progressTimer 每 250ms 刷新进度条；它遇到 !isPlaying 会直接 early-return，
+            //所以暂停态跳转后进度条、时间文字和画面都不会动——用户看到的就是"提示跳转了、进度没变"，
+            //而且下一次横滑仍按旧位置算起点，越滑越偏。这里手动同步一次 UI 并强解一帧
+            if (!isPlaying) {
+                pendingPausedSeekMs = position;
+                video_now = (int) position;
+                video_now_last = video_now;
+                final int uiPos = (int) position;
+                runOnUiThread(() -> {
+                    if (destroyed) return;
+                    if (!isLiveMode) seekbar_progress.setProgress(uiPos);   //进度条的监听器会同步时间文字
+                    else text_progress.setText(StringUtil.toTime(uiPos / 1000));
+                });
+                repaintPausedFrame();
+            } else {
+                pendingPausedSeekMs = -1;
+            }
         }
     }
 
@@ -3671,6 +3777,22 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         } else {
             //handler 还没 prepared，seekTo 会被 DanmakuView 直接丢弃，等 prepared 回调补做
             pendingDanmakuSeekMs = positionMs;
+        }
+        //DFM 的 seekTo 在 DrawHandler 里会落到 RESUME 分支（SEEK_POS → RESUME），
+        //暂停态下等于把弹幕又跑起来了，必须立刻压回去
+        pauseDanmakuIfUserPaused();
+    }
+
+    /**
+     * 暂停态下把弹幕绘制线程压回暂停。
+     *
+     * <p>DFM 的 {@code start()} 与 {@code seekTo()} 在 DrawHandler.handleMessage 里都会顺带执行
+     * RESUME 分支（quitFlag=false、重建 mTimeBase、启动绘制线程），所以任何"对齐时间轴"的操作
+     * 都会在用户暂停时把弹幕重新跑起来——这就是"暂停之后弹幕继续滚动"的根因。
+     */
+    private void pauseDanmakuIfUserPaused() {
+        if (userPaused && hasDanmaku && mDanmakuView != null) {
+            mDanmakuView.pause();
         }
     }
 
@@ -4730,9 +4852,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void resumePlaybackIfPaused() {
         runOnUiThread(() -> {
             if (currentQuestion != null && currentQuestion.pauseVideo == 1 && !isPlaying) {
-                ijkPlayer.start();
-                isPlaying = true;
-                btn_control.setImageResource(R.drawable.btn_player_pause);
+                //统一走 playerResume：它会把「用户暂停」标记清掉并把弹幕一起恢复；
+                //直接 ijkPlayer.start() 会漏掉弹幕恢复，选完选项后视频在走、弹幕却停着
+                playerResume();
             }
         });
     }

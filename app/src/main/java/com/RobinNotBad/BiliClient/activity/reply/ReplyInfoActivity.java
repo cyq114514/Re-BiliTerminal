@@ -27,6 +27,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -95,6 +96,7 @@ public class ReplyInfoActivity extends BaseActivity {
 
         refreshLayout.setRefreshing(true);
         TerminalContext.getInstance().getReply(type, oid, rpid).observe(this, (rootReplyResult) -> {
+            if (!ToolsUtil.isHostAlive(this)) return;
             replyList = new ArrayList<>();
             rootReplyResult.onSuccess((rootReply) -> {
                 Future<Integer> future = CenterThreadPool.supplyAsyncWithFuture(() -> ReplyApi.getReplies(oid, rpid, page, type, sort, replyList));
@@ -200,6 +202,7 @@ public class ReplyInfoActivity extends BaseActivity {
         refreshLayout.setRefreshing(true);
 
         TerminalContext.getInstance().getReply(type, oid, rpid).observe(this, (rootReplyResult) -> rootReplyResult.onSuccess((rootReply) -> {
+            if (!ToolsUtil.isHostAlive(this)) return;
             List<Reply> list = new ArrayList<>();
             Future<Integer> future = CenterThreadPool.supplyAsyncWithFuture(() -> ReplyApi.getReplies(oid, rpid, page, type, sort, list));
             CenterThreadPool.observe(future, (result) -> {

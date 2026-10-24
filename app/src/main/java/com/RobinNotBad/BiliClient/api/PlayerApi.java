@@ -23,6 +23,7 @@ import com.RobinNotBad.BiliClient.model.Subtitle;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
 import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.service.DownloadService;
+import com.RobinNotBad.BiliClient.util.CookieGenerator;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
@@ -208,15 +209,18 @@ public class PlayerApi {
                 if (b != null && !b.isEmpty() && !all.contains(b)) all.add(b);
             }
         }
-        if (all.size() <= 1) return all;
-
         ArrayList<String> trusted = new ArrayList<>();
         ArrayList<String> others = new ArrayList<>();
         for (String u : all) {
-            if (isTrustedMediaHost(u)) trusted.add(u);
-            else others.add(u);
+            if (isTrustedMediaHost(u)) {
+                trusted.add(u);
+            } else if (isHttpsUrl(u)) {
+                //第三方 PCDN 只保留 https：这类地址本就不该拿到登录 Cookie（见 mediaHeadersFor），
+                //再走明文等于把播放内容也一并交给中间人，直接从候选里剔除
+                others.add(u);
+            }
         }
-        ArrayList<String> ordered = new ArrayList<>(all.size());
+        ArrayList<String> ordered = new ArrayList<>(trusted.size() + others.size());
         ordered.addAll(trusted);
         ordered.addAll(others);
         return ordered;
@@ -230,6 +234,33 @@ public class PlayerApi {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** 是否是 https 地址（无法解析的一律按不安全处理）。 */
+    private static boolean isHttpsUrl(String url) {
+        try {
+            okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+            return parsed != null && parsed.isHttps();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 媒体（视频/音频流）请求头的唯一出口。
+     *
+     * <p>playurl 下发的候选地址里混着第三方 PCDN（如 {@code *.edge.mountaintoys.cn:4483}），
+     * 把带着 SESSDATA/bili_jct 的完整 Cookie 发给它，等于把登录态交给第三方 CDN 运营方。
+     * 下载链路一直按域剥离 Cookie（见 {@code DownloadService} 的 isBilibiliHost 判定），
+     * 内置播放器与短视频此前漏了这一层，这里收口成一处，避免再各写一套。
+     */
+    public static Map<String, String> mediaHeadersFor(String url) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Referer", "https://www.bilibili.com/");
+        if (isTrustedMediaHost(url)) {
+            headers.put("Cookie", CookieGenerator.getCookieString(true));
+        }
+        return headers;
     }
 
     public static void getVideoDash(PlayerData playerData) throws IOException, JSONException {
@@ -252,6 +283,10 @@ public class PlayerApi {
                 playerData.audioUrls = buildMediaCandidates(as.baseUrl, as.backupUrl);
                 playerData.audioUrl = playerData.audioUrls.isEmpty() ? as.baseUrl : playerData.audioUrls.get(0);
             }
+            //解析层曾经"静默成功"：dash 字段在、但流全空（Gson 字段名对不上），
+            //调用方拿到 null 只会提示"没有可用的音频流"，把解析 bug 伪装成内容问题
+            if (playerData.videoUrls.isEmpty() && playerData.audioUrls.isEmpty())
+                throw new JSONException("DASH 解析结果为空：音视频流都未取到");
         } else {
             getVideo(playerData, true);
             return;

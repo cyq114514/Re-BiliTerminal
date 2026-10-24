@@ -12,7 +12,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 
 public class SettingMenuActivity extends BaseActivity {
 
-    private SwitchMaterial menu_popular, menu_hotsearch, menu_live, menu_precious, menu_ranking, menu_timeline;
+    private SwitchMaterial menu_short_video, menu_popular, menu_hotsearch, menu_live, menu_precious, menu_ranking, menu_timeline;
 
     @SuppressLint("InflateParams")
     @Override
@@ -20,6 +20,9 @@ public class SettingMenuActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
 
         asyncInflate(R.layout.activity_setting_menu, (layoutView, resId) -> {
+
+            menu_short_video = findViewById(R.id.menu_short_video);
+            menu_short_video.setChecked(SharedPreferencesUtil.getBoolean("menu_short_video", true));
 
             menu_popular = findViewById(R.id.menu_popular);
             menu_popular.setChecked(SharedPreferencesUtil.getBoolean("menu_popular", true));
@@ -48,6 +51,7 @@ public class SettingMenuActivity extends BaseActivity {
     }
 
     private void save() {
+        SharedPreferencesUtil.putBoolean("menu_short_video", menu_short_video.isChecked());
         SharedPreferencesUtil.putBoolean("menu_popular", menu_popular.isChecked());
         SharedPreferencesUtil.putBoolean("menu_hotsearch", menu_hotsearch.isChecked());
         SharedPreferencesUtil.putBoolean("menu_precious", menu_precious.isChecked());

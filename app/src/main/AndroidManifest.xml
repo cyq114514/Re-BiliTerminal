@@ -490,6 +490,11 @@
             android:label="推荐"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.video.shortvideo.ShortVideoPlayerActivity"
+            android:exported="false"
+            android:label="短视频"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.video.TimelineActivity"
             android:exported="false"
             android:label="时间线"

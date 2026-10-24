@@ -415,6 +415,16 @@ public class ReplyFragment extends RefreshListFragment {
         CenterThreadPool.run(() -> {
             try {
                 List<Reply> list = new ArrayList<>();
+                //调用方没给总数时自己问一次：短视频页传的是 0，头部就一直在显示"共0条评论"。
+                //这个数字还参与"热度排序拉空 → 换时间排序 / 换评论类型"的兜底判断，值得补齐
+                if (count <= 0 && seek <= 0) {
+                    try {
+                        long total = ReplyApi.getReplyCount(aid, type);
+                        if (total > 0) count = (int) Math.min(Integer.MAX_VALUE, total);
+                    } catch (Throwable ignored) {
+                        //拿不到就维持 0，不影响列表加载
+                    }
+                }
                 ReplyApi.ReplyResult result = ReplyApi.getRepliesLazyWithRetry(aid, seek, pagination, type, sort, list);
                 if (generation != loadGeneration) return;   //已被更新的刷新作废
                 //热度排序（mode=3）对"只有一两条新评论"的评论区经常返回空列表，而头部显示的

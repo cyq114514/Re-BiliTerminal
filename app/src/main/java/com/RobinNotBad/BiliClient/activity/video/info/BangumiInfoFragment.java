@@ -760,7 +760,7 @@ public class BangumiInfoFragment extends Fragment {
         CenterThreadPool.run(() -> {
             try {
                 String url = "https://api.bilibili.com/pgc/web/follow/" + (isFollowing ? "del" : "add");
-                String body = "season_id=" + sid + "&csrf=" + SharedPreferencesUtil.getString("csrf", "");
+                String body = "season_id=" + sid + "&csrf=" + NetWorkUtil.getLoginCsrf();
                 NetWorkUtil.post(url, body, NetWorkUtil.webHeaders).body().string();
                 SharedPreferencesUtil.putBoolean(cacheKey, !isFollowing);
                 //回调统一走 Handler 投递：请求完成时 fragment 可能已 detach，

@@ -55,6 +55,19 @@
                 android:layout_height="wrap_content">
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/menu_short_video"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@android:color/transparent"
+                    android:text="显示“短视频”" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/menu_popular"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

@@ -122,6 +122,35 @@ public class ImageApi {
         return new PreparedImage(baos.toByteArray(), "img_" + now + ".jpg", "image/jpeg");
     }
 
+    /**
+     * 头像上传专用：头像接口（uploadAvatar）固定以 {@code image/jpeg} 提交，
+     * 所以这里一律解码 → 按最长边 1080 采样 → 重压缩为 jpeg。
+     *
+     * <p>此前头像页走的是「原图全尺寸解码再 compress」，一张 12MP 照片的位图约 48MB，
+     * 低内存设备/手表上直接 OOM；而 {@code OutOfMemoryError} 是 Error，调用方的
+     * {@code catch (Exception)} 接不住，表现为"选张照片就闪退"。
+     */
+    public static PreparedImage prepareAvatar(Context context, Uri uri) throws IOException {
+        byte[] raw = readAllBytes(context, uri);
+        if (raw == null || raw.length == 0) throw new IOException("无法读取图片");
+
+        BitmapFactory.Options boundsOpt = new BitmapFactory.Options();
+        boundsOpt.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(raw, 0, raw.length, boundsOpt);
+        if (boundsOpt.outWidth <= 0 || boundsOpt.outHeight <= 0) throw new IOException("无法解码图片");
+
+        BitmapFactory.Options opt = new BitmapFactory.Options();
+        opt.inSampleSize = calcInSampleSize(boundsOpt, 1080);
+        Bitmap bitmap = BitmapFactory.decodeByteArray(raw, 0, raw.length, opt);
+        if (bitmap == null) throw new IOException("无法解码图片");
+        bitmap = rotateByExif(context, uri, bitmap);
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos);
+        bitmap.recycle();
+        return new PreparedImage(baos.toByteArray(), "avatar_" + System.currentTimeMillis() + ".jpg", "image/jpeg");
+    }
+
     /**上传图片到B站图床，返回图片外链与尺寸信息（动态/评论：带 category=daily）*/
     public static UploadedImage uploadImage(byte[] imageData, String fileName, String mimeType, String biz) throws IOException, JSONException {
         return uploadImage(imageData, fileName, mimeType, biz, "daily");
@@ -129,7 +158,7 @@ public class ImageApi {
 
     /**category 传 null 时省略该字段（私信 biz=im 不带 category，与 PiliPlus 一致）*/
     public static UploadedImage uploadImage(byte[] imageData, String fileName, String mimeType, String biz, String category) throws IOException, JSONException {
-        String csrf = SharedPreferencesUtil.getString("csrf", "");
+        String csrf = NetWorkUtil.getLoginCsrf();
         String url = "https://api.bilibili.com/x/dynamic/feed/draw/upload_bfs";
 
         RequestBody fileBody = RequestBody.create(MediaType.parse(mimeType), imageData);

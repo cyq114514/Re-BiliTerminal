@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.Inflater;
 
 import okhttp3.HttpUrl;
@@ -53,6 +54,8 @@ import okio.Sink;
 
 public class DownloadService extends Service {
     public static volatile boolean started;
+    /** 同一时刻只允许一个下载 worker：START_STICKY 重投递/失败重试/重复 start 都会再进 onStartCommand */
+    private static final AtomicBoolean WORKER_RUNNING = new AtomicBoolean(false);
     public static volatile int exitCode;
     public static volatile float percent = -1;
     public static volatile String state;
@@ -139,7 +142,15 @@ public class DownloadService extends Service {
         exitCode = ERR_UNKNOWN;
         startNotifyProgress();
 
+        //重复进入 onStartCommand（START_STICKY 进程级重启、失败重试、重复 start）时不再起第二个 worker：
+        //两个 worker 会同时扫同一张 download 表，重复下载同一条目、互相删对方正在写的目录
+        if (!WORKER_RUNNING.compareAndSet(false, true)) {
+            Logu.w("download", "已有下载 worker 在运行，忽略重复启动");
+            return Service.START_STICKY;
+        }
+
         CenterThreadPool.run(() -> {
+            try {
             boolean failed = false;
             while (!failed && started) {
                 DownloadSection section_tmp = getFirst();
@@ -362,8 +373,21 @@ public class DownloadService extends Service {
                     default:
                         exitMessage = "下载失败，未知错误";
                 }
-
-            stopSelf();
+            } catch (Throwable t) {
+                //worker 内任何未预料的异常都必须在这里收口：交给线程池只会弹个提示，
+                //而 started 会一直为 true，之后所有下载入口都提示"队列已在进行中"，只能杀进程恢复
+                exitCode = ERR_UNKNOWN;
+                exitMessage = "下载失败：" + t;
+                Logu.e("download", "下载 worker 异常退出：" + t);
+                t.printStackTrace();
+                section = null;
+                refreshDownloadList();
+            } finally {
+                //无论正常/异常/被取消，都必须复位状态并让服务退出，否则前台通知常驻
+                started = false;
+                WORKER_RUNNING.set(false);
+                stopSelf();
+            }
         });
 
         return Service.START_STICKY;
@@ -679,6 +703,10 @@ public class DownloadService extends Service {
     public void onDestroy() {
         Logu.d("结束");
 
+        //只有"用户主动取消"（stopService）时 started 才仍为 true：worker 正常/异常收尾都会先把它
+        //置 false 再 stopSelf。原实现无条件清理目录，会把"下载失败待重试"的半成品也一并删掉，
+        //在双 worker 场景下更会删掉另一个 worker 正在写的目录（表现为"下载到一半自己没了"）
+        final boolean canceledByUser = started;
         started = false;
         percent = -1;
         state = null;
@@ -697,8 +725,9 @@ public class DownloadService extends Service {
         section = null;
 
         CenterThreadPool.run(() -> {
-            if (pendingSection != null && exitCode != NORMAL) {
-                //中途退出：残留条目恢复为可重试状态并清理半成品
+            if (pendingSection != null && canceledByUser) {
+                //用户取消：残留条目恢复为可重试状态并清理半成品
+                //（异常退出不删：失败的条目已由 worker 置 error，留着文件供下次续传）
                 setState(pendingSection.id, "none");
                 FileUtil.deleteFolder(pendingSection.getPath());
             }
@@ -937,7 +966,7 @@ public class DownloadService extends Service {
         });
     }
 
-    public static void start(long first) {
+    public static synchronized void start(long first) {
         if (started) {
             //onDestroy 不保证执行（进程级回收），此时再 start 会永远卡在 started=true：
             //不重复启动第二条下载循环，但给出可感知的提示而不是静默失效
