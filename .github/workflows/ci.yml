@@ -62,6 +62,17 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: ./gradlew :app:assembleRelease --stacktrace
 
+      # release 独有的资源收缩会把"只被 getIdentifier 动态引用"的资源判成不可达并裁掉
+      # （历史上裁掉过 6 张教程插图），这里对最终 APK 做一次冒烟断言，防止再无声回归
+      - name: release 资源冒烟（教程插图不可被裁）
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)
+          N=$("$AAPT2" dump resources "$APK" | grep -cE 'mipmap/tutorial_')
+          echo "release 包内教程插图数量：$N/6"
+          [ "$N" -ge 6 ] || { echo "::error::release 包缺少教程插图（$N/6），检查 res/raw/keep.xml"; exit 1; }
+
       - name: 上传 Release 包
         if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
