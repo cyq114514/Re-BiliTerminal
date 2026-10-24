@@ -11,10 +11,10 @@
   // 兜底值：与最新一次 Release 的资产保持一致（本地预览与函数失效时使用）。
   // 注意：fileName 必须与 GitHub Release 上的资产名完全一致，否则下载 404。
   var FALLBACK = {
-    versionName: '1.2.4',
-    size: 9683553,
-    sha256: '804d06a2f589111d846cae07c168be38535e06cef56808c4308793512353c469',
-    fileName: 'Re-BiliTerminal-v1.2.4-release.apk'
+    versionName: '1.2.5',
+    size: 9710195,
+    sha256: '501bf1a688ddffd08d0ec31c709ff66e21caa1253879c7a3eb317d3af87cafce',
+    fileName: 'Re-BiliTerminal-v1.2.5-release.apk'
   };
 
   // 第三方 GitHub 加速前缀（社区维护，可能随时失效；仅重写 github.com 直链）
