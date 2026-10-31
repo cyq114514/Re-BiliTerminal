@@ -16,7 +16,13 @@ public class PrivateMsgSession {
     public long maxSeqno = 0;
     public long ackSeqno = 0;
     public long lastMsgTimestamp = 0;
+    //服务端置顶时间戳（微秒级），0 表示未置顶；解析自 session 的 top_ts 字段
+    public long topTs = 0;
 
     public PrivateMsgSession() {
+    }
+
+    public boolean isTop() {
+        return topTs > 0;
     }
 }

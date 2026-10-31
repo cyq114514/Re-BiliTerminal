@@ -263,20 +263,39 @@ public class FavoriteApi {
         return folderList;
     }
 
+    /** 排序：按收藏时间（x/v3/fav/resource/list 的 order 参数，服务端排序） */
+    public static final String ORDER_FAV_TIME = "mtime";
+    /** 排序：按播放量 */
+    public static final String ORDER_VIEW = "view";
+    /** 排序：按投稿时间 */
+    public static final String ORDER_PUBTIME = "pubtime";
+
     /**
-     * 收藏夹里的内容（只保留普通视频稿件）。
+     * 收藏夹里的内容（只保留普通视频稿件），按收藏时间排序。
      *
      * @param mediaId 收藏夹 media_id（不是老 fid）
      * @return 0 = 还有下一页；1 = 已到末尾/没有更多
      */
     public static int getFolderVideos(long mediaId, int page, ArrayList<VideoCard> videoList) throws IOException, JSONException {
+        return getFolderVideos(mediaId, page, ORDER_FAV_TIME, videoList);
+    }
+
+    /**
+     * 收藏夹里的内容（只保留普通视频稿件），排序由服务端完成——切换排序必须重新翻页：
+     * 本地重排既拿不到被服务端排序后的完整数据，分页游标也会错位。
+     *
+     * @param mediaId 收藏夹 media_id（不是老 fid）
+     * @param order   {@link #ORDER_FAV_TIME} / {@link #ORDER_VIEW} / {@link #ORDER_PUBTIME}
+     * @return 0 = 还有下一页；1 = 已到末尾/没有更多
+     */
+    public static int getFolderVideos(long mediaId, int page, String order, ArrayList<VideoCard> videoList) throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/v3/fav/resource/list" + new NetWorkUtil.FormData()
                 .setUrlParam(true)
                 .put("media_id", mediaId)
                 .put("pn", page)
                 .put("ps", FOLDER_PAGE_SIZE)
                 .put("keyword", "")
-                .put("order", "mtime")
+                .put("order", order)
                 .put("type", 0)
                 .put("tid", 0)
                 .put("platform", "web");

@@ -12,6 +12,7 @@ import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.activity.settings.setup.SetupUIActivity;
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
@@ -79,6 +80,8 @@ public class SplashActivity extends Activity {
         boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)
                 && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.SPLASH_NEW_UI, true);
         setContentView(newUi ? R.layout.activity_splash_new : R.layout.activity_splash);
+        //开屏页不继承 BaseActivity，主题色要在这里单独应用一次（只换强调色，不动布局）
+        ThemeApplier.apply(findViewById(android.R.id.content));
         Log.e("debug", "进入应用");
 
         splashTextView = findViewById(R.id.splashText);

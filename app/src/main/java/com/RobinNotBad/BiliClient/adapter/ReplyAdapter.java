@@ -6,6 +6,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.animation.ObjectAnimator;
 import android.graphics.Color;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -33,7 +34,10 @@ import com.RobinNotBad.BiliClient.api.ReplyApi;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.model.Reply;
 import com.RobinNotBad.BiliClient.model.UserInfo;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -71,6 +75,13 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
     public boolean isDetail = false;
     public boolean isManager = false;
     public long count = -1;
+    /**
+     * 从消息跳转进来时要高亮的子评论 rpid（-1 表示无）。
+     *
+     * <p>为什么要单独标出来：B 站 {@code reply/main} 收到子评论 rpid 作为 seek_rpid 时，
+     * 会把它排在主评论预览的第一位，但列表长得一模一样，用户仍要自己找。
+     */
+    public long seekChildRpid = -1;
     final Context context;
     final ArrayList<Reply> replyList;
     final long oid;
@@ -97,6 +108,51 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         this.listener = listener;
     }
 
+    /**
+     * 找 adapterPos 这层楼里 rpid 对应的子评论 View，供调用方做像素级滚动定位。
+     *
+     * <p>子评论渲染在一层 LinearLayout 里、不是独立 item，所以只能拿到 View 再按坐标滚，
+     * 用 {@code scrollToPosition} 是定位不到具体哪一行的。
+     *
+     * @return 找不到（还没 bind、或这条子评论不在预览里）返回 null
+     */
+    public View findChildRow(RecyclerView recyclerView, int adapterPos, long rpid) {
+        if (recyclerView == null || rpid <= 0) return null;
+        RecyclerView.ViewHolder vh = recyclerView.findViewHolderForAdapterPosition(adapterPos);
+        if (!(vh instanceof ReplyHolder)) return null;
+        LinearLayout container = ((ReplyHolder) vh).childReplies;
+        if (container == null) return null;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View row = container.getChildAt(i);
+            if (row.getVisibility() != View.VISIBLE) continue;
+            Object tag = row.getTag(R.id.tag_child_rpid);
+            if (tag instanceof Long && (Long) tag == rpid) return row;
+        }
+        return null;
+    }
+
+    /**
+     * 目标子评论高亮：底色 1 秒渐隐（参照 PiliPlus 的 colorAnimController）。
+     *
+     * <p>必须先取消旧动画：holder 会复用，上一行的渐隐还在跑时会把刚绑定到这行的
+     * 别的内容也染上色。
+     */
+    private void bindSeekHighlight(TextView textView, boolean highlight) {
+        ObjectAnimator running = (ObjectAnimator) textView.getTag(R.id.tag_color_anim);
+        if (running != null) {
+            running.cancel();
+            textView.setTag(R.id.tag_color_anim, null);
+        }
+        if (!highlight) {
+            textView.setBackgroundColor(Color.TRANSPARENT);
+            return;
+        }
+        ObjectAnimator anim = ObjectAnimator.ofArgb(textView, "backgroundColor", 0x66FB7299, 0x00FB7299);
+        anim.setDuration(1000);
+        textView.setTag(R.id.tag_color_anim, anim);
+        anim.start();
+    }
+
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -105,6 +161,8 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             return new WriteReply(view);
         } else {
             View view = LayoutInflater.from(this.context).inflate(R.layout.cell_reply_list, parent, false);
+            //行内强调色（UP主标识/展开箭头）跟随主题色；主题变化需重进页面，按 holder 创建时应用一次
+            ThemeApplier.apply(view);
             return new ReplyHolder(view);
         }
     }
@@ -221,7 +279,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             replyHolder.likeCount.setText(toWan(reply.likeCount));
 
             if (reply.liked) {
-                replyHolder.likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
+                replyHolder.likeCount.setTextColor(ThemeManager.getPrimary());
                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
                         getLikeIcon(context, true), null, null, null);
             } else {
@@ -272,6 +330,10 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                             textView = newTextView;
                         }
                         textView.setText(childMsg);
+                        //把 rpid 挂在行上，供 scrollToChildRow 精确定位到某一行
+                        textView.setTag(R.id.tag_child_rpid, child.rpid);
+                        //目标子评论（消息跳转进来那条）：1 秒底色渐隐，参照 PiliPlus 的 colorAnim
+                        bindSeekHighlight(textView, child.rpid == seekChildRpid && seekChildRpid > 0);
                     }
 
                     for (int i = childCount; i < existingViewCount; i++) {
@@ -355,7 +417,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                             ((Activity) context).runOnUiThread(() -> {
                                 MsgUtil.showMsg("点赞成功");
                                 replyHolder.likeCount.setText(toWan(++reply.likeCount));
-                                replyHolder.likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
+                                replyHolder.likeCount.setTextColor(ThemeManager.getPrimary());
                                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
                                         getLikeIcon(context, true), null, null,
                                         null);
@@ -446,6 +508,24 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             } else
                 replyHolder.item_reply_delete.setVisibility(View.GONE);
 
+            // 置顶按钮：只有评论区管理员（UP 主/合作稿 staff）可见，且只能对一级评论操作
+            //（服务端对子评论回 12030，这里就不给入口）。最终权限以服务端判定为准。
+            if (isManager && reply.parent == 0) {
+                replyHolder.item_reply_top.setText(reply.isTop ? "取消置顶" : "置顶");
+                replyHolder.item_reply_top.setOnClickListener(view -> {
+                    boolean top = !reply.isTop;
+                    new AdaptiveDialog.Builder(context)
+                            .setTitle(top ? "置顶评论" : "取消置顶")
+                            .setMessage(top ? "确定将这条评论置顶吗？每个评论区只有一个置顶位。"
+                                    : "确定取消这条评论的置顶吗？")
+                            .setPositiveButton(top ? "置顶" : "取消置顶", (dialog, which) -> setReplyTop(reply, top))
+                            .setNegativeButton("取消", null)
+                            .show();
+                });
+                replyHolder.item_reply_top.setVisibility(View.VISIBLE);
+            } else
+                replyHolder.item_reply_top.setVisibility(View.GONE);
+
             // 回复按钮
             replyHolder.replyBtn.setOnClickListener(view -> {
                 boolean noParent = isDetail && realPosition == 0;
@@ -473,6 +553,36 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             replyHolder.lastImageUrl = null;
         }
         super.onViewRecycled(holder);
+    }
+
+    /**
+     * 置顶/取消置顶评论。
+     *
+     * <p>成功后的本地同步有两步，缺一不可：
+     * ① 服务端一个评论区只有一个置顶位（再置顶别的会回 12029），而 {@link Reply#isTop} 是逐条布尔，
+     *    所以置顶成功必须先把其它条目的标记清掉，否则列表会同时出现两条「[置顶]」；
+     * ② 「[置顶]」前缀是构造 Reply 时拼进 message 的，只改布尔值界面不会变，
+     *    统一走 {@link Reply#setTopFlag(boolean)} 增删前缀后再 notify。
+     */
+    private void setReplyTop(Reply reply, boolean top) {
+        CenterThreadPool.run(() -> {
+            try {
+                int code = ReplyApi.setReplyTop(oid, reply.rpid, replyType, top);
+                ((Activity) context).runOnUiThread(() -> {
+                    if (code == 0) {
+                        if (top) Reply.clearTopFlags(replyList);
+                        reply.setTopFlag(top);
+                        notifyDataSetChanged();
+                        MsgUtil.showMsg(top ? "置顶成功~" : "已取消置顶~");
+                    } else {
+                        String msg = ReplyApi.topActionErrorMsg(code);
+                        MsgUtil.showMsg(msg.isEmpty() ? "操作失败：" + code : msg);
+                    }
+                });
+            } catch (Exception e) {
+                ((Activity) context).runOnUiThread(() -> MsgUtil.err(e));
+            }
+        });
     }
 
     public void startReplyInfoActivity(Reply reply) {
@@ -518,6 +628,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         final TextView upLiked;
         final TextView imageCount;
         final TextView item_reply_delete;
+        final TextView item_reply_top;
         final LinearLayout childReplyCard;
         final ImageView imageCard;
         String lastAvatarUrl;
@@ -542,6 +653,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             imageCount = itemView.findViewById(R.id.imageCount);
             imageCard = itemView.findViewById(R.id.imageCard);
             item_reply_delete = itemView.findViewById(R.id.item_reply_delete);
+            item_reply_top = itemView.findViewById(R.id.item_reply_top);
             defaultNameColor = userName.getTextColors().getDefaultColor();
         }
     }

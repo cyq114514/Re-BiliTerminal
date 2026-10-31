@@ -34,6 +34,7 @@ import com.RobinNotBad.BiliClient.activity.user.MedalWallActivity;
 import com.RobinNotBad.BiliClient.adapter.user.ElectricUserAdapter;
 import com.RobinNotBad.BiliClient.api.ElectricApi;
 import com.RobinNotBad.BiliClient.api.UserInfoApi;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.model.Dynamic;
 import com.RobinNotBad.BiliClient.model.ElectricPanel;
 import com.RobinNotBad.BiliClient.model.UserInfo;
@@ -181,8 +182,9 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             msgBtn.setVisibility((followed ? View.VISIBLE : View.GONE));
             //颜色走资源：关注=主题粉、已关注=卡片灰。原来是硬编码 ARGB，
             //既对不上 @color/bili_pink，也和 ButtonStyle 的卡片语言不一致
-            followBtn.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(
-                    itemView.getContext(), followed ? R.color.btn_followed_bg : R.color.bili_pink)));
+            followBtn.setBackgroundTintList(ColorStateList.valueOf(followed
+                    ? ContextCompat.getColor(itemView.getContext(), R.color.btn_followed_bg)
+                    : ThemeManager.getPrimary()));
             followBtn.setText((followed ? "已关注" : "关注"));
         }
 

@@ -15,6 +15,8 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.BackgroundManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CrashTrace;
@@ -144,6 +146,18 @@ public class SettingUIActivity extends BaseActivity {
                 intent.setClass(SettingUIActivity.this, UIPreviewActivity.class);
                 startActivity(intent);
             });
+            //主题配色：只改新版美学的强调色，独立子页承载色板与 HEX 输入
+            findViewById(R.id.theme_color).setOnClickListener(view -> {
+                save();
+                Intent intent = new Intent();
+                intent.setClass(SettingUIActivity.this, ThemeColorActivity.class);
+                startActivity(intent);
+            });
+            //开关的激活色来自主题属性 colorControlActivated，运行时改不了，这里逐个补 tint
+            //（默认主题下 applySwitch 直接返回，保持原版渲染）
+            applySwitchTheme(newUi);
+            applySwitchTheme(round);
+            applySwitchTheme(bgSwitch);
             findViewById(R.id.reset).setOnClickListener(view -> {
                 SharedPreferencesUtil.putInt("paddingH_percent", 0);
                 SharedPreferencesUtil.putInt("paddingV_percent", 0);
@@ -161,8 +175,10 @@ public class SettingUIActivity extends BaseActivity {
                 //背景图本身不清除（那是用户自己的图片资产），只把暗度恢复默认
                 SharedPreferencesUtil.putInt(BackgroundManager.KEY_DIM, 30);
                 if (bgDimInput != null) bgDimInput.setText("30");
+                //主题配色一并恢复：#FE679A 及其派生色与原版完全一致
+                ThemeManager.resetToDefault();
                 updateBgImageState();
-                MsgUtil.showMsg("恢复完成");
+                MsgUtil.showMsg("恢复完成\n主题配色已恢复默认");
             });
 
             View scrollView = findViewById(R.id.scrollView);
@@ -170,6 +186,12 @@ public class SettingUIActivity extends BaseActivity {
             scrollView.setFocusableInTouchMode(true);
             scrollView.requestFocus();
         });
+    }
+
+    /** 开关激活色跟随主题色；默认主题下不做任何改动，保持原版渲染 */
+    private void applySwitchTheme(SwitchMaterial switchMaterial) {
+        if (switchMaterial == null) return;
+        ThemeApplier.applySwitch(switchMaterial, ThemeManager.getPrimary());
     }
 
     private void save() {

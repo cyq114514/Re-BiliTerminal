@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.model.VideoCard;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 
@@ -68,13 +69,13 @@ public class VideoCardHolder extends RecyclerView.ViewHolder {
         switch (videoCard.type) {
             case "live":
                 SpannableString sstr_live = new SpannableString("[直播]" + StringUtil.htmlToString(videoCard.title));
-                sstr_live.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.bili_pink)), 0, 4,
+                sstr_live.setSpan(new ForegroundColorSpan(ThemeManager.getPrimary()), 0, 4,
                         Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
                 title.setText(sstr_live);
                 break;
             case "series":
                 SpannableString sstr_series = new SpannableString("[系列]" + StringUtil.htmlToString(videoCard.title));
-                sstr_series.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.bili_pink)), 0, 4,
+                sstr_series.setSpan(new ForegroundColorSpan(ThemeManager.getPrimary()), 0, 4,
                         Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
                 title.setText(sstr_series);
                 break;

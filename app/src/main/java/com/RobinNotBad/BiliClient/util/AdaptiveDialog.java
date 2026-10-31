@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.ArrayList;
@@ -257,6 +258,8 @@ public final class AdaptiveDialog {
                 if (spec.text == null || spec.text.length() == 0) continue;
                 MaterialButton button = (MaterialButton) inflater.inflate(
                         R.layout.button_dialog_text, buttonBar, false);
+                //弹窗不在 Activity 的内容树里，强调色按钮需要单独应用一次
+                ThemeApplier.apply(button);
                 button.setText(spec.text);
                 //高度写死：MaterialButton 的 wrap_content 会被 TextButton 样式的 inset 与
                 //padding 叠加压扁，界面放大后文字只剩中间一条（实测 dpi 1.6 时可复现）

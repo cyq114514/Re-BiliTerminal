@@ -142,6 +142,7 @@ public class ReplyInfoActivity extends BaseActivity {
         });
     }
 
+
     private void onPullDataFailed(Exception e) {
         MsgUtil.err(e);
         refreshLayout.setRefreshing(false);

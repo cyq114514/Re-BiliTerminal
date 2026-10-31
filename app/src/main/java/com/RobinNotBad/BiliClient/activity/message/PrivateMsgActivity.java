@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.PickImageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import org.json.JSONArray;
@@ -167,7 +168,8 @@ public class PrivateMsgActivity extends BaseActivity {
 
         picBtn.setOnClickListener(view -> {
             if (sendingImage) MsgUtil.showMsg("正在发送图片，稍等喵~");
-            else pickImageLauncher.launch("image/*");
+            //没有系统文件选择器的手表/精简 ROM 上 GetContent 会直接抛，统一走安全入口
+            else PickImageUtil.launchSafe(pickImageLauncher);
         });
 
         sendBtn.setOnClickListener(view -> CenterThreadPool.run(() -> {

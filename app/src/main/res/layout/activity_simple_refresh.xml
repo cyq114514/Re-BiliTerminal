@@ -36,18 +36,153 @@
 
     </RelativeLayout>
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipeRefreshLayout"
+    <LinearLayout
+        android:id="@+id/listContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/top">
+        android:layout_below="@id/top"
+        android:orientation="vertical">
 
-        <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
-            android:id="@+id/recyclerView"
+        <!-- 列表筛选/排序条：默认隐藏，只有需要的页面（如「稍后再看」的全部/未看完）
+             在代码里设成 VISIBLE 并接管点击。放在列表外而不是做成列表项，
+             避免改变业务 adapter 的 viewType 与 adapterPosition 语义 -->
+        <LinearLayout
+            android:id="@+id/filterBar"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/activity_padding_horizontal"
+            android:paddingRight="@dimen/activity_padding_horizontal"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:visibility="gone">
 
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            <TextView
+                android:id="@+id/filterAll"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="全部"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/filterUnfinished"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="未看完"
+                android:textSize="13sp" />
+
+            <!-- 「清除所有已看完」：只有「稍后再看」页会点亮；破坏性操作，点击后二次确认 -->
+            <TextView
+                android:id="@+id/clearWatched"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="清除已看完"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- 列表排序条：默认隐藏，需要服务端排序的页面（如收藏夹的 收藏时间/播放量/投稿时间）
+             在代码里点亮。排序要重发请求，和上面的筛选条是两回事 -->
+        <LinearLayout
+            android:id="@+id/sortBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/activity_padding_horizontal"
+            android:paddingRight="@dimen/activity_padding_horizontal"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/sortByFavTime"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="收藏时间"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/sortByView"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="播放量"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/sortByPubtime"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="投稿时间"
+                android:textSize="13sp" />
+
+            <!-- 多选管理入口：只有收藏夹内容页会点亮；破坏性操作，执行前二次确认 -->
+            <TextView
+                android:id="@+id/manageEntries"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:minHeight="36dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="管理"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipeRefreshLayout"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+                android:id="@+id/recyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </LinearLayout>
 
     <!-- 高度必须 wrap_content：TextView 的 drawableTop 是贴着「视图上沿」画的，
          而文字是按 gravity 居中的——高度撑满父容器时，图标跑到屏幕最顶上（压住标题栏），

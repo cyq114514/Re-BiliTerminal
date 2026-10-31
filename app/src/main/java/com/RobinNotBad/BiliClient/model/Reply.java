@@ -17,6 +17,7 @@ import java.io.Serializable;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 
 public class Reply implements Serializable {
@@ -154,5 +155,33 @@ public class Reply implements Serializable {
         }
 
         this.message = messageSpannable;
+    }
+
+    /**
+     * 本地切换置顶标记。
+     *
+     * <p>「[置顶]」前缀是构造时拼进 {@link #message} 的（还带一个粉色 span），只改 {@link #isTop}
+     * 界面不会变。这里用 insert/delete 而不是重建字符串：SpannableStringBuilder 插删会自动平移
+     * 已有的表情/链接 span，重建则会全部丢掉。
+     */
+    public void setTopFlag(boolean top) {
+        if (this.isTop == top) return;
+        if (!(message instanceof SpannableStringBuilder)) return;
+        SpannableStringBuilder builder = (SpannableStringBuilder) message;
+        if (top) {
+            builder.insert(0, TOP_TIP);
+            StringUtil.setTopSpan(builder);
+        } else if (builder.toString().startsWith(TOP_TIP)) {
+            builder.delete(0, TOP_TIP.length());
+        }
+        this.isTop = top;
+    }
+
+    /** 置顶前先把列表里已有的置顶标记清掉：服务端一个评论区只有一个置顶位（再置顶回 12029） */
+    public static void clearTopFlags(List<Reply> list) {
+        if (list == null) return;
+        for (Reply reply : list) {
+            if (reply != null && reply.isTop) reply.setTopFlag(false);
+        }
     }
 }

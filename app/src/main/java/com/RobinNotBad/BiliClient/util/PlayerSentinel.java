@@ -6,8 +6,6 @@ import android.os.Build;
 
 import org.json.JSONObject;
 
-import java.io.File;
-
 /**
  * 播放会话哨兵：把"点播放就闪退、却不产生任何崩溃记录"的隐形崩溃变成可见数据。
  *
@@ -17,8 +15,10 @@ import java.io.File;
  * 被系统低内存回收、被强杀都属于这一类，它们都不会进 Java 的崩溃 handler，
  * 所以在此之前控制台里永远看不到（真实案例：米兔4 每次播放必崩、三条日志零记录）。
  *
- * <p>上报通道复用 {@link CrashUploader}：本地文件 + 待发队列 + 尝试上传，
- * 与崩溃页链路一致；是否真的上传仍受"崩溃上报"开关约束。
+ * <p><b>只留本地，不上传。</b>哨兵能看到的信息仅止于"播放页没正常收尾"，
+ * 分不清 native 崩溃、被系统回收还是被强杀——这三类在数据上完全同形，拿去做归因只会误导。
+ * 因此它只走 logcat + {@link CrashUploader#saveLocal} 本地留档，不进待发队列、不上传；
+ * 线上只收有明确 Java 堆栈的崩溃（{@link CrashFilter} 里对哨兵也拦了一道）。
  */
 public final class PlayerSentinel {
 
@@ -195,19 +195,11 @@ public final class PlayerSentinel {
                 JSONObject report = CrashUploader.buildReport(context, synthetic, "player-sentinel", trail);
                 //此刻还停在启动页，真实位置写死在播放页
                 report.put("page", "PlayerActivity");
-                //本地永远留档；上不上传交给统一裁决：
-                //哨兵分不清 native 崩溃/系统回收/强杀，只有"连续异常 ≥2 次"或"停在 native 高危阶段"
-                //才算强信号，且同样受 24h 同指纹去重约束（见 CrashFilter）
+                //只留本地：不 enqueue、不上传。需要排查时由用户从本地目录导出。
                 CrashUploader.saveLocal(report);
-                CrashFilter.Decision decision = CrashFilter.decide(report);
-                if (!decision.upload) {
-                    Logu.e("player_sentinel", "仅本地留档（" + decision.reason + "）");
-                    return;
-                }
-                File pending = CrashUploader.enqueue(context, report);
-                CrashUploader.tryUpload(report, pending);
+                Logu.e("player_sentinel", "仅本地留档，不进待发队列");
             } catch (Throwable t) {
-                Logu.e("player_sentinel", "上报失败: " + t);
+                Logu.e("player_sentinel", "本地留档失败: " + t);
             }
         });
     }

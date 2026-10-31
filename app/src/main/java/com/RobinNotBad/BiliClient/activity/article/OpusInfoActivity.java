@@ -35,6 +35,8 @@ public class OpusInfoActivity extends BaseActivity {
 
     private ReplyFragment replyFragment;
     private long seek_reply;
+    /** 消息跳转时要高亮的子评论 rpid（-1 表示无） */
+    private long seek_child = -1;
 
     //页面内容完全由 intent 的 id 决定，冷启动可恢复
     @Override
@@ -52,6 +54,7 @@ public class OpusInfoActivity extends BaseActivity {
         Intent intent = getIntent();
         oid = intent.getLongExtra("id", 114514);
         seek_reply = getIntent().getLongExtra("seekReply", -1);
+        seek_child = getIntent().getLongExtra("seekChild", -1);
 
         setPageName("文章详情");
         loadingView = findViewById(R.id.loading);
@@ -68,6 +71,7 @@ public class OpusInfoActivity extends BaseActivity {
                         Intent intent1 = new Intent(this, DynamicInfoActivity.class);
                         intent1.putExtra("id", oid);
                         intent1.putExtra("seekReply", seek_reply);
+                        intent1.putExtra("seekChild", seek_child);
                         startActivity(intent1);
                         finish();
                         return;
@@ -82,7 +86,7 @@ public class OpusInfoActivity extends BaseActivity {
                     //直接取字段会 NPE（线上已收到 2 例：Attempt to read field 'int ...Stats.reply' on null）
                     int replyCount = opus.stats != null ? opus.stats.reply : 0;
                     replyFragment = ReplyFragment.newInstance(opus.commentId, opus.commentType, replyCount,
-                            seek_reply, opus.upInfo != null ? opus.upInfo.mid : 0);
+                            seek_reply, opus.upInfo != null ? opus.upInfo.mid : 0, seek_child);
                     if (opus.upInfo != null) replyFragment.setManager(opus.upInfo);
                     fragmentList.add(replyFragment);
 

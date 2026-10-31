@@ -159,6 +159,8 @@ public class PrivateMsgApi {
         session.unread = sessionJson.optInt("unread_count", 0);
         session.maxSeqno = sessionJson.optLong("max_seqno", 0);
         session.ackSeqno = sessionJson.optLong("ack_seqno", 0);
+        //置顶时间戳（微秒级），0=未置顶；置顶/取消置顶后重拉列表刷新该字段
+        session.topTs = sessionJson.optLong("top_ts", 0);
 
         // 解析 account_info 获取用户信息（PiliPlus 风格：直接从 API 取）
         if (sessionJson.has("account_info") && !sessionJson.isNull("account_info")) {
@@ -214,6 +216,82 @@ public class PrivateMsgApi {
             }
         }
         return sessionList;
+    }
+
+    /** 私信会话 session_type：1=普通用户会话（群聊是 3，本客户端暂不涉及） */
+    public static final int SESSION_TYPE_USER = 1;
+
+    /**
+     * set_top 接口的 op_type：0 是置顶、1 是取消置顶（与直觉相反，接口文档就是这么写的）。
+     * 抽成纯函数，免得调用点写反——写反的后果是「点了置顶结果取消置顶」，不报错、难发现。
+     */
+    public static int opTypeForTop(boolean top) {
+        return top ? 0 : 1;
+    }
+
+    /**
+     * 修改会话置顶状态。
+     *
+     * @param top true 置顶，false 取消置顶
+     * @return 接口返回码，0 表示成功
+     */
+    public static int setSessionTop(long talkerId, int sessionType, boolean top)
+            throws IOException, JSONException {
+        String url = "https://api.vc.bilibili.com/session_svr/v1/session_svr/set_top";
+        JSONObject result = postSessionAction(url, talkerId, sessionType,
+                "&op_type=" + opTypeForTop(top));
+        return result.optInt("code", -1);
+    }
+
+    /**
+     * 把会话从会话列表中移除。注意服务端只是移除会话，<b>不会删除聊天记录</b>，
+     * 对方再发消息时会话会重新出现。
+     *
+     * @return 接口返回码，0 表示成功
+     */
+    public static int removeSession(long talkerId, int sessionType)
+            throws IOException, JSONException {
+        String url = "https://api.vc.bilibili.com/session_svr/v1/session_svr/remove_session";
+        JSONObject result = postSessionAction(url, talkerId, sessionType, "");
+        return result.optInt("code", -1);
+    }
+
+    /**
+     * session_svr 系列接口的公共请求体（talker_id/session_type/csrf/build/mobi_app）。
+     *
+     * @param extra 额外的参数串，需要以 & 开头（如 "&op_type=0"），可为空串
+     */
+    private static JSONObject postSessionAction(String url, long talkerId, int sessionType, String extra)
+            throws IOException, JSONException {
+        String csrf = NetWorkUtil.getLoginCsrf();
+        String per = "talker_id=" + talkerId
+                + "&session_type=" + sessionType
+                + extra
+                + "&csrf_token=" + csrf
+                + "&csrf=" + csrf
+                + "&build=0"
+                + "&mobi_app=web";
+
+        // 非 2xx（412 风控 / 5xx）时 body 是 HTML，解析会抛 JSONException；返回空对象，
+        // 调用方 optInt("code", -1) 拿到 -1，再由 sessionErrorMsg 翻译
+        try (okhttp3.Response resp = NetWorkUtil.post(url, per, NetWorkUtil.webHeaders)) {
+            if (resp == null || !resp.isSuccessful() || resp.body() == null) return new JSONObject();
+            return new JSONObject(resp.body().string());
+        }
+    }
+
+    /** 把会话管理接口的返回码翻译成给用户看的提示。0 返回空串（成功，由调用方自己提示）。 */
+    public static String sessionErrorMsg(int code) {
+        switch (code) {
+            case 0:
+                return "";
+            case -101:
+                return "请先登录后再操作";
+            case -400:
+                return "请求错误，会话可能已不存在";
+            default:
+                return "操作失败：" + code;
+        }
     }
 
     public static JSONObject sendMsg(

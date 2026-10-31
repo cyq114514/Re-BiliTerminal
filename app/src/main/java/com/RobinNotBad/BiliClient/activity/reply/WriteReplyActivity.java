@@ -25,6 +25,7 @@ import com.RobinNotBad.BiliClient.event.ReplyEvent;
 import com.RobinNotBad.BiliClient.model.Reply;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.PickImageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
@@ -178,6 +179,25 @@ public class WriteReplyActivity extends BaseActivity {
                                         && (resultReply.pictureList == null || resultReply.pictureList.isEmpty())) {
                                     resultReply.pictureList = new ArrayList<>(uploadedPicUrls);
                                 }
+                                //视频评论会被 B 站异步审核：发送返回成功（state=0）但他人暂时看不到
+                                //（2026-10-31 实证，详见 ReplyApi.checkReplyVisible 注释）。
+                                //延迟几秒以"他人视角"复查一次，不可见就如实提示，避免用户误会评论被吞
+                                if (resultReply.rpid > 0) {
+                                    final long checkOid = oid;
+                                    final int checkType = replyType;
+                                    final long checkRoot = rpid;
+                                    final long checkRpid = resultReply.rpid;
+                                    CenterThreadPool.run(() -> {
+                                        try {
+                                            Thread.sleep(3000);
+                                        } catch (InterruptedException ignored) {
+                                            return;
+                                        }
+                                        if (!ReplyApi.checkReplyVisible(checkOid, checkType, checkRpid, checkRoot)) {
+                                            MsgUtil.showMsg("该评论已提交，B 站审核通过后其他人可见");
+                                        }
+                                    });
+                                }
                                 EventBus.getDefault().post(new ReplyEvent(1, resultReply, pos, oid));
                                 finish();
                             } else {
@@ -195,8 +215,9 @@ public class WriteReplyActivity extends BaseActivity {
                 MsgUtil.showDialog("无法发送", "上一次的Cookie刷新失败了，\n您可能需要重新登录以进行敏感操作", -1);
         });
 
+        //没有系统文件选择器的手表/精简 ROM 上 GetContent 会直接抛，统一走安全入口
         addPic.setOnClickListener(view ->
-                pickImageLauncher.launch("image/*"));
+                PickImageUtil.launchSafe(pickImageLauncher));
 
         findViewById(R.id.emote).setOnClickListener(view ->
                 emoteLauncher.launch(new Intent(this, EmoteActivity.class).putExtra("from", EmoteApi.BUSINESS_REPLY)));

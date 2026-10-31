@@ -31,6 +31,7 @@ import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.adapter.article.ArticleCardHolder;
 import com.RobinNotBad.BiliClient.adapter.video.VideoCardHolder;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.model.ArticleCard;
 import com.RobinNotBad.BiliClient.model.Dynamic;
 import com.RobinNotBad.BiliClient.model.LiveRoom;
@@ -611,7 +612,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                 //点赞区会整块消失（作者注释说的"一定要加 else"，这里补的就是漏掉的 visibility）
                 likeCount.setVisibility(View.VISIBLE);
                 if (dynamic.stats.liked) { // 这里，还有下面，一定要加else！否则会导致错乱
-                    likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
+                    likeCount.setTextColor(ThemeManager.getPrimary());
                     likeCount.setCompoundDrawablesWithIntrinsicBounds(
                             getLikeIcon(context, true), null, null, null);
                 } else {
@@ -631,7 +632,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                             ((Activity) context).runOnUiThread(() -> {
                                 MsgUtil.showMsg("点赞成功");
                                 likeCount.setText(toWan(++dynamic.stats.like));
-                                likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
+                                likeCount.setTextColor(ThemeManager.getPrimary());
                                 likeCount.setCompoundDrawablesWithIntrinsicBounds(
                                         getLikeIcon(context, true), null, null,
                                         null);

@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.adapter.message;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -24,7 +25,11 @@ import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.model.PrivateMsgSession;
 import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan;
+import com.RobinNotBad.BiliClient.api.PrivateMsgApi;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
+import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
+import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -45,6 +50,12 @@ public class PrivateMsgSessionsAdapter
     private static final int BADGE_TEXT_COLOR = Color.WHITE;
     private static final int BADGE_BG_COLOR = Color.rgb(207, 75, 95);
     private static final String BADGE_TEXT = "  未读 ";
+    /** 置顶/删除成功后的回调，宿主用它重拉会话列表（服务端才是唯一真相） */
+    private Runnable onSessionsChanged;
+
+    public void setOnSessionsChanged(Runnable onSessionsChanged) {
+        this.onSessionsChanged = onSessionsChanged;
+    }
 
     public PrivateMsgSessionsAdapter(Context context, ArrayList<PrivateMsgSession> sessionsList,
                                      HashMap<Long, UserInfo> userMap) {
@@ -142,9 +153,7 @@ public class PrivateMsgSessionsAdapter
                 context.startActivity(intent);
             });
             holder.itemView.setOnLongClickListener(view -> {
-                Intent intent = new Intent(context, UserInfoActivity.class);
-                intent.putExtra("mid", msgContent.talkerUid);
-                context.startActivity(intent);
+                showSessionMenu(msgContent);
                 return true;
             });
         } catch (JSONException err) {
@@ -155,6 +164,89 @@ public class PrivateMsgSessionsAdapter
     @Override
     public int getItemCount() {
         return sessionsList != null ? sessionsList.size() : 0;
+    }
+
+    /**
+     * 会话长按菜单：置顶/取消置顶、删除会话、查看用户主页。
+     *
+     * <p>原来长按直接跳用户主页；置顶/删除没有别的入口，只能收编成长按菜单，
+     * 查看主页保留为菜单项（原行为没丢）。
+     * 两个接口都只改服务端的会话列表（删除不清聊天记录），成功后统一重拉列表，
+     * 置顶状态以服务端 top_ts 为准，本地不手工挪位置。
+     */
+    private void showSessionMenu(PrivateMsgSession session) {
+        String[] actions = new String[]{
+                session.isTop() ? "取消置顶" : "置顶会话",
+                "删除会话",
+                "查看用户主页"};
+        new AdaptiveDialog.Builder(context)
+                .setTitle("会话操作")
+                .setSingleChoiceItems(actions, -1, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (which == 0) {
+                        setSessionTop(session, !session.isTop());
+                    } else if (which == 1) {
+                        confirmRemoveSession(session);
+                    } else {
+                        Intent intent = new Intent(context, UserInfoActivity.class);
+                        intent.putExtra("mid", session.talkerUid);
+                        context.startActivity(intent);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmRemoveSession(PrivateMsgSession session) {
+        new AdaptiveDialog.Builder(context)
+                .setTitle("删除会话")
+                .setMessage("只会把会话从列表里移除，不会删除聊天记录。")
+                .setPositiveButton("删除", (dialog, which) -> removeSession(session))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void setSessionTop(PrivateMsgSession session, boolean top) {
+        CenterThreadPool.run(() -> {
+            try {
+                int code = PrivateMsgApi.setSessionTop(session.talkerUid, PrivateMsgApi.SESSION_TYPE_USER, top);
+                ((Activity) context).runOnUiThread(() -> {
+                    String error = PrivateMsgApi.sessionErrorMsg(code);
+                    if (error.isEmpty()) {
+                        MsgUtil.showMsg(top ? "已置顶" : "已取消置顶");
+                        if (onSessionsChanged != null) onSessionsChanged.run();
+                    } else {
+                        MsgUtil.showMsg(error);
+                    }
+                });
+            } catch (Exception e) {
+                ((Activity) context).runOnUiThread(() -> MsgUtil.err(e));
+            }
+        });
+    }
+
+    private void removeSession(PrivateMsgSession session) {
+        CenterThreadPool.run(() -> {
+            try {
+                int code = PrivateMsgApi.removeSession(session.talkerUid, PrivateMsgApi.SESSION_TYPE_USER);
+                ((Activity) context).runOnUiThread(() -> {
+                    String error = PrivateMsgApi.sessionErrorMsg(code);
+                    if (error.isEmpty()) {
+                        int index = sessionsList.indexOf(session);
+                        if (index >= 0 && index < sessionsList.size()) {
+                            sessionsList.remove(index);
+                            notifyItemRemoved(index);
+                        }
+                        MsgUtil.showMsg("已从会话列表移除");
+                        if (onSessionsChanged != null) onSessionsChanged.run();
+                    } else {
+                        MsgUtil.showMsg(error);
+                    }
+                });
+            } catch (Exception e) {
+                ((Activity) context).runOnUiThread(() -> MsgUtil.err(e));
+            }
+        });
     }
 
     public static class PrivateMsgSessionsHolder extends RecyclerView.ViewHolder {

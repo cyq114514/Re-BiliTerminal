@@ -106,6 +106,22 @@
         app:layout_constraintStart_toEndOf="@+id/dislikeBtn"
         app:layout_constraintTop_toTopOf="@+id/likes" />
 
+    <!-- 置顶：只有评论区管理员（UP 主/合作稿 staff）可见，代码里接管显隐；
+         服务端硬性要求一级评论（12030）且一个区只有一个置顶位（12029） -->
+    <TextView
+        android:id="@+id/item_reply_top"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:alpha="0.75"
+        android:gravity="center_vertical"
+        android:text="置顶"
+        android:textSize="13sp"
+        android:textColor="@color/textwhite"
+        app:drawableStartCompat="@drawable/icon_star"
+        app:layout_constraintStart_toEndOf="@+id/item_reply_delete"
+        app:layout_constraintTop_toTopOf="@+id/likes" />
+
     <androidx.constraintlayout.utils.widget.ImageFilterView
         android:id="@+id/imageCard"
         android:layout_width="match_parent"

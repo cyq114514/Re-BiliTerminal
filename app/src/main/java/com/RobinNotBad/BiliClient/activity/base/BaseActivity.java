@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.event.SnackEvent;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
@@ -150,6 +151,43 @@ public class BaseActivity extends AppCompatActivity {
             return info.theme == R.style.Theme_NoSwipe || info.theme == R.style.Theme_NoSwipe_AppCompat;
         } catch (Throwable e) {
             return false;
+        }
+    }
+
+    // ---------------------------------------------------------------- 主题配色（强调色自定义）
+
+    /**
+     * 布局里的 {@code @color/bili_pink} 保持不动作为默认兜底，这里在内容就绪后统一换成用户主题色。
+     * 默认主题下 {@link ThemeApplier#apply(View)} 首行即返回，等于没有这次调用。
+     *
+     * <p>只覆写 setContentView 而不是在几十个页面里各加一行：所有页面都走这三个入口，
+     * 漏改的风险比重载一次更大。
+     */
+    @Override
+    public void setContentView(int layoutResID) {
+        super.setContentView(layoutResID);
+        applyThemeColors();
+    }
+
+    @Override
+    public void setContentView(View view) {
+        super.setContentView(view);
+        applyThemeColors();
+    }
+
+    @Override
+    public void setContentView(View view, ViewGroup.LayoutParams params) {
+        super.setContentView(view, params);
+        applyThemeColors();
+    }
+
+    private void applyThemeColors() {
+        try {
+            View content = findViewById(android.R.id.content);
+            if (content != null) ThemeApplier.apply(content);
+        } catch (Throwable t) {
+            //换色失败只影响观感，绝不能连累页面启动
+            Logu.e("theme", "应用主题色失败：" + t);
         }
     }
 

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/activity_padding_horizontal"
+    android:paddingVertical="8dp">
+
+    <TextView
+        android:id="@+id/resultTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:lines="1"
+        android:paddingHorizontal="6dp"
+        android:text="设置项"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/resultPage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:lines="1"
+        android:paddingHorizontal="6dp"
+        android:text="所属页面"
+        android:textColor="@color/text_gray"
+        android:textSize="11sp" />
+
+</LinearLayout>

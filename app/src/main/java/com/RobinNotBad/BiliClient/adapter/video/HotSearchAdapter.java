@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.model.HotSearchCard;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
@@ -32,7 +33,10 @@ public class HotSearchAdapter extends RecyclerView.Adapter<HotSearchAdapter.Hold
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new Holder(LayoutInflater.from(context).inflate(R.layout.item_hot_search, parent, false));
+        View view = LayoutInflater.from(context).inflate(R.layout.item_hot_search, parent, false);
+        //行内强调文字跟随主题色；主题变化需重进页面，故按 holder 创建时应用一次即可
+        ThemeApplier.apply(view);
+        return new Holder(view);
     }
 
     @SuppressLint("SetTextI18n")

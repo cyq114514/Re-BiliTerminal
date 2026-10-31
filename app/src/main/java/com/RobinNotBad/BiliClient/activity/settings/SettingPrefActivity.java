@@ -9,6 +9,7 @@ import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter;
 import com.RobinNotBad.BiliClient.api.RecommendApi;
 import com.RobinNotBad.BiliClient.model.SettingSection;
+import com.RobinNotBad.BiliClient.util.AppBuvid;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import java.util.ArrayList;
@@ -53,6 +54,23 @@ public class SettingPrefActivity extends RefreshListActivity {
                 //"设置页显示关、实际在开"的口径不一致问题
                 add(new SettingSection("switch", "首页使用app端推荐", RecommendApi.KEY_APP_RECOMMEND,
                         "默认使用 app 端推荐（相关性更好）；若观感不符预期，可关闭改用 web 端推荐", "true"));
+                //App 端推荐的设备标识：与 Cookie 里的 buvid3 不是同一个东西，必须单独存（见 AppBuvid 注释）。
+                //进设置页就生成一份，否则这里会是一个空输入框，用户不知道自己该填什么
+                String appBuvid = AppBuvid.get();
+                add(new SettingSection("input_string", "App 推荐设备标识", AppBuvid.KEY,
+                        "App 端推荐请求头 buvid 的值，留空或格式不对会自动重新生成。\n"
+                                + "这是长期设备标识，B 站可用它把同一设备上的多个账号关联起来；换新值等于重置推荐偏好，"
+                                + "需要刷新几轮才见效。", appBuvid));
+                add(new SettingSection("switch", "App 推荐附带客户端签名", RecommendApi.KEY_APP_RECOMMEND_SIGN,
+                        "按官方客户端方式给请求加 appkey/ts/sign（参数不变）。关掉后退回不签名请求，"
+                                + "用于排查签名被拒导致推荐变少的情况", "true"));
+                add(new SettingSection("switch", "App 推荐附带 access_key", RecommendApi.KEY_APP_RECOMMEND_ACCESS_KEY,
+                        "默认关闭。access_key 属于账号凭证，本应用此前只在发私信卡片时用过；"
+                                + "开启后推荐请求会带上它（需已通过扫码换到过），失败不影响匿名推荐", "false"));
+                add(new SettingSection("input_string", "推荐屏蔽的 UP 主", RecommendApi.KEY_BLOCK_MIDS,
+                        "填 UP 主 mid（数字），多个用逗号或换行分隔；命中就不在首页推荐里出现。填错的行会被忽略", ""));
+                add(new SettingSection("input_string", "推荐屏蔽的关键词", RecommendApi.KEY_BLOCK_WORDS,
+                        "按视频标题做包含匹配，不区分大小写，多个用逗号或换行分隔", ""));
                 add(new SettingSection("switch", "新动态数量检查", SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE,
                         getString(R.string.desc_dynamic_update_check_enable), "true"));
                 add(new SettingSection("switch", "消息数量检查", SharedPreferencesUtil.MESSAGE_UPDATE_CHECK_ENABLE,
@@ -115,6 +133,7 @@ public class SettingPrefActivity extends RefreshListActivity {
 
         SettingsAdapter adapter = new SettingsAdapter(this, sectionList);
         setAdapter(adapter);
+        scrollToSettingTitle(sectionList);
 
         setRefreshing(false);
 

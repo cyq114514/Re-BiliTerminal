@@ -31,6 +31,7 @@ import java.util.HashMap;
 
 public class MessageActivity extends InstanceActivity {
     private RecyclerView sessionsView;
+    private SwipeRefreshLayout swipeRefreshLayout;
 
     @SuppressLint({"SetTextI18n", "InflateParams"})
     @Override
@@ -39,6 +40,7 @@ public class MessageActivity extends InstanceActivity {
 
         asyncInflate(R.layout.activity_message, (layoutView, resId) -> {
             SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
+            this.swipeRefreshLayout = swipeRefreshLayout;
             swipeRefreshLayout.setEnabled(false);
             swipeRefreshLayout.setRefreshing(true);
 
@@ -89,37 +91,7 @@ public class MessageActivity extends InstanceActivity {
             CenterThreadPool.run(() -> {
                 try {
                     JSONObject stats = MessageApi.getUnread();
-                    // 使用 getNewSessionsList 获取更完整的会话数据
-                    ArrayList<PrivateMsgSession> sessionsList = PrivateMsgApi.getNewSessionsList(0, 20, 0, "web");
-                    // 如果新接口返回为空，回退到旧接口
-                    if (sessionsList.isEmpty()) {
-                        sessionsList = PrivateMsgApi.getSessionsList(20);
-                    }
-                    Collections.sort(sessionsList, (o1, o2) -> {
-                        boolean o1Unread = o1.unread > 0;
-                        boolean o2Unread = o2.unread > 0;
-                        if (o1Unread && !o2Unread) {
-                            return -1;
-                        } else if (!o1Unread && o2Unread) {
-                            return 1;
-                        }
-                        return 0;
-                    });
-                    // 使用 session 自带的信息 + 批量用户查询兜底
-                    ArrayList<Long> uidList = new ArrayList<>();
-                    for (PrivateMsgSession item : sessionsList) {
-                        uidList.add(item.talkerUid);
-                    }
-                    HashMap<Long, UserInfo> userMap = new HashMap<>();
-                    try {
-                        if (!uidList.isEmpty()) {
-                            userMap = PrivateMsgApi.getUsersInfo(uidList);
-                        }
-                    } catch (Exception ignored) {}
-
-                    PrivateMsgSessionsAdapter adapter = new PrivateMsgSessionsAdapter(this, sessionsList, userMap);
                     runOnUiThread(() -> {
-                        swipeRefreshLayout.setRefreshing(false);
                         try {
                             if (stats != null) {
                                 ((TextView) findViewById(R.id.reply_text)).setText("回复我的"
@@ -129,9 +101,6 @@ public class MessageActivity extends InstanceActivity {
                                 ((TextView) findViewById(R.id.at_text)).setText(
                                         "@我" + ((stats.getInt("at") > 0) ? ("(" + stats.getInt("at") + "未读)") : ""));
                             }
-                            sessionsView.setLayoutManager(new CustomLinearManager(this));
-                            sessionsView.setAdapter(adapter);
-                            SharedPreferencesUtil.putInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
                         } catch (Exception e) {
                             MsgUtil.err(e);
                         }
@@ -142,14 +111,64 @@ public class MessageActivity extends InstanceActivity {
                         scrollView.requestFocus();
                     });
                 } catch (Exception e) {
-                    runOnUiThread(() -> {
-                        swipeRefreshLayout.setRefreshing(false);
-                        MsgUtil.err(e);
-                    });
+                    runOnUiThread(() -> MsgUtil.err(e));
                 }
+
+                loadSessions();
             });
 
             TutorialHelper.showTutorialList(this, R.array.tutorial_message, 5);
+        });
+    }
+
+    /**
+     * 拉取会话列表并刷新界面。置顶/删除会话后由适配器回调再次调用（服务端才是唯一真相）。
+     * <p>排序：置顶优先（置顶时间晚的靠前）→ 未读优先 → 维持服务端原序。原先只按「未读优先」排，
+     * 置顶但没未读的会话会被挤到未读会话后面，表现为「点了置顶、提示已置顶，位置却没变」。
+     * Collections.sort 是稳定排序，同档内不打乱服务端给出的时间顺序。
+     */
+    private void loadSessions() {
+        CenterThreadPool.run(() -> {
+            try {
+                ArrayList<PrivateMsgSession> sessionsList = PrivateMsgApi.getNewSessionsList(0, 20, 0, "web");
+                //如果新接口返回为空，回退到旧接口
+                if (sessionsList.isEmpty()) {
+                    sessionsList = PrivateMsgApi.getSessionsList(20);
+                }
+                Collections.sort(sessionsList, (o1, o2) -> {
+                    if (o1.isTop() != o2.isTop()) return o1.isTop() ? -1 : 1;
+                    if (o1.isTop() && o1.topTs != o2.topTs) return o1.topTs > o2.topTs ? -1 : 1;
+                    boolean o1Unread = o1.unread > 0;
+                    boolean o2Unread = o2.unread > 0;
+                    if (o1Unread != o2Unread) return o1Unread ? -1 : 1;
+                    return 0;
+                });
+                //使用 session 自带的信息 + 批量用户查询兜底
+                ArrayList<Long> uidList = new ArrayList<>();
+                for (PrivateMsgSession item : sessionsList) {
+                    uidList.add(item.talkerUid);
+                }
+                HashMap<Long, UserInfo> userMap = new HashMap<>();
+                try {
+                    if (!uidList.isEmpty()) {
+                        userMap = PrivateMsgApi.getUsersInfo(uidList);
+                    }
+                } catch (Exception ignored) {}
+
+                PrivateMsgSessionsAdapter adapter = new PrivateMsgSessionsAdapter(this, sessionsList, userMap);
+                adapter.setOnSessionsChanged(this::loadSessions);
+                runOnUiThread(() -> {
+                    swipeRefreshLayout.setRefreshing(false);
+                    sessionsView.setLayoutManager(new CustomLinearManager(this));
+                    sessionsView.setAdapter(adapter);
+                    SharedPreferencesUtil.putInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    swipeRefreshLayout.setRefreshing(false);
+                    MsgUtil.err(e);
+                });
+            }
         });
     }
 }

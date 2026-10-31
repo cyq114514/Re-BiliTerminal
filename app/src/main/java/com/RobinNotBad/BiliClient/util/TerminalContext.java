@@ -186,10 +186,20 @@ public class TerminalContext {
     }
 
     public void enterDynamicDetailPage(Context context, long id, int position, long seekReply) {
+        enterDynamicDetailPage(context, id, position, seekReply, -1);
+    }
+
+    /**
+     * @param seekChild 被回复的子评论 rpid（-1 表示没有）：评论列表用它高亮目标子评论。
+     *                  <p>调用方注意：带子评论时 seekReply 本身也应该传子评论 rpid——
+     *                  服务端只有收到子评论 rpid 才会把它排进主评论预览的第一位。
+     */
+    public void enterDynamicDetailPage(Context context, long id, int position, long seekReply, long seekChild) {
         Intent intent = new Intent(context, OpusInfoActivity.class);
         intent.putExtra("position", position);
         intent.putExtra("id", id);
         intent.putExtra("seekReply", seekReply);
+        intent.putExtra("seekChild", seekChild);
         context.startActivity(intent);
     }
 

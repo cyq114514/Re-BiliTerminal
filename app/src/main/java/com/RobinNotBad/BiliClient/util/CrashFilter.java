@@ -18,7 +18,9 @@ import java.util.List;
  * <ol>
  *   <li>系统压力类（lmk / freezer / resource）完全不上传；</li>
  *   <li>实验室「主动触发崩溃」不上传；</li>
- *   <li>播放哨兵只在「连续异常 ≥2 次」或「最后阶段属于 native 高危区」时才传；</li>
+ *   <li>播放哨兵（{@code PlayerSentinel$AbnormalExit}）一律不上传：它只证明"播放页没正常收尾"，
+ *       分不清 native 崩溃、被系统回收还是被强杀，属于可疑但无法行动的数据。
+ *       线上只收「有明确 Java 堆栈」的崩溃；哨兵仍写 logcat 与本地留档，需要时人工导出；</li>
  *   <li>Java 崩溃的堆栈里没有本仓库代码帧（含随仓库编译的 ijk / DFM / brotli），
  *       视为系统或环境异常，丢弃；</li>
  *   <li>24 小时内同一指纹只上传一条，期间重复发生只累加计数（写进 message 后缀，
@@ -53,22 +55,6 @@ public final class CrashFilter {
             "com.netease.hearttouch.brotlij",
     };
 
-    /**
-     * native 崩溃高危阶段：只保留"播放还没真正开始"的那几步。
-     *
-     * <p>不能把「首帧就绪」算进去——后台看几小时被系统回收的设备，最后阶段也都是首帧就绪，
-     * 实测 20 条哨兵里 17 条是这个，正是噪音主体。
-     */
-    private static final String[] NATIVE_RISK_STAGES = {
-            "最后阶段=加载ijk库",
-            "最后阶段=配置显示",
-            "最后阶段=设置数据源",
-            "最后阶段=已提交准备",
-    };
-
-    /** 短会话阈值：不到两分钟就异常收尾的播放，比"看了 7 小时被回收"更可能是真崩 */
-    private static final long SHORT_SESSION_SECONDS = 120;
-
     /** 指纹表：fingerprint -> {"t": 上次上传时间, "n": 累计发生次数} */
     private static final String KEY_INDEX = "crash_fp_index";
     private static final long DEDUP_WINDOW_MS = 24L * 60 * 60 * 1000;
@@ -102,11 +88,12 @@ public final class CrashFilter {
             return new Decision(false, "test-crash");
         }
 
-        // 3) 播放哨兵：只看强信号（连续异常 / native 高危阶段）
+        // 3) 播放哨兵：一律不上传。它只能证明"播放页没正常收尾"，
+        //    分不清 native 崩溃 / 被系统回收 / 被强杀——这三类在数据上完全同形，
+        //    继续上传只会用无法行动的数据淹没真崩溃（1.2.5 期间 110 条里 84 条是它）。
+        //    本地留档与 logcat 仍在，排查时人工导出即可。
         if (SENTINEL_CLASS.equals(cls)) {
-            if (!sentinelWorthReporting(message)) {
-                return new Decision(false, "sentinel-weak");
-            }
+            return new Decision(false, "sentinel-disabled");
         } else if ("java".equals(type) && !hasOurFrame(stack)) {
             // 4) Java 崩溃堆栈里没有任何本仓库代码帧 → 系统/环境异常（DeadSystem、BadParcelable、
             // 系统组件内部崩溃…），默认丢弃。java-early 不适用：它本来就发生在框架初始化阶段
@@ -127,49 +114,6 @@ public final class CrashFilter {
         if (stack == null || stack.isEmpty()) return false;
         for (String pkg : OUR_PACKAGES) {
             if (stack.contains(pkg)) return true;
-        }
-        return false;
-    }
-
-    /**
-     * 播放哨兵是否值得上报。
-     *
-     * <p>哨兵只能看到"播放页没有正常收尾"，分不清 native 崩溃、被系统回收还是被强杀；
-     * 因此只保留三类强信号：
-     * <ul>
-     *   <li>连续异常 ≥2 次（偶发回收不会连着来）；</li>
-     *   <li>最后阶段停在 native 高危区（加载 ijk / 配置显示 / 设置数据源 / 已提交准备）——
-     *       播放还没起来就没了，基本是播放器 so 的锅；</li>
-     *   <li>短会话（≤120 秒）异常收尾：看几分钟就崩，比"看了一晚上被回收"更可疑。</li>
-     * </ul>
-     */
-    static boolean sentinelWorthReporting(String message) {
-        if (message == null) return false;
-        int idx = message.indexOf("连续=");
-        if (idx >= 0) {
-            int end = message.indexOf('次', idx);
-            if (end > idx + 3) {
-                try {
-                    int streak = Integer.parseInt(message.substring(idx + 3, end));
-                    if (streak >= 2) return true;
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        }
-        for (String stage : NATIVE_RISK_STAGES) {
-            if (message.contains(stage)) return true;
-        }
-        //短会话：解析 "停留=123s"
-        int stayIdx = message.indexOf("停留=");
-        if (stayIdx >= 0) {
-            int end = message.indexOf('s', stayIdx);
-            if (end > stayIdx + 3) {
-                try {
-                    long seconds = Long.parseLong(message.substring(stayIdx + 3, end));
-                    if (seconds >= 0 && seconds <= SHORT_SESSION_SECONDS) return true;
-                } catch (NumberFormatException ignored) {
-                }
-            }
         }
         return false;
     }

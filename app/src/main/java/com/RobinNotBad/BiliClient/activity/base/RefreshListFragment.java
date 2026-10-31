@@ -7,13 +7,13 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -50,7 +50,8 @@ public class RefreshListFragment extends BaseFragment {
         swipeRefreshLayout.setRefreshing(true);
         //新版美学：刷新指示器与氛围背景同色（与 RefreshListActivity 一致）
         if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)) {
-            swipeRefreshLayout.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.bili_pink));
+            //刷新指示器颜色跟随主题强调色（默认主题下仍是原 #FE679A）
+            swipeRefreshLayout.setColorSchemeColors(ThemeManager.getPrimary());
         }
         //初始加载期间联动宿主页面的氛围呼吸
         if (getActivity() instanceof BaseActivity) ((BaseActivity) getActivity()).setAmbientBreathing(true);

@@ -138,10 +138,12 @@ import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPreparedListener {
-    private boolean destroyed = false;
+    //主线程写、DFM 绘制线程与缓存线程读：不加 volatile 时回调线程可能读到过期值
+    //（旧代码里表现出来就是 prepared 回调读到 null 的 mDanmakuView，线上 2 例 NPE）
+    private volatile boolean destroyed = false;
 
     private IjkMediaPlayer ijkPlayer;
-    private IDanmakuView mDanmakuView;
+    private volatile IDanmakuView mDanmakuView;
     private DanmakuContext mContext;
 
     private SurfaceView surfaceView;
@@ -297,6 +299,19 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private boolean danmakuStalled = false;
     //同步诊断日志节流：每 5 秒一条，真机上直接看两个时间差多少
     private long lastDanmakuDiagMs = 0;
+    //seek 落点校正：ijk 的 seek 会落在目标位置前最近的关键帧上并从关键帧起播（本工程预编译
+    //native 无 accurate-seek），而 seekDanmakuTo 把弹幕对齐到"请求位置"——真机实测续播 28000ms
+    //时播放器实际从 24872ms 起播，弹幕因此整体超前 3.4s，且因 20s 冷却一直无人纠偏。
+    //窗口期内检测到真实偏差就立即按实际落点重新对齐，不等冷却
+    private static final long DANMAKU_LANDING_WINDOW_MS = 8000;
+    //窗口开头的宽限期：ijkPlayer.seekTo 返回后旧解码流水线还会推进几百毫秒，这期间
+    //getCurrentPosition 报的是旧流位置而非落点，不能拿去对齐
+    private static final long DANMAKU_LANDING_GRACE_MS = 600;
+    //落点校正与卡顿纠偏共用的最小有效偏差：实测两个时钟差低于它时弹幕其实没偏，
+    //此时 seek 只会白白清一次屏（真机观测到启动期 431ms"卡顿"的误触发）
+    private static final long DANMAKU_REALIGN_MIN_DRIFT_MS = 800;
+    //落点校正窗口截止时刻：seekDanmakuTo 里刷新，progressTimer 的 tick 里消费
+    private long danmakuLandingCheckUntil = 0;
     //当前倍速缓存：DFM 的 prepared 回调跑在弹幕线程上，那里不能去读 SeekBar（跨线程碰 View）
     private volatile float currentSpeed = 1.0f;
 
@@ -2469,6 +2484,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             @Override
             public void prepared() {
                 Logu.v("danmaku", "prepared");
+                //本回调跑在 DFM 线程，而主线程在换 P / 换清晰度 / 退出时已经把 mDanmakuView
+                //release 并置空；必须先取一次局部引用判空，否则直接 NPE（线上 2 例 setSpeed on null）。
+                //后续一律用这个局部引用，避免中途被主线程改掉。
+                IDanmakuView danmakuView = mDanmakuView;
+                if (danmakuView == null || destroyed) return;
                 //弹幕下载通常慢于取流，onPrepared 里的 seek/start 会被 DanmakuView 直接丢弃（handler 未 prepared），
                 //弹幕就会从 0 开始播。这里**无条件**按当前播放位置对齐一次：
                 //只有 pendingDanmakuSeekMs 时补做是不够的——普通起播时它一直是 -1，
@@ -2478,13 +2498,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         : (isPrepared ? video_now : 0);
                 if (anchor > 0) {
                     Logu.d("弹幕同步", "prepared 后对齐 seek=" + anchor + "ms");
-                    mDanmakuView.seekTo(anchor);
+                    danmakuView.seekTo(anchor);
                     lastDanmakuSyncMs = System.currentTimeMillis();
                 }
                 pendingDanmakuSeekMs = -1;
                 //prepare() 之后 handler 才 isPrepared，此前 onPrepared 里的 setSpeed 会被静默丢弃，
                 //倍速播放时弹幕时钟就停在 1x——这里补一次
-                mDanmakuView.setSpeed(currentPlayerSpeed());
+                danmakuView.setSpeed(currentPlayerSpeed());
                 //弹幕通常晚于取流加载完：如果用户在这之前就按了暂停，上面的 seekTo 会顺带把
                 //绘制线程拉起来（DFM 内部 SEEK_POS → RESUME），这里再压一次
                 pauseDanmakuIfUserPaused();
@@ -3768,6 +3788,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (positionMs < 0) positionMs = 0;
         //主动跳转后先进入冷却：播放器 seek 需要时间才真正到位，期间不能反过来把弹幕拉回旧位置
         lastDanmakuSyncMs = System.currentTimeMillis();
+        //同时打开落点校正窗口：ijk 关键帧落点与请求位置的偏差由窗口期内的 tick 尽快修正
+        danmakuLandingCheckUntil = lastDanmakuSyncMs + DANMAKU_LANDING_WINDOW_MS;
         resetDanmakuTick();
         if (mDanmakuView.isPrepared()) {
             //已经 prepared 就当场生效；pending 必须清掉，否则下次 reload 的 prepared 回调
@@ -3841,10 +3863,32 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //差值就是这段卡顿被弹幕时钟"白走"掉的时间（阈值 400ms 只为吃掉 tick 抖动）。
         //posGap < 0（用户往回跳）不算卡顿，否则每次后退都会紧跟一次多余的 seek
         if (posGap >= 0 && wallGap - posGap > 400) {
-            Logu.d("弹幕同步", "检测到卡顿 " + (wallGap - posGap) + "ms，按播放位置重对齐到 "
-                    + playerPositionMs + "ms");
-            seekDanmakuTo(playerPositionMs);
+            //卡顿期间 DFM 大多已被 BUFFERING 事件正确暂停、时钟没偏（真机观测到启动期 431ms
+            //"卡顿"的误触发，白清一次屏）。先实测两个时钟的差，没偏就不纠
+            long danmakuTimeStall = mDanmakuView.getCurrentTime();
+            if (Math.abs(playerPositionMs - danmakuTimeStall) > DANMAKU_REALIGN_MIN_DRIFT_MS) {
+                Logu.d("弹幕同步", "检测到卡顿 " + (wallGap - posGap) + "ms，按播放位置重对齐到 "
+                        + playerPositionMs + "ms");
+                seekDanmakuTo(playerPositionMs);
+            }
             return;
+        }
+
+        //---------- seek 落点校正 ----------
+        //只在 seek 后的短窗口内做：偏差来源明确（ijk 关键帧落点 vs 弹幕对齐的请求位置，
+        //真机实测可达 3s 以上），不必等 20s 冷却的极端偏差兜底。
+        //能走到这里说明播放位置正在真实推进（tick 门控了位置变化），宽限期内除外——
+        //seekTo 返回后旧解码流水线还会推进几百毫秒，那不是落点，拿去对齐会把弹幕拽回过去
+        long sinceSync = now - lastDanmakuSyncMs;
+        if (sinceSync >= DANMAKU_LANDING_GRACE_MS && now < danmakuLandingCheckUntil) {
+            long danmakuTimeLanding = mDanmakuView.getCurrentTime();
+            long landingDiff = playerPositionMs - danmakuTimeLanding;
+            if (Math.abs(landingDiff) > DANMAKU_REALIGN_MIN_DRIFT_MS) {
+                Logu.w("弹幕校正", "seek 落点偏差 " + landingDiff + "ms（弹幕=" + danmakuTimeLanding
+                        + "，player=" + playerPositionMs + "），按实际落点重新对齐");
+                seekDanmakuTo(playerPositionMs);
+                return;
+            }
         }
 
         //---------- 极端偏差兜底 ----------
@@ -4038,7 +4082,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         CenterThreadPool.run(() -> {
             try {
                 Logu.d("高能进度条", "开始加载数据 aid=" + aid + " cid=" + cid);
-                HighEnergyData data = PlayerApi.getHighEnergyData(cid, aid);
+                //数据源已从失效的 pbp 接口切换到 x/player/wbi/v2 的 view_points（见 PlayerApi.getHighEnergyViewPoints）
+                HighEnergyData data = PlayerApi.getHighEnergyViewPoints(aid, cid);
 
                 if (data != null && data.hasValidData()) {
                     runOnUiThread(() -> {
@@ -4048,7 +4093,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         }
                     });
                 } else {
-                    Logu.w("高能进度条", "未获取到有效数据");
+                    Logu.d("高能进度条", "未获取到有效数据（view_points 为空或未登录）");
                 }
             } catch (Exception e) {
                 Logu.e("高能进度条", "加载失败: " + e.getMessage());

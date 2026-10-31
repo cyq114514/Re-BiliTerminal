@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity;
@@ -84,6 +85,8 @@ public class BangumiInfoFragment extends Fragment {
             mediaId = arguments.getLong("media_id");
         }
         rootView = inflater.inflate(R.layout.fragment_media_info, container, false);
+        //Fragment 的视图在 setContentView 之后才挂上，需要单独应用一次主题色
+        ThemeApplier.apply(rootView);
         return rootView;
     }
 

@@ -73,6 +73,8 @@ public class MessageApi {
         @SerializedName("source_content") public String source_content;
         @SerializedName("image") public String image;
         @SerializedName("uri") public String uri;
+        /** App 深链接，比 uri 更精确：bilibili://opus/detail/<dynId> 或 bilibili://comment/detail/<bid>/<oid>/<rid>/ */
+        @SerializedName("native_uri") public String native_uri;
         @SerializedName("target_id") public long target_id;
     }
     public static class MsgCursor {
@@ -185,7 +187,8 @@ public class MessageApi {
             LikeItemData item = obj.item;
             if (item == null) { mc.getType = MessageCard.GET_TYPE_LIKE; list.add(mc); continue; }
             mc.businessId = item.business_id; mc.subjectId = item.subject_id; mc.sourceId = item.source_id;
-            mc.rootId = item.root_id; mc.itemType = item.type; mc.contentUri = item.uri;
+            mc.rootId = item.root_id; mc.itemType = item.type;
+            mc.contentUri = item.uri; mc.nativeUri = item.native_uri;
             switch (item.type) {
                 case "video": mc.content = "等总共 " + obj.counts + " 人点赞了你的视频"; mc.videoCard = parseVideoCard(item); break;
                 case "reply": mc.content = "等总共 " + obj.counts + " 人点赞了你的评论"; mc.replyInfo = buildReply(item, false); break;
@@ -216,7 +219,7 @@ public class MessageApi {
             if (item == null) { mc.getType = MessageCard.GET_TYPE_REPLY; list.add(mc); continue; }
             mc.businessId = item.business_id; mc.subjectId = item.subject_id; mc.sourceId = item.source_id;
             mc.rootId = item.root_id; mc.itemType = item.type; mc.targetId = item.target_id;
-            mc.contentUri = item.uri;
+            mc.contentUri = item.uri; mc.nativeUri = item.native_uri;
             // 原版逻辑：action 文本显示 source_content（直接父级 C）
             mc.content = (item.source_content != null) ? item.source_content : item.title;
             mc.getType = MessageCard.GET_TYPE_REPLY;
@@ -252,7 +255,7 @@ public class MessageApi {
             if (item == null) { mc.getType = MessageCard.GET_TYPE_AT; list.add(mc); continue; }
             mc.businessId = item.business_id; mc.subjectId = item.subject_id; mc.sourceId = item.source_id;
             mc.rootId = item.root_id; mc.itemType = item.type; mc.getType = MessageCard.GET_TYPE_AT;
-            mc.contentUri = item.uri;
+            mc.contentUri = item.uri; mc.nativeUri = item.native_uri;
             switch (item.type) {
                 case "video": mc.videoCard = parseVideoCard(item); break;
                 case "reply": Reply r = buildReply(item, false);

@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
+import com.RobinNotBad.BiliClient.util.MediaMerger;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 
@@ -176,6 +177,24 @@ public class DownloadService extends Service {
                         if (urls_audio.isEmpty() && section.audioUrl != null && !section.audioUrl.isEmpty())
                             urls_audio.add(section.audioUrl);
                         urls_video = null; // 仅音频模式不需要视频
+                    } else if ("video_dash".equals(section.downloadType)) {
+                        // DASH 双流下载（1080P 高码率/4K 等 durl 拿不到的清晰度）：
+                        // 视频、音频各下一份后在本地 remux 成单个 MP4
+                        PlayerApi.getVideoDash(data);
+                        urls_video = new ArrayList<>(data.videoUrls);
+                        if (urls_video.isEmpty() && data.videoUrl != null && !data.videoUrl.isEmpty())
+                            urls_video.add(data.videoUrl);
+                        urls_audio = new ArrayList<>(data.audioUrls);
+                        if (urls_audio.isEmpty() && data.audioUrl != null && !data.audioUrl.isEmpty())
+                            urls_audio.add(data.audioUrl);
+                        if (urls_video.isEmpty()) {
+                            // DASH 没给视频流（不该发生）：退回普通单文件取流兜底
+                            PlayerApi.getVideo(data, true);
+                            urls_video = new ArrayList<>(data.videoUrls);
+                            if (urls_video.isEmpty() && data.videoUrl != null && !data.videoUrl.isEmpty())
+                                urls_video.add(data.videoUrl);
+                            urls_audio = null;
+                        }
                     } else {
                         PlayerApi.getVideo(data, true);
                         urls_video = new ArrayList<>(data.videoUrls);
@@ -252,6 +271,14 @@ public class DownloadService extends Service {
                                     setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
                                     continue;
                                 }
+                            } else if ("video_dash".equals(section.downloadType)) {
+                                result = downloadDashPair(urls_video, urls_audio, path_single);
+                                if (result != NORMAL) {
+                                    failed = true;
+                                    exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
+                                    continue;
+                                }
                             } else {
                                 toastState("下载视频");
                                 result = downFile(urls_video, new File(path_single, "video.mp4"), true);
@@ -314,6 +341,14 @@ public class DownloadService extends Service {
                             if (section.isAudioOnly()) {
                                 toastState("下载音频");
                                 result = downFile(urls_audio, new File(path_page, "audio.m4a"), true);
+                                if (result != NORMAL) {
+                                    failed = true;
+                                    exitCode = result;
+                                    setState(section.id, "error");   //失败落库，否则该条目永久停留在 downloading 被误锁
+                                    continue;
+                                }
+                            } else if ("video_dash".equals(section.downloadType)) {
+                                result = downloadDashPair(urls_video, urls_audio, path_page);
                                 if (result != NORMAL) {
                                     failed = true;
                                     exitCode = result;
@@ -527,6 +562,47 @@ public class DownloadService extends Service {
             return parsed != null ? parsed.host() : "?";
         } catch (Exception e) {
             return "?";
+        }
+    }
+
+    /**
+     * DASH 双流下载：视频、音频各下一份，再用 MediaMerger remux 成单个 video.mp4。
+     *
+     * <p>临时文件统一在 finally 里清理——合并失败保留分轨没有消费方（本地列表只认 video.mp4），
+     * 反而会占空间；任务已按 error 落库，重新下载即可。
+     *
+     * @return NORMAL 成功；否则返回错误码（由调用方落 error 状态）
+     */
+    private int downloadDashPair(List<String> urls_video, List<String> urls_audio, File targetDir) throws IOException {
+        File videoTmp = new File(targetDir, "video_dash_tmp.mp4");
+        File audioTmp = new File(targetDir, "audio_dash_tmp.m4a");
+        File merged = new File(targetDir, "video.mp4");
+        try {
+            toastState("下载视频");
+            int result = downFile(urls_video, videoTmp, true);
+            if (result != NORMAL) return result;
+
+            if (urls_audio == null || urls_audio.isEmpty()) {
+                //无音轨（极少见）：视频临时文件直接转正
+                if (!videoTmp.renameTo(merged)) return ERR_FILE;
+                return NORMAL;
+            }
+
+            toastState("下载音频");
+            int audioResult = downFile(urls_audio, audioTmp, true);
+            if (audioResult != NORMAL) return audioResult;
+
+            toastState("合并音视频");
+            int mergeResult = MediaMerger.mergeAv(videoTmp, audioTmp, merged, null, () -> !started);
+            if (mergeResult != MediaMerger.RESULT_OK) {
+                Logu.e("download", "DASH 合并失败（" + mergeResult + "）");
+                MsgUtil.showMsg("音视频合并失败（" + mergeResult + "），请重新下载");
+                return ERR_UNKNOWN;
+            }
+            return NORMAL;
+        } finally {
+            videoTmp.delete();
+            audioTmp.delete();
         }
     }
 

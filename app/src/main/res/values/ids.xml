@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 代码里用 setTag(id, value) 挂载数据的键，不参与布局 -->
+<resources>
+    <!-- 子评论行 → 它对应的 rpid，用于从消息跳转时精确定位到某一行 -->
+    <item name="tag_child_rpid" type="id" />
+    <!-- 子评论行 → 正在播放的高亮动画，复用时先取消，避免动画改到别人的背景 -->
+    <item name="tag_color_anim" type="id" />
+</resources>

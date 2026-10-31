@@ -22,6 +22,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -397,6 +398,54 @@ public class ReplyApi {
         return sendReply(oid, root, parent, text, REPLY_TYPE_DYNAMIC);
     }
 
+    /**
+     * 以"他人视角"复查一条刚发出的评论是否已对外可见。
+     *
+     * <p>背景（2026-10-31 真机实证）：经 {@code reply/add} 发出的<b>视频评论区（type=1）一级评论</b>
+     * 会被 B 站异步审核——发送返回 code=0 且 reply.state=0（服务端当时不打标记），自己端正常展示，
+     * 但未登录公开接口查不到这条评论（同请求发的动态评论 type=11 立即可见；同一账号浏览器发的
+     * 视频评论 1 分钟内可见）。楼中楼有约 1 小时内放行的实例。即"发送成功 ≠ 他人可见"。
+     * 判定发生在风控深层，换 UA/请求头无法绕过（BiliDroid UA 实测无效），故不做请求侧对抗，
+     * 改为如实告知用户（见 WriteReplyActivity 的复查提示），本方法即复查用的探测接口。
+     *
+     * <p><b>必须不带登录凭证查询</b>：带 SESSDATA 查会把"审核中（仅自己可见）"的评论也查出来，
+     * 失去复查意义。buvid3 是设备标识而非登录凭证，带上以通过基础风控（实测匿名无 buvid 会被拒）。
+     *
+     * @return true=已对外可见（或查询本身失败——失败按可见处理，不做多余提示）
+     */
+    public static boolean checkReplyVisible(long oid, int type, long rpid, long root) {
+        try {
+            String buvid3 = NetWorkUtil.getInfoFromCookie("buvid3",
+                    SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+            ArrayList<String> headers = NetWorkUtil.webHeadersWithoutCookie();
+            for (int i = 0; i + 1 < headers.size(); i += 2) {
+                if ("Cookie".equalsIgnoreCase(headers.get(i))) {
+                    headers.set(i + 1, (buvid3 == null || buvid3.isEmpty()) ? "" : "buvid3=" + buvid3);
+                    break;
+                }
+            }
+            //一级评论查评论区时间序（刚发出的可见评论必然在最新前列）；
+            //楼中楼查该根本楼的子评论列表
+            String url = root != 0
+                    ? "https://api.bilibili.com/x/v2/reply/reply?oid=" + oid + "&type=" + type
+                      + "&root=" + root + "&ps=20"
+                    : "https://api.bilibili.com/x/v2/reply/main?oid=" + oid + "&type=" + type
+                      + "&mode=2&ps=20&plat=1";
+            //maxRetryTimes 传 1：复查是尽力而为的探测，弱网下不应反复重试拖出长延迟
+            JSONObject result = NetWorkUtil.getJson(url, headers, 1);
+            JSONObject data = result.optJSONObject("data");
+            JSONArray replies = data != null ? data.optJSONArray("replies") : null;
+            if (replies == null) return true;
+            for (int i = 0; i < replies.length(); i++) {
+                JSONObject r = replies.optJSONObject(i);
+                if (r != null && r.optLong("rpid", -1) == rpid) return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
     public static int likeReply(long oid, long root, boolean action) throws IOException, JSONException {
         return likeReply(oid, root, REPLY_TYPE_VIDEO, action);
     }
@@ -413,6 +462,40 @@ public class ReplyApi {
         String url = "https://api.bilibili.com/x/v2/reply/del";
         String reqBody = new NetWorkUtil.FormData().put("type", type).put("oid", oid).put("rpid", rpid).put("csrf", NetWorkUtil.getLoginCsrf()).toString();
         return new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, reqBody, NetWorkUtil.webHeaders).body()).string()).optInt("code", -1);
+    }
+
+    /**
+     * 置顶 / 取消置顶评论（对应网页端评论区管理）。
+     *
+     * <p>只能操作<b>自己管理的评论区</b>（视频 UP 主、合作稿 staff）里的<b>一级评论</b>；
+     * 服务端一个评论区只有一个置顶位，已有置顶时再置顶别的会回 12029，
+     * 置顶楼中楼/子评论回 12030。最终以服务端判定为准。
+     *
+     * @param top true=设为置顶（action=1），false=取消置顶（action=0）
+     * @return 接口 code，0 表示成功
+     */
+    public static int setReplyTop(long oid, long rpid, int type, boolean top) throws IOException, JSONException {
+        String url = "https://api.bilibili.com/x/v2/reply/top";
+        String reqBody = new NetWorkUtil.FormData()
+                .put("type", type)
+                .put("oid", oid)
+                .put("rpid", rpid)
+                .put("action", top ? 1 : 0)
+                .put("csrf", NetWorkUtil.getLoginCsrf())
+                .toString();
+        return new JSONObject(Objects.requireNonNull(NetWorkUtil.post(url, reqBody, NetWorkUtil.webHeaders).body()).string()).optInt("code", -1);
+    }
+
+    /** 置顶接口错误码转用户可读文案；空串表示交给通用「操作失败：code」兜底 */
+    public static String topActionErrorMsg(int code) {
+        switch (code) {
+            case 12029: return "已有置顶评论，请先取消原置顶";
+            case 12030: return "只能置顶一级评论";
+            case -101: return "请先登录后再操作";
+            case -403: return "权限不足";
+            case -404: return "没有这条评论";
+            default: return "";
+        }
     }
 
     public static long getReplyCount(long oid, int type) throws IOException, JSONException {

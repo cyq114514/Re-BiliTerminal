@@ -6,13 +6,13 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
@@ -43,7 +43,8 @@ public class RefreshListActivity extends BaseActivity {
         swipeRefreshLayout.setRefreshing(true);
         //新版美学：刷新指示器与氛围背景同色；初始加载期间氛围呼吸
         if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)) {
-            swipeRefreshLayout.setColorSchemeColors(ContextCompat.getColor(this, R.color.bili_pink));
+            //刷新指示器颜色跟随主题强调色（默认主题下仍是原 #FE679A）
+            swipeRefreshLayout.setColorSchemeColors(ThemeManager.getPrimary());
             setAmbientBreathing(true);
         }
         recyclerView = findViewById(R.id.recyclerView);
@@ -113,6 +114,35 @@ public class RefreshListActivity extends BaseActivity {
 
     public void setOnLoadMoreListener(OnLoadMoreListener loadMore) {
         listener = loadMore;
+    }
+
+    /**
+     * 从「设置项搜索」跳进来时，把列表滚到命中的那一条。
+     *
+     * <p>只滚不highlight：设置项没有统一的"命中"样式，高亮要改每个 cell 的渲染。
+     * 命中项落在屏幕顶端已经足够——用户是照着搜索结果点进来的。
+     */
+    public void scrollToSettingTitle(java.util.List<com.RobinNotBad.BiliClient.model.SettingSection> sections) {
+        if (sections == null || getIntent() == null) return;
+        String target = getIntent().getStringExtra(
+                com.RobinNotBad.BiliClient.activity.settings.SettingSearchActivity.EXTRA_SCROLL_TITLE);
+        if (target == null || target.isEmpty()) return;
+        int index = -1;
+        for (int i = 0; i < sections.size(); i++) {
+            if (target.equals(sections.get(i).name)) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) return;
+        final int position = index;
+        recyclerView.post(() -> {
+            RecyclerView.LayoutManager manager = recyclerView.getLayoutManager();
+            if (manager instanceof LinearLayoutManager)
+                ((LinearLayoutManager) manager).scrollToPositionWithOffset(position, 0);
+            else
+                recyclerView.scrollToPosition(position);
+        });
     }
 
     //自动

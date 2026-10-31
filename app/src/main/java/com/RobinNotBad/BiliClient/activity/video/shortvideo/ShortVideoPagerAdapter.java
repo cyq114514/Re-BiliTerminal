@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.model.ShortVideoItem;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
@@ -75,6 +76,8 @@ public class ShortVideoPagerAdapter extends RecyclerView.Adapter<ShortVideoPager
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.cell_short_video_page, parent, false);
+        //播放进度条 tint 跟随主题色
+        ThemeApplier.apply(view);
         return new Holder(view);
     }
 

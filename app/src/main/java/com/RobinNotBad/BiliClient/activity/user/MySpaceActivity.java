@@ -68,7 +68,11 @@ public class MySpaceActivity extends InstanceActivity {
                     UserInfo userInfo = UserInfoApi.getCurrentUserInfo();
                     currentUserInfo = userInfo;
                     int userCoin = UserInfoApi.getCurrentUserCoin();
-                    if (!this.isDestroyed()) runOnUiThread(() -> {
+                    runOnUiThread(() -> {
+                        //判断必须放在 runnable 内部：post 出去到真正执行之间页面可能已被销毁，
+                        //Glide.with(Activity) 在 destroyed/finishing 后会抛
+                        //"You cannot start a load for a destroyed activity"（线上 1 例）
+                        if (isDestroyed() || isFinishing()) return;
                         Glide.with(MySpaceActivity.this).load(GlideUtil.url(userInfo.avatar))
                                 .transition(GlideUtil.getTransitionOptions())
                                 .placeholder(R.mipmap.akari).apply(RequestOptions.circleCropTransform())

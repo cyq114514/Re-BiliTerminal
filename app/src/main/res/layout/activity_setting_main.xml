@@ -53,6 +53,23 @@
             android:paddingVertical="2dp"
             android:orientation="vertical">
 
+            <!-- 设置项搜索：设置已散在 10 个页面、120+ 条目里，记不住在哪页时先搜 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/searchSetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="搜索设置"
+                    android:textAlignment="textStart"
+                    android:textSize="13sp" />
+
+            </com.google.android.material.card.MaterialCardView>
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/login"
                 android:layout_width="match_parent"

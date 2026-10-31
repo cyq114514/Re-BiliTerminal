@@ -158,6 +158,12 @@
             android:label="偏好设置"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.SettingSearchActivity"
+            android:exported="false"
+            android:label="搜索设置"
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="stateAlwaysHidden" />
+        <activity
             android:name=".activity.settings.SettingRepliesActivity"
             android:exported="false"
             android:label="评论区设置"
@@ -402,6 +408,11 @@
             android:name=".activity.settings.SettingUIActivity"
             android:exported="false"
             android:label="界面设置"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.settings.ThemeColorActivity"
+            android:exported="false"
+            android:label="主题配色"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.user.VipActivity"

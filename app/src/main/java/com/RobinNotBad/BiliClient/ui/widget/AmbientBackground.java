@@ -16,19 +16,20 @@ import android.view.animation.AccelerateDecelerateInterpolator;
 
 import androidx.core.graphics.ColorUtils;
 
-import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 
 /**
  * 氛围背景（移植自 Re-WearBili 的黑底氛围视觉）：
- * 纯黑底上铺一层克制的 B 站粉装饰，加载时以 alpha 呼吸（1 ↔ 0.35）。
- * 全局只有一种画法：顶部一枚柔和的粉色径向光晕，铺满整屏。
+ * 纯黑底上铺一层克制的强调色装饰，加载时以 alpha 呼吸（1 ↔ 0.35）。
+ * 全局只有一种画法：顶部一枚柔和的径向光晕，铺满整屏。
  * 开「圆屏适配」时也用这一套（只改页面布局，不换背景风格）——
  * 原来的圆屏专属画法（黑底 + 右上/左下两枚装饰圆环）会让整页发黑，与直屏观感割裂，已移除。
  * 只做静态绘制 + view alpha 动画，不逐帧重绘内容，照顾手表性能。
+ *
+ * <p>光晕颜色取自 {@link ThemeManager#getAmbient()}（主题色自定义），渐变圆心、半径、透明度、
+ * 缓存策略全部保持原样；主题色变化时只重建缓存图，不改变绘制方式。
  */
-public class AmbientBackground extends View {
-
-    private static final int COLOR_PINK = 0xFFFE679A;
+public class AmbientBackground extends View implements ThemeManager.OnThemeChangedListener {
 
     /**
      * 径向光晕的预渲染降采样倍数。
@@ -90,8 +91,16 @@ public class AmbientBackground extends View {
             breatheAnim.cancel();
             breatheAnim = null;
         }
+        //主题色变化监听跟着视图生命周期走，不持有已销毁的 View
+        ThemeManager.removeListener(this);
         releaseRadialCache();
         super.onDetachedFromWindow();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        ThemeManager.addListener(this);
     }
 
     @Override
@@ -104,11 +113,26 @@ public class AmbientBackground extends View {
         invalidate();
     }
 
+    /**
+     * 主题色变化：只重建渐变与缓存图，绘制结构、圆心、半径、透明度一律不动。
+     * 尺寸还没确定时什么都不做——onSizeChanged 会带着新颜色重建。
+     */
+    @Override
+    public void onThemeChanged() {
+        int w = getWidth();
+        int h = getHeight();
+        if (w <= 0 || h <= 0) return;
+        ensureRadialShader(w, h);
+        rebuildRadialCache(w, h);
+        invalidate();
+    }
+
     /** 光晕的渐变着色器（缓存图建不起来时直接绘制用） */
     private void ensureRadialShader(int w, int h) {
+        int ambient = ThemeManager.getAmbient();
         paint.setShader(new RadialGradient(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f,
-                new int[]{ColorUtils.setAlphaComponent(COLOR_PINK, 0x59),
-                        ColorUtils.setAlphaComponent(COLOR_PINK, 0x00)},
+                new int[]{ColorUtils.setAlphaComponent(ambient, 0x59),
+                        ColorUtils.setAlphaComponent(ambient, 0x00)},
                 new float[]{0f, 1f}, Shader.TileMode.CLAMP));
     }
 
@@ -147,9 +171,10 @@ public class AmbientBackground extends View {
             //先用原尺寸坐标系画，再整体缩放到缓存分辨率，避免半径/圆心两处换算出错
             cacheCanvas.scale(bw / (float) w, bh / (float) h);
             Paint cacheShaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+            int ambient = ThemeManager.getAmbient();
             cacheShaderPaint.setShader(new RadialGradient(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f,
-                    new int[]{ColorUtils.setAlphaComponent(COLOR_PINK, 0x59),
-                            ColorUtils.setAlphaComponent(COLOR_PINK, 0x00)},
+                    new int[]{ColorUtils.setAlphaComponent(ambient, 0x59),
+                            ColorUtils.setAlphaComponent(ambient, 0x00)},
                     new float[]{0f, 1f}, Shader.TileMode.CLAMP));
             cacheCanvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, cacheShaderPaint);
         } catch (Throwable t) {

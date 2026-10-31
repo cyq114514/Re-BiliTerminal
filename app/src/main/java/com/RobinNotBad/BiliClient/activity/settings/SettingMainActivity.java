@@ -32,6 +32,11 @@ public class SettingMainActivity extends InstanceActivity {
         asyncInflate(R.layout.activity_setting_main, ((layoutView, id) -> {
             Log.e("debug", "进入设置页");
 
+            //搜索设置项
+            MaterialCardView searchSetting = findViewById(R.id.searchSetting);
+            searchSetting.setOnClickListener(view ->
+                    startActivity(new Intent(this, SettingSearchActivity.class)));
+
             //查看登录信息
             MaterialCardView login_cookie = findViewById(R.id.login_cookie);
             login_cookie.setOnClickListener(view -> {

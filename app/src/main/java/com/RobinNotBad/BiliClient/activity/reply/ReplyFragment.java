@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.activity.reply;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -17,6 +18,7 @@ import com.RobinNotBad.BiliClient.activity.base.RefreshListFragment;
 import com.RobinNotBad.BiliClient.adapter.ReplyAdapter;
 import com.RobinNotBad.BiliClient.api.ReplyApi;
 import com.RobinNotBad.BiliClient.event.ReplyEvent;
+import com.RobinNotBad.BiliClient.model.ContentType;
 import com.RobinNotBad.BiliClient.model.Reply;
 import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
@@ -44,6 +46,12 @@ public class ReplyFragment extends RefreshListFragment {
     protected ReplyAdapter replyAdapter;
     public int replyType = ReplyApi.REPLY_TYPE_VIDEO;
     private long seek;
+    /** 从消息跳转过来时要高亮的子评论 rpid（-1 表示无） */
+    private long seekChild = -1;
+    /** 已经就地展开过目标楼，避免每次刷新重复展开 */
+    private boolean seekChildExpanded = false;
+    /** 就地展开楼中楼时最多拉几页（一页 20 条），再多应提示而不是一直拉 */
+    private static final int EXPAND_MAX_PAGES = 5;
     private String pagination = "";
     private boolean isManager = false;
     //游标分页的到底标志：与父类 bottom 配合，到底后阻止继续请求（pagination 会被置空，避免误用空游标重拉第一页导致重复）
@@ -112,6 +120,16 @@ public class ReplyFragment extends RefreshListFragment {
     }
 
     public static ReplyFragment newInstance(long aid, int type, int count, long seek_rpid, long up_mid) {
+        return newInstance(aid, type, count, seek_rpid, up_mid, -1);
+    }
+
+    /**
+     * @param seekChild 从消息跳转进来时要高亮的子评论 rpid（-1 表示无）。
+     *                  与 seek_rpid 通常传同一个值：服务端只有收到子评论 rpid，
+     *                  才会把它排进主评论预览的第一位，光靠滚动是看不到的。
+     */
+    public static ReplyFragment newInstance(long aid, int type, int count, long seek_rpid, long up_mid,
+                                            long seekChild) {
         ReplyFragment fragment = new ReplyFragment();
         Bundle args = new Bundle();
         args.putLong("aid", aid);
@@ -119,6 +137,7 @@ public class ReplyFragment extends RefreshListFragment {
         args.putInt("type", type);
         args.putLong("seek", seek_rpid);
         args.putLong("mid", up_mid);
+        args.putLong("seekChild", seekChild);
         fragment.setArguments(args);
         return fragment;
     }
@@ -133,7 +152,10 @@ public class ReplyFragment extends RefreshListFragment {
             replyType = type;
             dontload = getArguments().getBoolean("dontload", false);
             seek = getArguments().getLong("seek", -1);
+            seekChild = getArguments().getLong("seekChild", -1);
             mid = getArguments().getLong("mid", -1);
+            Logu.e("seek-debug", "ReplyFragment aid=" + aid + " type=" + type
+                    + " seek=" + seek + " seekChild=" + seekChild);
         }
     }
 
@@ -184,8 +206,125 @@ public class ReplyFragment extends RefreshListFragment {
         }
     }
 
+    /**
+     * 从消息跳进来、目标子评论属于某个楼中楼时：<b>就地展开该楼</b>（拉全部子评论）并把列表滚过去。
+     *
+     * <p>与官方 App 一致：不跳页、不闪一下，直接在评论区把这层楼摊开；
+     * 展开后的子评论仍由 {@link ReplyAdapter} 渲染，目标那条靠 seekChildRpid 高亮。
+     *
+     * <p>只有"目标在别人的 childMsgList 里"才算楼中楼；目标本身就是主评论时不需要展开——
+     * 主评论列表已经按 seek 定位到它了。
+     */
+    private void expandSeekChildRoot() {
+        Logu.e("seek-debug", "expandSeekChildRoot 进入: seekChild=" + seekChild
+                + " expanded=" + seekChildExpanded
+                + " list=" + (replyList == null ? -1 : replyList.size()));
+        if (seekChildExpanded || seekChild <= 0) return;
+        if (replyList == null || replyList.isEmpty()) return;
+        for (int i = 0; i < replyList.size(); i++) {
+            final Reply root = replyList.get(i);
+            if (root == null || root.rpid == seekChild || root.childMsgList == null) continue;
+            boolean hit = containsChild(root.childMsgList, seekChild);
+            Logu.e("seek-debug", "  检查第 " + i + " 楼 root=" + root.rpid
+                    + " childCount=" + root.childCount
+                    + " preview=" + root.childMsgList.size() + " 命中=" + hit);
+            if (!hit) continue;
+
+            seekChildExpanded = true;
+            //接口预览已经给全了（rcount 不大于预览条数），不用再请求，直接滚过去
+            if (root.childCount <= root.childMsgList.size()) {
+                Logu.e("seek-debug", "  预览已含全部回复，直接定位到第 " + (i + 1) + " 楼");
+                scrollToChildRow(i, seekChild);
+                return;
+            }
+            final int rootIndex = i;
+            CenterThreadPool.run(() -> {
+                //楼中楼一页 20 条，目标子评论可能在更后面：逐页拉直到找到或到底（上限 EXPAND_MAX_PAGES）
+                ArrayList<Reply> expanded = new ArrayList<>();
+                boolean found = false;
+                int pageNo = 0;
+                while (pageNo < EXPAND_MAX_PAGES) {
+                    pageNo++;
+                    List<Reply> pageData = new ArrayList<>();
+                    int state;
+                    try {
+                        ContentType contentType = ContentType.getContentType(type);
+                        state = ReplyApi.getReplies(aid, root.rpid, pageNo, contentType, sort, pageData);
+                    } catch (Exception e) {
+                        Logu.w("ReplyFragment", "展开楼中楼失败: " + e.getMessage());
+                        break;
+                    }
+                    Logu.e("seek-debug", "  拉楼中楼 page=" + pageNo + " state=" + state
+                            + " 本页=" + pageData.size() + " 累计=" + expanded.size() + " 命中=" + found);
+                    if (state == -1) break;
+                    for (Reply child : pageData) {
+                        //接口会把根评论一起返回，去掉避免同一条出现两次
+                        if (child == null || child.rpid == root.rpid) continue;
+                        expanded.add(child);
+                        if (child.rpid == seekChild) found = true;
+                    }
+                    if (found || state == 1) break;
+                }
+                if (expanded.isEmpty()) {
+                    Logu.e("seek-debug", "  展开失败：一条子评论都没拿到");
+                    return;
+                }
+                final ArrayList<Reply> finalExpanded = expanded;
+                final boolean finalFound = found;
+                runOnUiThread(() -> {
+                    root.childMsgList = finalExpanded;
+                    if (replyAdapter != null) replyAdapter.notifyItemChanged(rootIndex + 1);
+                    Logu.e("seek-debug", "  展开完成 pos=" + (rootIndex + 1)
+                            + " 子评论条数=" + finalExpanded.size() + " 命中=" + finalFound);
+                    scrollToChildRow(rootIndex, seekChild);
+                });
+            });
+            return;
+        }
+    }
+
+    private boolean containsChild(List<Reply> children, long rpid) {
+        if (children == null) return false;
+        for (Reply child : children) {
+            if (child != null && child.rpid == rpid) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 精确滚到目标子评论：先把楼滚进屏幕，等这一帧布局完成，再按目标行的实际坐标二次微调，
+     * 让它落在视口上 1/4 处（参照 PiliPlus 的 {@code getOffsetToReveal(index, 0.25)}）。
+     *
+     * <p>子评论渲染在楼的 LinearLayout 里、不是独立 item：{@code scrollToPosition} 只能定位到楼，
+     * 定位不到"楼里第几行"，所以必须拿到 View 再 {@code scrollBy}。
+     */
+    private void scrollToChildRow(int rootDataIndex, long childRpid) {
+        if (recyclerView == null || replyAdapter == null) return;
+        final int rootPos = rootDataIndex + 1;   //位 0 是写评论格
+        recyclerView.post(() -> {
+            recyclerView.scrollToPosition(rootPos);
+            recyclerView.post(() -> {
+                View row = replyAdapter.findChildRow(recyclerView, rootPos, childRpid);
+                if (row == null) {
+                    Logu.w("ReplyFragment", "定位子评论失败：行还没绑定 rpid=" + childRpid);
+                    return;
+                }
+                Rect rect = new Rect();
+                recyclerView.offsetDescendantRectToMyCoords(row, rect);
+                int targetTop = (int) (recyclerView.getHeight() * 0.25f);
+                int delta = rect.top - targetTop;
+                recyclerView.scrollBy(0, delta);
+                Logu.e("seek-debug", "  定位完成 rowTop=" + rect.top
+                        + " 目标=" + targetTop + " delta=" + delta);
+            });
+        });
+    }
+
     private ReplyAdapter createReplyAdapter() {
-        return new ReplyAdapter(requireContext(), replyList, aid, 0, type, sort, mid);
+        ReplyAdapter adapter = new ReplyAdapter(requireContext(), replyList, aid, 0, type, sort, mid);
+        //从消息跳进来时把目标子评论带过去，让它高亮（-1 时无效果）
+        adapter.seekChildRpid = seekChild;
+        return adapter;
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -403,6 +542,15 @@ public class ReplyFragment extends RefreshListFragment {
 
     @SuppressLint("NotifyDataSetChanged")
     public void refresh(long aid) {
+        //oid 非法时不要发请求：动态被删除后上层拿到的 comment_id 是 0，
+        //请求只会换回服务端的 "invalid oid"，再把一串无效诊断甩给用户。
+        //这里统一兜住——不管哪个页面把 0 传进来。
+        if (aid <= 0) {
+            Logu.e("ReplyFragment", "跳过评论加载：oid=" + aid);
+            setRefreshing(false);
+            MsgUtil.showMsg("评论区不可用");
+            return;
+        }
         //切换/下拉刷新时重置全部分页状态，确保不残留旧数据与旧游标
         pagination = "";
         isEnd = false;
@@ -518,6 +666,7 @@ public class ReplyFragment extends RefreshListFragment {
                             replyAdapter.notifyDataSetChanged();
                         }
                         setRefreshing(false);
+                        expandSeekChildRoot();
                     });
                 } else if (isAdded()) {
                     final ReplyApi.ReplyResult errorResult = result;

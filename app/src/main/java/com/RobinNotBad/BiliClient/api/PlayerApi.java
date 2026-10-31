@@ -194,6 +194,16 @@ public class PlayerApi {
     }
 
     /**
+     * DASH 双流下载（1080P 高码率/4K 等 durl 拿不到的清晰度）：
+     * 下载服务会分别拉视频与音频流并用 MediaMerger 合成单个 MP4。
+     * audioUrl 只作入库兜底，真正下载时服务端会重新取新链接（旧链接几小时就过期）。
+     */
+    public static void startDownloadingDash(VideoInfo videoInfo, int page, int qn, String audioUrl) {
+        if (videoInfo.cids.size() == 1) DownloadService.startDownload(videoInfo.title, videoInfo.aid, videoInfo.cids.get(0), videoInfo.cover, qn, "video_dash", audioUrl);
+        else DownloadService.startDownload(videoInfo.title, videoInfo.pagenames.get(page), videoInfo.aid, videoInfo.cids.get(page), videoInfo.cover, qn, "video_dash", audioUrl);
+    }
+
+    /**
      * 把 playurl 下发的地址整理成「下载候选列表」：去重 + 官方 CDN 优先（PiliPlus 的 getCdnUrl 同思路）。
      *
      * <p>实测 B 站现在给 1080P 的 mp4（format=mp4720）与 DASH 流，首地址大量是 PCDN：
@@ -264,8 +274,16 @@ public class PlayerApi {
     }
 
     public static void getVideoDash(PlayerData playerData) throws IOException, JSONException {
+        getVideoDash(playerData, 16);
+    }
+
+    /**
+     * DASH 取流。fnval 是位掩码：16=基础 DASH，4048=DASH|HDR|4K|杜比|8K|AV1 全开——
+     * 4K(qn=120) 及以上不带对应位时服务端不会返回该清晰度的流。
+     */
+    public static void getVideoDash(PlayerData playerData, int fnval) throws IOException, JSONException {
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
-        String url = "https://api.bilibili.com/x/player/wbi/playurl?avid=" + playerData.aid + "&cid=" + playerData.cid + "&qn=" + playerData.qn + "&fnval=16&fnver=0&platform=pc&voice_balance=1&gaia_source=pre-load&isGaiaAvoided=true";
+        String url = "https://api.bilibili.com/x/player/wbi/playurl?avid=" + playerData.aid + "&cid=" + playerData.cid + "&qn=" + playerData.qn + "&fnval=" + fnval + "&fnver=0&platform=pc&voice_balance=1&gaia_source=pre-load&isGaiaAvoided=true";
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url), NetWorkUtil.webHeaders).toString();
         ApiResponse<PlayUrlData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<PlayUrlData>>(){}.getType());
         if (resp == null || !resp.isSuccess() || resp.data == null) throw new JSONException("获取播放地址失败");
@@ -809,25 +827,70 @@ public class PlayerApi {
         return subtitles;
     }
 
-    public static HighEnergyData getHighEnergyData(long cid, long aid) {
+    /**
+     * 高能进度条数据（新版）：取自 x/player/wbi/v2 响应的 view_points 字段。
+     *
+     * <p>旧数据源 {@code bvc.bilivideo.com/pbp/data} 已失效：2026-10-31 实测对 Rick Astley MV、
+     * 番剧 ep（cid=22742297）、12.8 万弹幕的 av2 全部返回 404 HTML 页，带不带
+     * Referer/buvid3 无差别，App 内表现为"开始加载数据→7 秒重试→未获取到有效数据"。
+     * 该端点连同重试一起弃用。
+     *
+     * <p>view_points 匿名请求实测恒为空数组（含 buvid3 也是），需要登录 cookie 才有数据；
+     * 本方法与同接口其余调用方（续播进度/字幕）一样走全局 webHeaders（带 cookie）+ WBI 签名，
+     * 口径一致，且播放时本来就要请求该接口，无额外端点。
+     *
+     * <p>view_points 元素为 {from,to,score}（单位秒，score 为该时间段的弹幕热度），
+     * 这里映射为固定 10s 步长的密度数组，供 HighEnergyProgressBar 绘制波形。
+     *
+     * @return 无数据/接口异常时返回 null，调用方按"本次无高能数据"处理
+     */
+    public static HighEnergyData getHighEnergyViewPoints(long aid, long cid) {
         try {
-            String url = "https://bvc.bilivideo.com/pbp/data?cid=" + cid + (aid > 0 ? "&aid=" + aid : "");
-            JSONObject response = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders);
-            if (response == null) return null;
-            int code = response.optInt("code", -1);
-            if (code != 0 && code != -1) return null;
-            HighEnergyData data = new HighEnergyData();
-            data.stepSec = response.optInt("step_sec", 10); data.tagStr = response.optString("tagstr", ""); data.debug = response.optString("debug", "");
-            JSONObject events = response.optJSONObject("events");
-            if (events != null) {
-                JSONArray defaultArray = events.optJSONArray("default");
-                if (defaultArray != null && defaultArray.length() > 0) {
-                    float[] eventData = new float[defaultArray.length()];
-                    for (int i = 0; i < defaultArray.length(); i++) eventData[i] = (float) defaultArray.optDouble(i, 0.0);
-                    data.events = eventData;
-                } else data.events = new float[0];
-            } else data.events = new float[0];
-            return data;
-        } catch (Exception e) { return null; }
+            JSONObject response = NetWorkUtil.getJson(ConfInfoApi.signWBI(
+                    "https://api.bilibili.com/x/player/wbi/v2?aid=" + aid + "&cid=" + cid));
+            JSONObject data = response.optJSONObject("data");
+            if (data == null) {
+                Logu.d("高能进度条", "wbi/v2 响应无 data（未登录？） aid=" + aid + " cid=" + cid);
+                return null;
+            }
+            JSONArray points = data.optJSONArray("view_points");
+            if (points == null || points.length() == 0) {
+                Logu.d("高能进度条", "view_points 为空 aid=" + aid + " cid=" + cid
+                        + "（若登录态下仍为空，则该功能当前无可用数据源）");
+                return null;
+            }
+            //登录态验证诊断：首条原始数据直接进日志，复测时看这里就知道字段格式是否如预期
+            Logu.d("高能进度条", "view_points 点数=" + points.length()
+                    + " 首条=" + points.optJSONObject(0));
+
+            HighEnergyData result = new HighEnergyData();
+            result.stepSec = 10;
+            result.tagStr = "view_points";
+            //先扫出最大 to 定桶数（波形的横向覆盖范围）
+            double maxTo = 0;
+            for (int i = 0; i < points.length(); i++) {
+                JSONObject p = points.optJSONObject(i);
+                if (p != null) maxTo = Math.max(maxTo, p.optDouble("to", 0));
+            }
+            int buckets = (int) Math.ceil(maxTo / result.stepSec);
+            if (buckets <= 0) return null;
+            float[] events = new float[buckets];
+            for (int i = 0; i < points.length(); i++) {
+                JSONObject p = points.optJSONObject(i);
+                if (p == null) continue;
+                double from = p.optDouble("from", -1);
+                double to = p.optDouble("to", -1);
+                double score = p.optDouble("score", 0);
+                if (to <= from || from < 0) continue;
+                int begin = (int) Math.max(0, Math.floor(from / result.stepSec));
+                int end = (int) Math.min(buckets - 1, Math.ceil(to / result.stepSec) - 1);
+                for (int b = begin; b <= end; b++) events[b] = (float) Math.max(events[b], score);
+            }
+            result.events = events;
+            return result;
+        } catch (Exception e) {
+            Logu.e("高能进度条", "view_points 加载失败: " + e.getMessage());
+            return null;
+        }
     }
 }

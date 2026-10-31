@@ -25,7 +25,7 @@ import com.RobinNotBad.BiliClient.model.MessageCard;
 import com.RobinNotBad.BiliClient.model.Reply;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
-import com.RobinNotBad.BiliClient.util.Logu;
+import com.RobinNotBad.BiliClient.util.MsgLinkParser;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
@@ -128,88 +128,40 @@ public class NoticeHolder extends RecyclerView.ViewHolder {
     }
 
     /**
-     * 用 B站消息的 contentUri 判断内容类型并跳转（完全参照 PiliPlus 的 URI 路由设计）
-     * PiliPlus 通过 item.uri 统一识别内容类型：bilibili://video/BVxxx → 视频,
-     * bilibili://opus/xxx → 动态, https://t.bilibili.com/xxx → 动态,
-     * https://www.bilibili.com/read/cvxxx → 专栏
+     * 用 B站消息的 uri / native_uri 判断内容类型并跳转。
+     *
+     * <p>解析规则集中在 {@link MsgLinkParser}。旧实现只认 {@code /video/BV}、{@code t.bilibili.com/}、
+     * {@code bilibili://opus/}，漏了「回复我的」实际给出的
+     * {@code https://www.bilibili.com/opus/<dynId>#reply<rpid>}；解析失败后回退到
+     * {@code subjectId > 1亿}，但实测 business_id=11 的 subject_id 是<b>评论区 oid</b>
+     * （如 413634671），拿它查动态只能得到 DYNAMIC_TYPE_NONE 空壳，
+     * 于是 comment_id=0，评论接口回 invalid oid。
      */
     private static void navigateByUri(Context context, MessageCard msg, long seekReply) {
-        String uri = msg.contentUri;
-        if (TextUtils.isEmpty(uri)) uri = "";
-        try {
-            // 1) 视频 BV 号：bilibili://video/BVxxx 或 /video/BVxxx
-            String bvid = null;
-            if (uri.contains("/video/BV")) {
-                bvid = uri.substring(uri.indexOf("/video/BV") + 7);
-                int q = bvid.indexOf('?');
-                if (q > 0) bvid = bvid.substring(0, q);
-            } else if (uri.contains("bilibili://video/BV")) {
-                bvid = uri.substring(uri.indexOf("bilibili://video/BV") + 18);
-                int q = bvid.indexOf('?');
-                if (q > 0) bvid = bvid.substring(0, q);
-            }
-            if (!TextUtils.isEmpty(bvid)) {
-                TerminalContext.getInstance().enterVideoDetailPage(context, 0, bvid, null, seekReply);
+        MsgLinkParser.Target target = MsgLinkParser.parse(
+                msg.contentUri, msg.nativeUri, msg.businessId, msg.subjectId);
+        // 子评论 rpid 优先作为 seek：实测 reply/main 只有收到子评论 rpid，才会把它排进
+        // 主评论预览的第一位；传主评论 rpid / source_id 时预览里没有这条子评论，
+        // 表现就是"跳到主评论了，但看不到被回复的子评论"
+        long seek = target.childRpid > 0 ? target.childRpid : seekReply;
+        switch (target.type) {
+            case MsgLinkParser.TYPE_VIDEO_BVID:
+                TerminalContext.getInstance().enterVideoDetailPage(context, 0, target.bvid, null, seek);
                 return;
-            }
-
-            // 2) 动态：https://t.bilibili.com/xxx?xxx 或 bilibili://opus/xxx
-            if (uri.contains("t.bilibili.com/")) {
-                int s = uri.indexOf("t.bilibili.com/") + 15;
-                int e = uri.indexOf('?', s);
-                if (e < 0) e = uri.length();
-                long id = Long.parseLong(uri.substring(s, e));
-                TerminalContext.getInstance().enterDynamicDetailPage(context, id, 0, seekReply);
+            case MsgLinkParser.TYPE_VIDEO_AID:
+                TerminalContext.getInstance().enterVideoDetailPage(context, target.id, null, null, seek);
                 return;
-            }
-            if (uri.contains("bilibili://opus/")) {
-                int s = uri.indexOf("bilibili://opus/") + 15;
-                int e = uri.indexOf('?', s);
-                if (e < 0) e = uri.length();
-                long id = Long.parseLong(uri.substring(s, e));
-                TerminalContext.getInstance().enterDynamicDetailPage(context, id, 0, seekReply);
+            case MsgLinkParser.TYPE_DYNAMIC:
+                //动态链路额外把子评论 rpid 传下去，评论列表据此高亮目标行
+                TerminalContext.getInstance().enterDynamicDetailPage(context, target.id, 0, seek, target.childRpid);
                 return;
-            }
-
-            // 3) 专栏：https://www.bilibili.com/read/cvxxx
-            if (uri.contains("/read/cv")) {
-                int s = uri.indexOf("/read/cv") + 7;
-                int e = uri.indexOf('?', s);
-                if (e < 0) e = uri.length();
-                long id = Long.parseLong(uri.substring(s, e));
-                TerminalContext.getInstance().enterArticleDetailPage(context, id, seekReply);
+            case MsgLinkParser.TYPE_ARTICLE:
+                TerminalContext.getInstance().enterArticleDetailPage(context, target.id, seek);
                 return;
-            }
-
-            // 4) 通用 bilibili:// URI 回退
-            if (uri.contains("bilibili://")) {
-                // 尝试提取末尾数字 ID
-                int lastSlash = uri.lastIndexOf('/');
-                if (lastSlash > 0 && lastSlash < uri.length() - 1) {
-                    String last = uri.substring(lastSlash + 1);
-                    int q = last.indexOf('?');
-                    if (q > 0) last = last.substring(0, q);
-                    try {
-                        long id = Long.parseLong(last);
-                        TerminalContext.getInstance().enterDynamicDetailPage(context, id, 0, seekReply);
-                        return;
-                    } catch (NumberFormatException ignored2) {}
-                }
-            }
-        } catch (Exception e) {
-            Logu.e("navigateByUri parse error: " + e.getMessage());
+            default:
+                break;
         }
-
-        // URI 解析失败，按 subjectId / sourceId 回退（参照 PiliPlus 容错逻辑）
-        if (msg.subjectId > 0 && msg.subjectId > 100000000) {
-            TerminalContext.getInstance().enterDynamicDetailPage(context, msg.subjectId, 0, seekReply);
-            return;
-        }
-        if (msg.sourceId > 0 && msg.sourceId > 100000000) {
-            TerminalContext.getInstance().enterDynamicDetailPage(context, msg.sourceId, 0, seekReply);
-            return;
-        }
-        // 最后一层回退：如果是视频相关，用 bvid
+        // 最后兜底：视频类消息可以直接用卡片里的 bvid
         if ("video".equals(msg.itemType) && msg.videoCard != null && !TextUtils.isEmpty(msg.videoCard.bvid)) {
             TerminalContext.getInstance().enterVideoDetailPage(context, 0, msg.videoCard.bvid);
             return;

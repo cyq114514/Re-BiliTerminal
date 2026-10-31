@@ -13,6 +13,7 @@ import com.RobinNotBad.BiliClient.activity.SplashActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.util.AccountManager;
 import com.RobinNotBad.BiliClient.util.AppAuthStore;
+import com.RobinNotBad.BiliClient.util.AppSign;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
@@ -239,9 +240,13 @@ public class LoginApi {
 
     // ---------------------------------------------------------------- App/TV 扫码（获取 access_key）
 
-    /** 官方 HD 客户端 appkey/appsec（公开内置值，PiliPlus 同款），只用于换取 App access_key */
-    private static final String APP_KEY = "dfca71928277209b";
-    private static final String APP_SEC = "b5475a8825547a4fc26c7d518eaaa02e";
+    /**
+     * 官方 HD 客户端 appkey/appsec（公开内置值，PiliPlus 同款）。
+     * 值统一放在 {@link AppSign}，这里只引用——推荐接口与 TV 扫码登录用的是同一对，
+     * 两处各写一份的话改了一个忘了另一个就会出现"一个接口能用一个 403"。
+     */
+    private static final String APP_KEY = AppSign.APP_KEY;
+    private static final String APP_SEC = AppSign.APP_SEC;
     private static final String APP_UA =
             "Mozilla/5.0 BiliDroid/2.0.1 (bbcallen@gmail.com) os/android model/android_hd "
                     + "mobi_app/android_hd build/2001100 channel/master innerVer/2001100 "

@@ -20,7 +20,9 @@ import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 //视频卡片Adapter 适用于各种场景（迫真
 //日期不记得了
@@ -32,6 +34,35 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
     final Context context;
     final List<VideoCard> videoCardList;
     OnItemLongClickListener longClickListener;
+
+    // ==================== 多选模式（仅需要的页面开启，如收藏夹批量管理） ====================
+    private boolean selectionMode = false;
+    private final Set<Long> selectedAids = new HashSet<>();
+
+    /** 进入/退出多选模式，退出时清空选择。默认关闭，其它使用方不受任何影响 */
+    public void setSelectionMode(boolean selectionMode) {
+        if (this.selectionMode == selectionMode) return;
+        this.selectionMode = selectionMode;
+        selectedAids.clear();
+        notifyDataSetChanged();
+    }
+
+    public boolean isSelectionMode() {
+        return selectionMode;
+    }
+
+    public void toggleSelected(long aid) {
+        if (!selectedAids.add(aid)) selectedAids.remove(aid);
+        notifyDataSetChanged();
+    }
+
+    public int getSelectedCount() {
+        return selectedAids.size();
+    }
+
+    public Set<Long> getSelectedAids() {
+        return selectedAids;
+    }
 
     public VideoCardAdapter(Context context, List<VideoCard> videoCardList) {
         this.context = context;
@@ -58,6 +89,19 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
             return;
 
         holder.showVideoCard(videoCard, context);
+
+        //多选模式：点按/长按都是切换选中。视觉用透明度区分，不做勾选框——
+        //这张卡片布局被推荐/历史/稍后再看共用，动布局回归面太大
+        if (selectionMode) {
+            holder.itemView.setAlpha(selectedAids.contains(videoCard.aid) ? 0.45f : 1f);
+            holder.itemView.setOnClickListener(view -> toggleSelected(videoCard.aid));
+            holder.itemView.setOnLongClickListener(view -> {
+                toggleSelected(videoCard.aid);
+                return true;
+            });
+            return;
+        }
+        holder.itemView.setAlpha(1f);
 
         holder.itemView.setOnClickListener(view -> {
             switch (videoCard.type) {

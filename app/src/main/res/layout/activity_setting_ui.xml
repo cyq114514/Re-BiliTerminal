@@ -66,6 +66,13 @@
                 android:layout_marginTop="2dp"
                 android:text="查看预览" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/theme_color"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="主题配色" />
+
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

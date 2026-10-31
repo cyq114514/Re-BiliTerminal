@@ -115,6 +115,7 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
 
         SettingsAdapter adapter = new SettingsAdapter(this, sectionList);
         setAdapter(adapter);
+        scrollToSettingTitle(sectionList);
 
         setRefreshing(false);
     }

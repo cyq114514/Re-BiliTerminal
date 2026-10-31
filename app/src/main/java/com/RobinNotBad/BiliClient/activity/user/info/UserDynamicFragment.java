@@ -96,6 +96,10 @@ public class UserDynamicFragment extends RefreshListFragment {
                 List<Dynamic> list = new ArrayList<>();
                 offset = DynamicApi.getDynamicList(list, offset, mid, null);
                 runOnUiThread(() -> {
+                    //首个加载是在 onViewCreated 的后台线程里建 adapter 的，用户在那之前就上拉时
+                    //adapter 还是 null，直接 notify 会 NPE（线上 1 例）。这一页无处可放，
+                    //丢掉即可——首屏那次加载会带全量数据
+                    if (adapter == null) return;
                     dynamicList.addAll(list);
                     adapter.notifyItemRangeInserted(dynamicList.size() - list.size() + 1, list.size());
                 });

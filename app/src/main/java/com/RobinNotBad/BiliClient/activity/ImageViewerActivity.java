@@ -100,8 +100,12 @@ public class ImageViewerActivity extends BaseActivity {
 
             @Override
             public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
-                //先清请求（此刻视图还 attach 着）再移除，释放离屏页位图
-                Glide.with((View) object).clear((View) object);
+                //先清请求（此刻视图还 attach 着）再移除，释放离屏页位图。
+                //必须用 application 的 RequestManager：ViewPager 的 populate→destroyItem 可能被主线程
+                //排到 Activity onDestroy 之后才执行，Glide.with(Activity/View) 会直接抛
+                //"You cannot start a load for a destroyed activity"（线上 5 例）。
+                //clear(View) 走 View 上的 target tag 找请求，换 manager 一样清得掉。
+                Glide.with(getApplicationContext()).clear((View) object);
                 container.removeView((View) object);
             }
         });

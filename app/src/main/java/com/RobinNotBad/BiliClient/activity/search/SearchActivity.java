@@ -213,8 +213,15 @@ public class SearchActivity extends InstanceActivity {
                 searchHistory = new ArrayList<>();
             }
             searchHistoryAdapter = new SearchHistoryAdapter(this, searchHistory);
-            searchHistoryAdapter.setOnClickListener(position -> keywordInput.setText(searchHistory.get(position)));
+            //Adapter 在 onBindViewHolder 时把当时的 position 快照进点击闭包，列表随后被
+            //remove / notifyItemMoved 改短时，旧 itemView 的闭包会带着过期下标（线上越界 2 例）。
+            //下标的有效性必须在消费端再判一次，不能只依赖绑定时的检查。
+            searchHistoryAdapter.setOnClickListener(position -> {
+                if (position < 0 || position >= searchHistory.size()) return;
+                keywordInput.setText(searchHistory.get(position));
+            });
             searchHistoryAdapter.setOnLongClickListener(position -> {
+                if (position < 0 || position >= searchHistory.size()) return;
                 MsgUtil.showMsg("删除成功");
                 searchHistory.remove(position);
                 searchHistoryAdapter.notifyItemRemoved(position);
@@ -234,6 +241,9 @@ public class SearchActivity extends InstanceActivity {
             searchSuggestions = new ArrayList<>();
             searchSuggestionsAdapter = new SearchSuggestionsAdapter(this, searchSuggestions);
             searchSuggestionsAdapter.setOnClickListener(position -> {
+                //同历史列表：建议列表会被 clear + addAll 改成更短的一批，
+                //旧 itemView 闭包里的下标可能已经越界（线上 Index:1, Size:1 两例）
+                if (position < 0 || position >= searchSuggestions.size()) return;
                 String suggestion = searchSuggestions.get(position);
                 //先清掉输入法未上屏的组词缓冲，防止其迟后commit再次触发建议请求导致卡片回弹
                 keywordInput.clearComposingText();

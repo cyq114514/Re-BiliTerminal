@@ -24,6 +24,8 @@ public class MessageCard {
     public long rootId;
     public long targetId;
     public String contentUri;   //B站消息中的完整内容 URL（用于定位跳转目标）
+    /** 同一目标的 App 深链接（native_uri）。比 contentUri 更精确，跳转时优先用它 */
+    public String nativeUri;
 
     public static class Cursor {
         public final boolean is_end;

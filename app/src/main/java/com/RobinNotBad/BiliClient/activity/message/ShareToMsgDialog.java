@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.activity.settings.login.AppAuthActivity;
 import com.RobinNotBad.BiliClient.activity.user.FollowUsersActivity;
 import com.RobinNotBad.BiliClient.adapter.message.ShareUserAdapter;
@@ -130,7 +131,10 @@ public class ShareToMsgDialog extends BottomSheetDialogFragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.dialog_share_to_msg, container, false);
+        View view = inflater.inflate(R.layout.dialog_share_to_msg, container, false);
+        //对话框不在 Activity 的 setContentView 路径上，需要单独应用一次主题色
+        ThemeApplier.apply(view);
+        return view;
     }
 
     @Override

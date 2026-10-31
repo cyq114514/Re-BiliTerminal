@@ -33,6 +33,7 @@ import com.RobinNotBad.BiliClient.model.Dynamic;
 import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.PickImageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
@@ -285,8 +286,9 @@ public class SendDynamicActivity extends BaseActivity {
                     MsgUtil.showDialog("无法发送", "上一次的Cookie刷新失败了，\n您可能需要重新登录以进行敏感操作", -1);
             });
 
+            //没有系统文件选择器的手表/精简 ROM 上 GetContent 会直接抛，统一走安全入口
             addPic.setOnClickListener(view ->
-                    pickImageLauncher.launch("image/*"));
+                    PickImageUtil.launchSafe(pickImageLauncher));
 
             findViewById(R.id.emote).setOnClickListener(view ->
                     emoteLauncher.launch(new Intent(this, EmoteActivity.class).putExtra("from", EmoteApi.BUSINESS_DYNAMIC)));
