@@ -24,6 +24,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CookieRefresher;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.PrivacyLockUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.UpdateManager;
@@ -105,11 +106,43 @@ public class SplashActivity extends Activity {
         }, 100, 100);
 
         //只有从桌面图标正常冷启动才做页面恢复；
-        //崩溃兜底重启（CatchActivity 用显式 intent、无 ACTION_MAIN）不走恢复，避免回到崩溃现场
-        final boolean fromLauncher = getIntent() != null && Intent.ACTION_MAIN.equals(getIntent().getAction());
+        //崩溃兜底重启（CatchActivity 用显式 intent、无 ACTION_MAIN）不走恢复，避免回到崩溃现场。
+        //提为字段：runStartupFlow 在隐私锁验证后会重入，onCreate 的局部变量够不到
+        fromLauncher = getIntent() != null && Intent.ACTION_MAIN.equals(getIntent().getAction());
 
         final long splashStartMs = android.os.SystemClock.uptimeMillis();
+        runStartupFlow(splashStartMs);
+    }
+
+    /**是否从桌面图标冷启动（决定要不要走页面恢复链）；onCreate 判定，runStartupFlow 消费。 */
+    private boolean fromLauncher;
+
+    /** 隐私锁的验证请求码。 */
+    private static final int REQUEST_UNLOCK = 4101;
+
+    /**本 Splash 实例内是否已验过密码。必须用实例标记而不是只看 intent extra：
+     * startActivityForResult 路径解锁成功后 runStartupFlow 会重跑，但启动 intent 上永远没有
+     * EXTRA_UNLOCKED（那是伪装路径专用的），不补这个标记就会出现「解锁瞬间又被闸门拦回计算器」
+     * 的死循环（2026-10-31 真机复现：unlock → 37ms 后闸门再次拉起计算器，循环 5 次）。 */
+    private boolean unlockVerified;
+
+    /**
+     * 启动链主体。隐私锁开着时会在这里被第零步拦下（先验密码），验证通过后从
+     * {@link #onActivityResult} 再完整跑一遍——所以这个方法必须可重入、无副作用残留。
+     */
+    private void runStartupFlow(final long splashStartMs) {
         CenterThreadPool.run(() -> {
+            // ===== 第零步：隐私锁 —— 开着就先验密码，启动链其余动作全部押后 =====
+            //伪装模式下不走这里（桌面图标直接开计算器页），这条闸门只管「图标还是本应用」的启动
+            final Intent launchIntent = getIntent();
+            boolean extraUnlocked = launchIntent != null
+                    && launchIntent.getBooleanExtra(PrivacyLockUtil.EXTRA_UNLOCKED, false);
+            if (PrivacyLockUtil.isEnabled() && !unlockVerified && !extraUnlocked) {
+                runOnUiThread(() -> startActivityForResult(
+                        new Intent(SplashActivity.this, CalculatorActivity.class), REQUEST_UNLOCK));
+                return;
+            }
+
             // ===== 第一步：只做本地决策，不碰网络 =====
             // 旧实现把「Cookie 续期」和「bilibili.com 取 Cookie」两个 HTTP 请求串在 startActivity 之前，
             // 冷启动要多等两个 RTT（连接超时 8s、读超时 16s），弱网/手表上就是开屏慢的主因。
@@ -187,6 +220,22 @@ public class SplashActivity extends Activity {
             // ===== 第三步：网络校验全部挪到首屏之后，不再挡开屏（等待模式下这里已经跑过了） =====
             if (!waitForRequests) CenterThreadPool.run(this::runStartupChecks);
         });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        //计算器锁屏验对密码：从第零步断点处继续完整启动链（重新计时，动画等待自然跳过）。
+        //用户在计算器页按返回 = 放弃解锁，直接退回桌面，别把人留在原地不动的开屏页上
+        if (requestCode != REQUEST_UNLOCK) return;
+        if (resultCode == RESULT_OK) {
+            unlockVerified = true;
+            Log.d("startup", "隐私锁验证通过，继续启动链");
+            runStartupFlow(android.os.SystemClock.uptimeMillis());
+        } else {
+            Log.d("startup", "隐私锁未解锁，退出");
+            finish();
+        }
     }
 
     /**

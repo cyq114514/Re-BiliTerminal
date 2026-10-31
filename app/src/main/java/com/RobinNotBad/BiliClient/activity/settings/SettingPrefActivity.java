@@ -51,6 +51,10 @@ public class SettingPrefActivity extends RefreshListActivity {
                 //搜索类别排序：open 型条目（SettingsAdapter.OpenHolder），id 字段是目标页全类名
                 add(new SettingSection("open", "搜索类别排序", SearchSortActivity.class.getName(),
                         "拖动调整搜索页各分类（视频/番剧/专栏/用户/直播）的排列顺序，视频固定在第一位；保存后返回搜索页自动生效", ""));
+                //隐私与伪装：启动密码锁 + 桌面图标/名称伪装成计算器
+                add(new SettingSection("open", "隐私与伪装",
+                        com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class.getName(),
+                        "启动密码锁（计算器界面输入密码进入）与桌面图标/名称伪装；忘密码无后门，只能清除应用数据", ""));
                 add(new SettingSection("switch", "识别链接", "link_enable", getString(R.string.desc_link_enable), "true"));
                 //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换。
                 //默认值必须与 RecommendApi.getRecommend 里的默认值一致（true），否则会重演

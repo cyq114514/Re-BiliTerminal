@@ -137,6 +137,7 @@ public class SettingSearchActivity extends BaseActivity {
         addPage(list, SettingQualityActivity.class, "默认清晰度");
         addPage(list, SortSettingActivity.class, "菜单排序");
         addPage(list, SearchSortActivity.class, "搜索类别排序");
+        addPage(list, com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class, "隐私与伪装");
         addPage(list, SettingPlayerChooseActivity.class, "播放器选择");
         addPage(list, UpdateActivity.class, "检查更新");
         addPage(list, UpdateLogActivity.class, "更新日志");
@@ -155,7 +156,7 @@ public class SettingSearchActivity extends BaseActivity {
                 "互动选项字体大小", "互动选项自动竖屏");
 
         add(list, SettingPrefActivity.class, "偏好设置",
-                "隐私模式", "崩溃上报", "活跃设备统计", "长按复制", "创作中心",
+                "隐私模式", "崩溃上报", "活跃设备统计", "长按复制", "创作中心", "隐私与伪装",
                 "搜索建议", "默认搜索内容", "搜索页显示热搜", "搜索类别排序", "识别链接",
                 "首页使用app端推荐", "App 推荐设备标识", "App 推荐附带客户端签名", "App 推荐附带 access_key",
                 "推荐屏蔽的 UP 主", "推荐屏蔽的关键词",

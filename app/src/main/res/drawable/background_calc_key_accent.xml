@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 计算器运算符键底图（浅一档的灰，与数字键区分） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FF5A5A5E" />
+    <corners android:radius="14dp" />
+</shape>

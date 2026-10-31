@@ -545,13 +545,48 @@
             android:exported="true"
             android:label="@string/app_name"
             android:screenOrientation="locked"
-            android:theme="@style/Theme.BiliClient.Splash">
+            android:theme="@style/Theme.BiliClient.Splash" />
+        <!-- 计算器锁屏：隐私锁的验证页，也是「图标伪装」开关的 alias 目标。
+             exported=false 即可——别名是 exported 的，系统经别名拉起目标不走目标的 exported 检查 -->
+        <activity
+            android:name=".activity.CalculatorActivity"
+            android:exported="false"
+            android:label="计算器"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.privacy.PrivacyLockSettingsActivity"
+            android:exported="false"
+            android:label="隐私与伪装"
+            android:screenOrientation="locked" />
+        <!-- 桌面入口别名：launcher intent-filter 从 SplashActivity 挪到这里，两选一。
+             切换必须「先启用目标别名、再禁用当前别名」（PrivacyLockSettingsActivity.applyDisguise），
+             顺序反了中途被杀会出现桌面无入口。覆盖安装会保留用户切换结果（component 状态持久） -->
+        <activity-alias
+            android:name=".LauncherDefault"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/icon"
+            android:label="@string/app_name"
+            android:targetActivity=".activity.SplashActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherCalculator"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/icon_calculator"
+            android:label="计算器"
+            android:targetActivity=".activity.CalculatorActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <meta-data
             android:name="com.xtc.unbind.clearUserData.white_list"
             android:value="true" />

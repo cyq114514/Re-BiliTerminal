@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 计算器锁屏：长得像个普通计算器（中性配色，不带应用品牌元素），输入设定密码后按「=」解锁。
+     显示区在这里、按钮网格由 CalculatorActivity 代码生成（4×5 全是同构按钮，代码生成比
+     100 行重复 XML 好维护）；按钮用原生 Button + 自绘圆角底图，不用 Material 组件——
+     本页可能以非 AppCompat 主题被桌面别名直接拉起，Material 组件在非 AppCompat 主题上会崩
+     （1.2.3fix 同款教训）。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF1B1B1D"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical"
+    android:paddingHorizontal="12dp"
+    android:paddingTop="24dp"
+    android:paddingBottom="12dp">
+
+    <TextView
+        android:id="@+id/calc_preview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="start"
+        android:gravity="end"
+        android:minHeight="24dp"
+        android:singleLine="true"
+        android:textColor="#FF8E8E93"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/calc_display"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:ellipsize="start"
+        android:gravity="end"
+        android:maxLines="2"
+        android:text="0"
+        android:textColor="#FFFFFFFF"
+        android:textSize="40sp" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:id="@+id/calc_keypad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+</LinearLayout>
