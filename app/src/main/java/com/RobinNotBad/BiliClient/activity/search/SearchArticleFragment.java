@@ -46,12 +46,25 @@ public class SearchArticleFragment extends SearchFragment {
         setOnLoadMoreListener(this::continueLoading);
     }
 
+    /**专栏分类的排序档位：order 值与视频相同，仅「最多播放」在专栏语境下是「最多阅读」。 */
+    @Override
+    public String[][] sortOptions() {
+        return new String[][]{
+                {"综合排序", "totalrank"},
+                {"最多阅读", "click"},
+                {"最新发布", "pubdate"},
+                {"最多收藏", "stow"}
+        };
+    }
+
     private void continueLoading(int page) {
         final int myGeneration = loadGeneration;
+        //请求前抓排序快照，代际守卫兜住中途切档的迟到响应（同 SearchVideoFragment）
+        final String orderAtRequest = sortOrder;
         CenterThreadPool.run(() -> {
             Log.e("debug", "加载下一页");
             try {
-                com.google.gson.JsonElement result = SearchApi.searchType(keyword, page, "article");
+                com.google.gson.JsonElement result = SearchApi.searchType(keyword, page, "article", orderAtRequest);
                 //代际守卫：过期请求整体丢弃（同 SearchVideoFragment）
                 if (myGeneration != loadGeneration) return;
                 if (result != null) {

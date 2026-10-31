@@ -48,6 +48,9 @@ public class SettingPrefActivity extends RefreshListActivity {
                 //「找不到自己的搜索记录」就是它。关闭后连热搜接口都不请求
                 add(new SettingSection("switch", "搜索页显示热搜", "search_hot_enable",
                         "打开后点搜索框、输入框为空时会弹出热搜词；关闭则只显示自己的搜索历史（默认关闭）", "false"));
+                //搜索类别排序：open 型条目（SettingsAdapter.OpenHolder），id 字段是目标页全类名
+                add(new SettingSection("open", "搜索类别排序", SearchSortActivity.class.getName(),
+                        "拖动调整搜索页各分类（视频/番剧/专栏/用户/直播）的排列顺序，视频固定在第一位；保存后返回搜索页自动生效", ""));
                 add(new SettingSection("switch", "识别链接", "link_enable", getString(R.string.desc_link_enable), "true"));
                 //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换。
                 //默认值必须与 RecommendApi.getRecommend 里的默认值一致（true），否则会重演

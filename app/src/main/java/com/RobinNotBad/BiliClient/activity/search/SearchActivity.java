@@ -23,12 +23,14 @@ import androidx.viewpager.widget.ViewPager;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
+import com.RobinNotBad.BiliClient.activity.settings.SearchSortActivity;
 import com.RobinNotBad.BiliClient.adapter.SearchHistoryAdapter;
 import com.RobinNotBad.BiliClient.adapter.SearchSuggestionsAdapter;
 import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerFragmentAdapter;
 import com.RobinNotBad.BiliClient.api.SearchApi;
 import com.RobinNotBad.BiliClient.helper.TutorialHelper;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.JsonUtil;
 import com.RobinNotBad.BiliClient.util.LinkUrlUtil;
@@ -82,6 +84,11 @@ public class SearchActivity extends InstanceActivity {
     boolean tutorial_show;
     String classname;
     ViewPagerFragmentAdapter vpfAdapter;
+    //构建 fragmentList 时所用的排序配置串；onResume 发现配置变了（用户在「搜索类别排序」页
+    //拖完回来）就整页重建，见 onResume 注释
+    private String appliedCategoryOrder = "";
+    //结果排序入口：仅当前分类支持排序（视频/专栏）时显示，文案带当前档位
+    private TextView sortButton;
 
     String[] specialList = {"心理疾病", "自杀", "自尽", "自残", "抑郁", "双相", "安眠药"};
 
@@ -124,6 +131,8 @@ public class SearchActivity extends InstanceActivity {
             View searchBtn = findViewById(R.id.search);
             keywordInput = findViewById(R.id.keywordInput);
             searchBar = findViewById(R.id.searchbar);
+            sortButton = findViewById(R.id.sortButton);
+            sortButton.setOnClickListener(view -> showSortDialog());
             historyRecyclerview = findViewById(R.id.history_recyclerview);
             suggestionsRecyclerview = findViewById(R.id.suggestions_recyclerview);
             viewPager.setOffscreenPageLimit(4);
@@ -154,13 +163,16 @@ public class SearchActivity extends InstanceActivity {
             historyRecyclerview.setVisibility(View.VISIBLE);
             suggestionsRecyclerview.setVisibility(View.GONE);
             List<Fragment> fragmentList = new ArrayList<>();
-            fragmentList.add(SearchVideoFragment.newInstance());
-            fragmentList.add(SearchBangumiFragment.newInstance());
-            fragmentList.add(SearchArticleFragment.newInstance());
-            fragmentList.add(SearchUserFragment.newInstance());
-            fragmentList.add(SearchLiveFragment.newInstance());
+            //顺序来自「搜索类别排序」设置（视频钉死首位，解析口径见 SearchSortActivity.loadOrderedKeys）
+            for (String key : SearchSortActivity.loadOrderedKeys()) {
+                Fragment fragment = createSearchFragment(key);
+                if (fragment != null) fragmentList.add(fragment);
+            }
+            appliedCategoryOrder = SearchSortActivity.getSortConf();
             vpfAdapter = new ViewPagerFragmentAdapter(getSupportFragmentManager(), fragmentList);
             viewPager.setAdapter(vpfAdapter);
+            //fragment 实例化完成后才能读到排序能力，post 一次把按钮状态刷出来
+            viewPager.post(this::updateSortButton);
 
             viewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
                 @Override
@@ -181,6 +193,7 @@ public class SearchActivity extends InstanceActivity {
                     if (fragment != null) {
                         fragment.refresh();
                     }
+                    updateSortButton();
                 }
 
                 @Override
@@ -376,6 +389,108 @@ public class SearchActivity extends InstanceActivity {
             if (isDestroyed() || isFinishing()) return;
             searchKeyword(keywordToRestore);
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        //从「搜索类别排序」页回来发现顺序变了：原地重建各 tab（见 rebuildViewPager 注释）
+        if (vpfAdapter != null && !SearchSortActivity.getSortConf().equals(appliedCategoryOrder)) {
+            rebuildViewPager();
+        }
+    }
+
+    /**
+     * 按当前排序配置重建 ViewPager 的全部 tab。
+     *
+     * <p>为什么不只 notifyDataSetChanged / 为什么不走 recreate()：ViewPagerFragmentAdapter 继承
+     * FragmentPagerAdapter，它按"位置 tag"（android:switcher:{viewId}:{position}）从 FragmentManager
+     * 复用 fragment 实例——原地换序或 recreate() 都会把这些旧实例按旧位置挂回来，新顺序静默失效。
+     * 所以必须先把旧 fragment 从 FragmentManager 里移除，再用全新实例建适配器。
+     * 重建后的 fragment 是空的：输入框里有关键词就重放一次搜索。
+     */
+    private void rebuildViewPager() {
+        androidx.fragment.app.FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        for (Fragment fragment : getSupportFragmentManager().getFragments()) {
+            transaction.remove(fragment);
+        }
+        transaction.commitNow();
+
+        List<Fragment> fragmentList = new ArrayList<>();
+        for (String key : SearchSortActivity.loadOrderedKeys()) {
+            Fragment fragment = createSearchFragment(key);
+            if (fragment != null) fragmentList.add(fragment);
+        }
+        appliedCategoryOrder = SearchSortActivity.getSortConf();
+        vpfAdapter = new ViewPagerFragmentAdapter(getSupportFragmentManager(), fragmentList);
+        viewPager.setAdapter(vpfAdapter);
+        viewPager.setOffscreenPageLimit(4);
+        viewPager.post(this::updateSortButton);
+
+        String keyword = keywordInput.getText().toString();
+        if (!keyword.isEmpty()) searchKeyword(keyword);
+    }
+
+    /**类别键 → 搜索页 Fragment。键的合法性由 SearchSortActivity.loadOrderedKeys 保证，未知键返回 null（跳过）。 */
+    private Fragment createSearchFragment(String key) {
+        switch (key) {
+            case "video":
+                return SearchVideoFragment.newInstance();
+            case "bangumi":
+                return SearchBangumiFragment.newInstance();
+            case "article":
+                return SearchArticleFragment.newInstance();
+            case "user":
+                return SearchUserFragment.newInstance();
+            case "live":
+                return SearchLiveFragment.newInstance();
+            default:
+                return null;
+        }
+    }
+
+    /**按当前 tab 的排序能力刷新排序按钮：支持则显示并带当前档位文案，不支持（番剧/用户/直播）隐藏。 */
+    private void updateSortButton() {
+        if (sortButton == null || vpfAdapter == null || viewPager == null) return;
+        SearchFragment fragment = (SearchFragment) vpfAdapter.getFragment(viewPager.getCurrentItem());
+        String[][] options = fragment != null ? fragment.sortOptions() : new String[0][];
+        //没搜过东西不给排序入口：切档会对空关键词发请求，只会换来一次「加载失败」
+        if (options.length == 0 || fragment.keyword == null || fragment.keyword.isEmpty()) {
+            sortButton.setVisibility(View.GONE);
+            return;
+        }
+        String currentLabel = options[0][0];
+        for (String[] option : options) {
+            if (option[1].equals(fragment.getSortOrder())) {
+                currentLabel = option[0];
+                break;
+            }
+        }
+        sortButton.setText(getString(R.string.search_sort_button) + ": " + currentLabel);
+        sortButton.setVisibility(View.VISIBLE);
+    }
+
+    /**排序单选弹窗：选中即切档，SearchFragment.selectSort 负责作废在途请求、清列表重拉第一页。 */
+    private void showSortDialog() {
+        SearchFragment fragment = (SearchFragment) vpfAdapter.getFragment(viewPager.getCurrentItem());
+        if (fragment == null || fragment.keyword == null || fragment.keyword.isEmpty()) return;
+        String[][] options = fragment.sortOptions();
+        if (options.length == 0) return;
+        String[] labels = new String[options.length];
+        int checked = 0;
+        for (int i = 0; i < options.length; i++) {
+            labels[i] = options[i][0];
+            if (options[i][1].equals(fragment.getSortOrder())) checked = i;
+        }
+        new AdaptiveDialog.Builder(this)
+                .setTitle(getString(R.string.search_sort_dialog_title))
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    fragment.selectSort(options[which][1]);
+                    updateSortButton();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     /**

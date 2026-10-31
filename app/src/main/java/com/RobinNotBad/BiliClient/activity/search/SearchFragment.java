@@ -171,6 +171,38 @@ public class SearchFragment extends Fragment {
         setBottom(false);
     }
 
+    //当前排序档位（B站 search/type 的 order 参数值，totalrank=综合排序）。
+    //volatile：档位在主线程写、加载在 CenterThreadPool 后台线程读，没有 happens-before 边界时
+    //后台可能读到旧值——表现为"点了排序但拉回来的还是旧排序的结果"
+    public volatile String sortOrder = "totalrank";
+
+    /**
+     * 本分类支持的排序档位，每项为 {显示名, order 参数值}；空数组 = 该分类不支持排序
+     * （番剧/用户/直播的排序键与视频不通用，不硬套）。
+     */
+    public String[][] sortOptions() {
+        return new String[0][];
+    }
+
+    public String getSortOrder() {
+        return sortOrder;
+    }
+
+    /**
+     * 切换排序档位：同值短路；否则作废在途请求（loadGeneration 自增，连同排序快照一起兜住
+     * 迟到响应）、清列表重拉第一页。由 SearchActivity 的排序弹窗调用，
+     * 只对 sortOptions 非空的分类可用。
+     */
+    public void selectSort(String order) {
+        if (order == null || order.equals(sortOrder)) return;
+        sortOrder = order;
+        loadGeneration++;
+        page = 1;
+        bottom = false;
+        refreshable = true; //走 refresh() 的正常消费路径，保持"页面切换才刷新"的状态机一致
+        refresh();
+    }
+
     public void refresh() {
         if (!refreshable) return;
         refreshable = false;

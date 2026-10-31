@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.adapter;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -18,6 +19,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
+import com.RobinNotBad.BiliClient.util.Logu;
+import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -46,6 +49,9 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             put("input_int", 2);
             put("input_float", 3);
             put("input_string", 4);
+            //点击打开页面：id 字段存目标 Activity 全类名（如 SearchSortActivity 的入口），
+            //渲染成整卡可点的名称+描述行
+            put("open", 5);
 
         }
     };
@@ -67,6 +73,9 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             case 1:
                 return new ChooseHolder(
                         LayoutInflater.from(this.context).inflate(R.layout.cell_setting_choose, parent, false));
+            case 5:
+                return new OpenHolder(
+                        LayoutInflater.from(this.context).inflate(R.layout.cell_setting_open, parent, false));
             case 2:
             case 3:
             case 4:
@@ -103,6 +112,10 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             case 1:
                 ChooseHolder chooseHolder = (ChooseHolder) holder;
                 chooseHolder.bind(settingSection);
+                break;
+            case 5:
+                OpenHolder openHolder = (OpenHolder) holder;
+                openHolder.bind(settingSection);
                 break;
             case 2:
             case 3:
@@ -389,6 +402,42 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
         public DividerHolder(@NonNull View itemView) {
             super(itemView);
+        }
+    }
+
+    /**
+     * 「点击打开页面」条目（type = {@code open}）：{@link SettingSection#id} 存目标 Activity 全类名。
+     *
+     * <p>这类条目没有可读写的数据，因此 id 不当 SP 键用——写错类名只会在点击时暴露，
+     * 用 toast 提示而不是静默吞掉。
+     */
+    public static class OpenHolder extends RecyclerView.ViewHolder {
+        final TextView name;
+        final TextView desc;
+
+        public OpenHolder(@NonNull View itemView) {
+            super(itemView);
+            name = itemView.findViewById(R.id.setting_open_name);
+            desc = itemView.findViewById(R.id.setting_open_desc);
+        }
+
+        public void bind(SettingSection settingSection) {
+            name.setText(settingSection.name);
+            if (settingSection.desc == null || settingSection.desc.isEmpty())
+                desc.setVisibility(View.GONE);
+            else {
+                desc.setText(settingSection.desc);
+                desc.setVisibility(View.VISIBLE);
+            }
+            itemView.setOnClickListener(view -> {
+                try {
+                    Class<?> target = Class.forName(settingSection.id);
+                    view.getContext().startActivity(new Intent(view.getContext(), target));
+                } catch (Exception e) {
+                    Logu.e("open 设置项目标类不存在: " + settingSection.id);
+                    MsgUtil.showMsg("无法打开「" + settingSection.name + "」");
+                }
+            });
         }
     }
 

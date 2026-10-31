@@ -136,6 +136,7 @@ public class SettingSearchActivity extends BaseActivity {
         addPage(list, ThemeColorActivity.class, "主题配色");
         addPage(list, SettingQualityActivity.class, "默认清晰度");
         addPage(list, SortSettingActivity.class, "菜单排序");
+        addPage(list, SearchSortActivity.class, "搜索类别排序");
         addPage(list, SettingPlayerChooseActivity.class, "播放器选择");
         addPage(list, UpdateActivity.class, "检查更新");
         addPage(list, UpdateLogActivity.class, "更新日志");
@@ -155,7 +156,7 @@ public class SettingSearchActivity extends BaseActivity {
 
         add(list, SettingPrefActivity.class, "偏好设置",
                 "隐私模式", "崩溃上报", "活跃设备统计", "长按复制", "创作中心",
-                "搜索建议", "默认搜索内容", "搜索页显示热搜", "识别链接",
+                "搜索建议", "默认搜索内容", "搜索页显示热搜", "搜索类别排序", "识别链接",
                 "首页使用app端推荐", "App 推荐设备标识", "App 推荐附带客户端签名", "App 推荐附带 access_key",
                 "推荐屏蔽的 UP 主", "推荐屏蔽的关键词",
                 "新动态数量检查", "消息数量检查", "最近更新的UP主", "私信自动已读", "我的关注列表分组",

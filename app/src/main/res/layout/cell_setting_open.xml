@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「点击打开页面」型设置条目（SettingsAdapter 的 open 类型）：结构与 cell_setting_choose 一致，
+     只是没有 RadioGroup——名称 + 可选描述，整卡可点。 -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+    android:layout_marginVertical="@dimen/list_margin_vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="7dp">
+
+        <TextView
+            android:id="@+id/setting_open_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="点击打开页面"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/setting_open_desc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:alpha="0.9"
+            android:text="描述"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

@@ -77,8 +77,24 @@
             android:textSize="13sp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintStart_toEndOf="@id/sortButton"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- 排序入口：仅当前分类支持排序时显示（视频/专栏），点开单选弹窗；
+             按钮文案带当前档位（如「排序: 最多播放」），不支持排序的分类（番剧/用户/直播）上隐藏 -->
+        <TextView
+            android:id="@+id/sortButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:text="@string/search_sort_button"
+            android:textSize="13sp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@+id/keywordInput"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/keywordInput" />
 
         <View
             android:id="@+id/search"

@@ -142,13 +142,46 @@ public class SearchApi {
     }
 
     public static com.google.gson.JsonElement searchType(String keyword, int page, String type) throws IOException, JSONException {
+        return searchType(keyword, page, type, null);
+    }
+
+    /**
+     * 分类搜索。order 为排序档位（B站 search/type 的 order 参数）：综合排序传 null/totalrank
+     * 不拼参数（接口默认即综合；视频分类的综合排序由调用方改走聚合接口 search()，
+     * 那条链路才会把番剧混进第一页，all/v2 本身不支持 order）。
+     */
+    public static com.google.gson.JsonElement searchType(String keyword, int page, String type, String order) throws IOException, JSONException {
         if (!search_keyword.equals(keyword)) { search_keyword = keyword; seid = ""; }
-        String url = "https://api.bilibili.com/x/web-interface/wbi/search/type?page=" + page + "&keyword=" + URLEncoder.encode(search_keyword, "UTF-8") + "&search_type=" + type + "&seid=" + seid;
-        String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url)).toString();
+        StringBuilder url = new StringBuilder("https://api.bilibili.com/x/web-interface/wbi/search/type?page=")
+                .append(page)
+                .append("&keyword=").append(URLEncoder.encode(search_keyword, "UTF-8"))
+                .append("&search_type=").append(type);
+        if (order != null && !order.isEmpty() && !"totalrank".equals(order))
+            url.append("&order=").append(order);
+        url.append("&seid=").append(seid);
+        String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url.toString())).toString();
         ApiResponse<SearchTypeData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<SearchTypeData>>(){}.getType());
         if (resp == null || !resp.isSuccess() || resp.data == null) return null;
         seid = resp.data.seid;
         return resp.data.result;
+    }
+
+    /**
+     * 分类搜索（search_type=video）的结果转视频卡片——排序档位下视频 tab 走的这条链路。
+     * 行结构与 all/v2 的 video 组同名同义（title/author/pic/aid/bvid/play），复用 SearchVideoItem 解析；
+     * em 高亮剥离与 "http:" 封面前缀的处理与 {@link #getVideosFromSearchResult} 完全一致。
+     */
+    public static void getVideosFromTypeResult(com.google.gson.JsonElement input, ArrayList<VideoCard> videoCardList) {
+        if (input == null || !input.isJsonArray()) return;
+        List<SearchVideoItem> items = GsonUtil.fromJson(input.getAsJsonArray().toString(),
+                new com.google.gson.reflect.TypeToken<List<SearchVideoItem>>(){}.getType());
+        if (items == null) return;
+        for (SearchVideoItem card : items) {
+            if (card == null || !"video".equals(card.type)) continue;
+            String title = StringUtil.htmlToString(card.title.replace("<em class=\"keyword\">", "").replace("</em>", ""));
+            String cover = card.pic != null && !card.pic.isEmpty() ? "http:" + card.pic : "";
+            videoCardList.add(new VideoCard(title, card.author, StringUtil.toWan(card.play) + "观看", cover, card.aid, card.bvid, "video"));
+        }
     }
 
     public static void getVideosFromSearchResult(JSONArray input, ArrayList<VideoCard> videoCardList, boolean first) {

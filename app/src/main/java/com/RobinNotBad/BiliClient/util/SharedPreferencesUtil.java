@@ -9,6 +9,9 @@ import android.content.SharedPreferences;
 public class SharedPreferencesUtil {
     public static final String LINK_ENABLE = "link_enable";
     public static final String MENU_SORT = "menu_sort";
+    //搜索类别排序：分号分隔的类别键序（如 video;bangumi;article;user;live），空串 = 默认顺序。
+    //解析入口只有 SearchSortActivity.loadOrderedKeys()，视频钉死首位
+    public static final String SEARCH_CATEGORY_SORT = "search_category_sort";
     public static final String ASYNC_INFLATE_ENABLE = "async_inflate_enable";
     public static final String LOAD_TRANSITION = "load_transition";
     public static final String SNACKBAR_ENABLE = "snackbar_enable";

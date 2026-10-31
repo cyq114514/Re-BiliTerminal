@@ -229,6 +229,11 @@
             android:label="菜单排序设置"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.SearchSortActivity"
+            android:exported="false"
+            android:label="搜索类别排序"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.UIPreviewActivity"
             android:exported="false"
             android:label="界面预览"
