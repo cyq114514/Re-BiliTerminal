@@ -652,6 +652,9 @@ public class SearchActivity extends InstanceActivity {
                         fragmentCurr.refresh();
                         requestFragmentFocus();
                     }
+                    //关键词已下发到各 fragment，排序入口这时才具备显示条件；post 一次否则按钮
+                    //要等用户左右滑一次 tab（触发 onPageSelected）才冒出来
+                    viewPager.post(this::updateSortButton);
                 } catch (Exception e) {
                     report(e);
                 }
