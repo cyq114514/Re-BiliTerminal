@@ -109,6 +109,55 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="7dp">
+
+                    <LinearLayout
+                        android:id="@+id/tutorial_header"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="使用说明（伪装后怎么进应用）"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tutorial_arrow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="▸"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tutorial_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:alpha="0.9"
+                        android:lineSpacingExtra="3dp"
+                        android:text="① 点上方「设置 / 修改密码」，设一个 4-12 位纯数字密码\n② 打开「启动密码锁」\n③ 打开「把图标和名称伪装成计算器」，确认后桌面图标变成「计算器」\n④ 点桌面「计算器」：进去是一个能正常算数的计算器\n⑤ 输入密码后按「=」，进入应用\n\n【注意】\n· 部分桌面（MIUI / ColorOS 等）图标刷新有几秒延迟，属正常现象\n· 从最近任务切回不会重新上锁，只有冷启动才验证密码\n· 恢复原图标：点桌面「计算器」→ 输密码进应用 → 设置 → 偏好设置 → 隐私与伪装 → 关掉伪装开关\n· 忘记密码没有后门，只能去系统设置清除应用数据（登录状态会一并丢失）"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
