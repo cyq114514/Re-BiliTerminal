@@ -172,6 +172,16 @@ public class BackgroundManager {
     }
 
     /**
+     * 装饰层第 0 层是否已经是本类铺的底图。
+     *
+     * <p>纯 tag 判断（无 IO、无 IPC）：给 {@code BaseActivity.installAmbient} 的快路径用——
+     * 那一层每次 onStart 都要检查一次，不能再走 {@link #install} 里的 SP/文件/IPC。
+     */
+    public static boolean isInstalledOn(ViewGroup decor) {
+        return decor != null && decor.getChildCount() > 0 && decor.getChildAt(0).getTag() == TAG;
+    }
+
+    /**
      * 在页面上铺底图。成功时返回 true，调用方应据此跳过自己的氛围背景层。
      *
      * @param decor Activity 的 DecorView；加到 index 0 才能垫在内容层之下

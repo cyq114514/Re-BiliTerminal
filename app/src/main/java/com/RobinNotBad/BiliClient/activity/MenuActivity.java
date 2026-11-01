@@ -43,7 +43,6 @@ import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.UpdateManager;
 import com.RobinNotBad.BiliClient.util.UpdateLog;
-import com.bumptech.glide.Glide;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.ArrayList;
@@ -335,7 +334,9 @@ public class MenuActivity extends BaseActivity {
                 intent.setClass(MenuActivity.this, target);
                 intent.putExtra("from", name);
                 startActivity(intent);
-                Glide.get(BiliTerminal.context).clearMemory();
+                //这里原来调 Glide.get(...).clearMemory()：主线程全量释放位图 + 触发 GC，
+                //正好压在切页转场动画上（低端机肉眼可见地顿一下），且返回时整屏图要重新解码。
+                //列表页退出后其位图由 LRU 自然回收，不需要每次切页都手动清。
             }
         } else {
             switch (name) {

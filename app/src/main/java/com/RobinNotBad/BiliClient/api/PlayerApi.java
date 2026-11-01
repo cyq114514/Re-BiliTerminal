@@ -17,7 +17,7 @@ import com.RobinNotBad.BiliClient.model.ClipInfo;
 import com.RobinNotBad.BiliClient.model.DashAudioStream;
 import com.RobinNotBad.BiliClient.model.DashData;
 import com.RobinNotBad.BiliClient.model.DashVideoStream;
-import com.RobinNotBad.BiliClient.model.HighEnergyData;
+
 import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.Subtitle;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
@@ -34,7 +34,6 @@ import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.google.gson.annotations.SerializedName;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -827,70 +826,8 @@ public class PlayerApi {
         return subtitles;
     }
 
-    /**
-     * 高能进度条数据（新版）：取自 x/player/wbi/v2 响应的 view_points 字段。
-     *
-     * <p>旧数据源 {@code bvc.bilivideo.com/pbp/data} 已失效：2026-10-31 实测对 Rick Astley MV、
-     * 番剧 ep（cid=22742297）、12.8 万弹幕的 av2 全部返回 404 HTML 页，带不带
-     * Referer/buvid3 无差别，App 内表现为"开始加载数据→7 秒重试→未获取到有效数据"。
-     * 该端点连同重试一起弃用。
-     *
-     * <p>view_points 匿名请求实测恒为空数组（含 buvid3 也是），需要登录 cookie 才有数据；
-     * 本方法与同接口其余调用方（续播进度/字幕）一样走全局 webHeaders（带 cookie）+ WBI 签名，
-     * 口径一致，且播放时本来就要请求该接口，无额外端点。
-     *
-     * <p>view_points 元素为 {from,to,score}（单位秒，score 为该时间段的弹幕热度），
-     * 这里映射为固定 10s 步长的密度数组，供 HighEnergyProgressBar 绘制波形。
-     *
-     * @return 无数据/接口异常时返回 null，调用方按"本次无高能数据"处理
-     */
-    public static HighEnergyData getHighEnergyViewPoints(long aid, long cid) {
-        try {
-            JSONObject response = NetWorkUtil.getJson(ConfInfoApi.signWBI(
-                    "https://api.bilibili.com/x/player/wbi/v2?aid=" + aid + "&cid=" + cid));
-            JSONObject data = response.optJSONObject("data");
-            if (data == null) {
-                Logu.d("高能进度条", "wbi/v2 响应无 data（未登录？） aid=" + aid + " cid=" + cid);
-                return null;
-            }
-            JSONArray points = data.optJSONArray("view_points");
-            if (points == null || points.length() == 0) {
-                Logu.d("高能进度条", "view_points 为空 aid=" + aid + " cid=" + cid
-                        + "（若登录态下仍为空，则该功能当前无可用数据源）");
-                return null;
-            }
-            //登录态验证诊断：首条原始数据直接进日志，复测时看这里就知道字段格式是否如预期
-            Logu.d("高能进度条", "view_points 点数=" + points.length()
-                    + " 首条=" + points.optJSONObject(0));
-
-            HighEnergyData result = new HighEnergyData();
-            result.stepSec = 10;
-            result.tagStr = "view_points";
-            //先扫出最大 to 定桶数（波形的横向覆盖范围）
-            double maxTo = 0;
-            for (int i = 0; i < points.length(); i++) {
-                JSONObject p = points.optJSONObject(i);
-                if (p != null) maxTo = Math.max(maxTo, p.optDouble("to", 0));
-            }
-            int buckets = (int) Math.ceil(maxTo / result.stepSec);
-            if (buckets <= 0) return null;
-            float[] events = new float[buckets];
-            for (int i = 0; i < points.length(); i++) {
-                JSONObject p = points.optJSONObject(i);
-                if (p == null) continue;
-                double from = p.optDouble("from", -1);
-                double to = p.optDouble("to", -1);
-                double score = p.optDouble("score", 0);
-                if (to <= from || from < 0) continue;
-                int begin = (int) Math.max(0, Math.floor(from / result.stepSec));
-                int end = (int) Math.min(buckets - 1, Math.ceil(to / result.stepSec) - 1);
-                for (int b = begin; b <= end; b++) events[b] = (float) Math.max(events[b], score);
-            }
-            result.events = events;
-            return result;
-        } catch (Exception e) {
-            Logu.e("高能进度条", "view_points 加载失败: " + e.getMessage());
-            return null;
-        }
-    }
+    //高能进度条数据不再走接口：x/player/wbi/v2 的 view_points 元素是"名场面标记"
+    //（content/from/to/imgUrl，见 ViewPointData），没有 score 字段，按 score 取值恒为 0，
+    //归一化后 maxValue<=0 会让波形一行都不画；旧源 bvc…/pbp/data 已 404。
+    //现在改为从本地已解析的弹幕算密度，见 PlayerActivity#loadHighEnergyData。
 }

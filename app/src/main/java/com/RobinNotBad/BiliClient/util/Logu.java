@@ -118,10 +118,21 @@ public class Logu {
      * 因此这里保证一条不变式：<b>开关关闭 ⇒ 不残留日志文件</b>。
      */
     public static void setFileLoggingEnabled(boolean enabled) {
+        //设置页切换开关：保留"关掉即清理本地日志"的语义
+        setFileLoggingEnabled(enabled, true);
+    }
+
+    /**
+     * @param cleanExisting false 表示<b>不为了删除历史日志去探测目录</b>。
+     *                      冷启动必须传 false：探测本身是 3 次真实写盘（ProgressDiag），
+     *                      而默认配置下文件日志是关的，等于每次冷启动白付这笔开销。
+     *                      设置页切换开关时仍传 true，保证"关掉开关即清理"的约定。
+     */
+    public static void setFileLoggingEnabled(boolean enabled, boolean cleanExisting) {
         fileLoggingEnabled = enabled;
         synchronized (FILE_LOCK) {
             closeWriterLocked();
-            if (!enabled) deleteLogFileLocked();
+            if (!enabled && cleanExisting) deleteLogFileLocked();
             //复位落点缓存与重试节流：否则上一次探测失败（或换了落点）后会一直写不出去
             fileFor = null;
             nextResolveAt = 0;

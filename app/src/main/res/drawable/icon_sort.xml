@@ -1,0 +1,17 @@
+<!-- 搜索结果排序入口图标：三条递减横线。
+     颜色写死白色作为兜底，实际着色由 SearchActivity 按主题强调色 tint（见 updateSortButton）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,6h18v2H3z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,11h12v2H3z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,16h7v2H3z" />
+</vector>

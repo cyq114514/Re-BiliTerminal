@@ -3,6 +3,8 @@ package com.RobinNotBad.BiliClient.activity.search;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
@@ -13,10 +15,15 @@ import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.core.content.ContextCompat;
+import androidx.core.widget.ImageViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
@@ -29,6 +36,7 @@ import com.RobinNotBad.BiliClient.adapter.SearchSuggestionsAdapter;
 import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerFragmentAdapter;
 import com.RobinNotBad.BiliClient.api.SearchApi;
 import com.RobinNotBad.BiliClient.helper.TutorialHelper;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
@@ -88,7 +96,7 @@ public class SearchActivity extends InstanceActivity {
     //拖完回来）就整页重建，见 onResume 注释
     private String appliedCategoryOrder = "";
     //结果排序入口：仅当前分类支持排序（视频/专栏）时显示，文案带当前档位
-    private TextView sortButton;
+    private ImageButton sortButton;
 
     String[] specialList = {"心理疾病", "自杀", "自尽", "自残", "抑郁", "双相", "安眠药"};
 
@@ -449,47 +457,85 @@ public class SearchActivity extends InstanceActivity {
         }
     }
 
-    /**按当前 tab 的排序能力刷新排序按钮：支持则显示并带当前档位文案，不支持（番剧/用户/直播）隐藏。 */
+    /**
+     * 按当前 tab 的排序能力刷新左侧排序按钮。
+     *
+     * <p>只按"分类是否支持排序"决定显隐（视频/专栏显示，番剧/用户/直播隐藏），
+     * 不再要求"已经搜出结果"——那个耦合正是 1.2.7 修过的"按钮不出现、要左右滑一次分类才冒出来"。
+     * 关键词为空时点按钮只提示、不发请求，所以常显是安全的。
+     *
+     * <p>图标着色：默认档位（综合排序）用正文色；用户改过档位后改用主题强调色，
+     * 一眼能看出"当前不是默认排序"。
+     */
     private void updateSortButton() {
         if (sortButton == null || vpfAdapter == null || viewPager == null) return;
         SearchFragment fragment = (SearchFragment) vpfAdapter.getFragment(viewPager.getCurrentItem());
         String[][] options = fragment != null ? fragment.sortOptions() : new String[0][];
-        //没搜过东西不给排序入口：切档会对空关键词发请求，只会换来一次「加载失败」
-        if (options.length == 0 || fragment.keyword == null || fragment.keyword.isEmpty()) {
+        if (options.length == 0) {
             sortButton.setVisibility(View.GONE);
             return;
         }
-        String currentLabel = options[0][0];
-        for (String[] option : options) {
-            if (option[1].equals(fragment.getSortOrder())) {
-                currentLabel = option[0];
-                break;
-            }
-        }
-        sortButton.setText(getString(R.string.search_sort_button) + ": " + currentLabel);
+        boolean customOrder = !"totalrank".equals(fragment.getSortOrder());
+        int color = customOrder ? ThemeManager.getPrimary() : ContextCompat.getColor(this, R.color.textwhite);
+        ImageViewCompat.setImageTintList(sortButton, ColorStateList.valueOf(color));
         sortButton.setVisibility(View.VISIBLE);
     }
 
-    /**排序单选弹窗：选中即切档，SearchFragment.selectSort 负责作废在途请求、清列表重拉第一页。 */
+    /**
+     * 排序弹窗：标题 + 每档一行（强调色圆点 + 文案 + 当前档位对勾）+ 「点空白处取消」。
+     *
+     * <p>外壳仍用 {@link AdaptiveDialog}（宽度 92% 屏宽、高度 86% 封顶、超出内部滚动），
+     * 只是把内容换成自定义布局；选中即切档，{@link SearchFragment#selectSort} 负责
+     * 作废在途请求、清列表重拉第一页。
+     */
     private void showSortDialog() {
+        if (vpfAdapter == null || viewPager == null) return;
         SearchFragment fragment = (SearchFragment) vpfAdapter.getFragment(viewPager.getCurrentItem());
-        if (fragment == null || fragment.keyword == null || fragment.keyword.isEmpty()) return;
+        if (fragment == null) return;
+        if (fragment.keyword == null || fragment.keyword.isEmpty()) {
+            //空关键词切档只会换来一次「加载失败」，这里直接挡掉
+            MsgUtil.showMsg(getString(R.string.search_sort_need_keyword));
+            return;
+        }
         String[][] options = fragment.sortOptions();
         if (options.length == 0) return;
-        String[] labels = new String[options.length];
-        int checked = 0;
-        for (int i = 0; i < options.length; i++) {
-            labels[i] = options[i][0];
-            if (options[i][1].equals(fragment.getSortOrder())) checked = i;
+
+        View content = getLayoutInflater().inflate(R.layout.dialog_search_sort, null);
+        LinearLayout container = content.findViewById(R.id.sort_options);
+        int primary = ThemeManager.getPrimary();
+        //弹窗不在 ThemeApplier 的作用范围（它只管 Activity 的 setContentView），
+        //强调色必须在这里按用户主题色手动设，否则自定义主题下弹窗永远是粉色
+        content.findViewById(R.id.sort_title_bar).setBackgroundColor(primary);
+
+        final android.app.Dialog[] holder = new android.app.Dialog[1];
+        for (String[] option : options) {
+            View row = getLayoutInflater().inflate(R.layout.item_search_sort_option, container, false);
+            ((TextView) row.findViewById(R.id.option_text)).setText(option[0]);
+
+            GradientDrawable dot = new GradientDrawable();
+            dot.setShape(GradientDrawable.OVAL);
+            dot.setColor(primary);
+            row.findViewById(R.id.option_dot).setBackground(dot);
+
+            boolean checked = option[1].equals(fragment.getSortOrder());
+            ImageView check = row.findViewById(R.id.option_check);
+            if (checked) {
+                ImageViewCompat.setImageTintList(check, ColorStateList.valueOf(primary));
+                check.setVisibility(View.VISIBLE);
+            } else {
+                check.setVisibility(View.GONE);
+            }
+
+            row.setOnClickListener(v -> {
+                if (holder[0] != null) holder[0].dismiss();
+                fragment.selectSort(option[1]);
+                updateSortButton();
+            });
+            container.addView(row);
         }
-        new AdaptiveDialog.Builder(this)
-                .setTitle(getString(R.string.search_sort_dialog_title))
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
-                    fragment.selectSort(options[which][1]);
-                    updateSortButton();
-                })
-                .setNegativeButton("取消", null)
+
+        holder[0] = new AdaptiveDialog.Builder(this)
+                .setView(content)
                 .show();
     }
 

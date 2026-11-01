@@ -2,6 +2,8 @@
     <string name="app_name">Re：哔哩终端</string>
     <string name="search_sort_button">排序</string>
     <string name="search_sort_dialog_title">排序方式</string>
+    <string name="search_sort_dismiss_hint">点空白处取消</string>
+    <string name="search_sort_need_keyword">先输入关键词再选排序</string>
     <string name="about_description">轻量的第三方B站客户端</string>
     <string name="about_say">软件名来自原神中的“虚空终端”\n最低兼容安卓4.0\n愿你在这一方小小的屏幕中，找到属于自己的小小的快乐\n提示：长按设置中的“关于”按钮有彩蛋哦！</string>
     <string name="about_group">此版本为 Re：哔哩终端，属非官方构建，出问题请不要打扰官方！</string>

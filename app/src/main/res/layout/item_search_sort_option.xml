@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  排序弹窗的单行：强调色圆点 + 文案 + 当前档位对勾。
+  圆点与对勾的颜色在 SearchActivity.showSortDialog 里按主题色设置（不写死在布局里，
+  否则用户自定义主题色时弹窗仍是粉色）。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="46dp"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <View
+        android:id="@+id/option_dot"
+        android:layout_width="6dp"
+        android:layout_height="6dp" />
+
+    <TextView
+        android:id="@+id/option_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:textColor="@color/textwhite"
+        android:textSize="13sp" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/option_check"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginStart="8dp"
+        android:contentDescription="@null"
+        android:visibility="gone"
+        app:srcCompat="@drawable/icon_check" />
+</LinearLayout>

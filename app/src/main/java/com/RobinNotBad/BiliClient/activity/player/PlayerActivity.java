@@ -115,6 +115,8 @@ import master.flame.danmaku.danmaku.loader.ILoader;
 import master.flame.danmaku.danmaku.loader.android.DanmakuLoaderFactory;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
+import master.flame.danmaku.danmaku.model.IDanmakuIterator;
+import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.IDisplayer;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.model.android.Danmakus;
@@ -299,19 +301,31 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private boolean danmakuStalled = false;
     //同步诊断日志节流：每 5 秒一条，真机上直接看两个时间差多少
     private long lastDanmakuDiagMs = 0;
+    //诊断（同上日志）：上一次采样的两个位置，用来算"这段时间里各自走了多少"，
+    //只有增量才看得出"弹幕时钟速度是否等于 播放器速度×倍速"
+    private long lastDanmakuDiagPlayer = -1;
+    private long lastDanmakuDiagDanmaku = -1;
     //seek 落点校正：ijk 的 seek 会落在目标位置前最近的关键帧上并从关键帧起播（本工程预编译
     //native 无 accurate-seek），而 seekDanmakuTo 把弹幕对齐到"请求位置"——真机实测续播 28000ms
     //时播放器实际从 24872ms 起播，弹幕因此整体超前 3.4s，且因 20s 冷却一直无人纠偏。
     //窗口期内检测到真实偏差就立即按实际落点重新对齐，不等冷却
     private static final long DANMAKU_LANDING_WINDOW_MS = 8000;
     //窗口开头的宽限期：ijkPlayer.seekTo 返回后旧解码流水线还会推进几百毫秒，这期间
-    //getCurrentPosition 报的是旧流位置而非落点，不能拿去对齐
-    private static final long DANMAKU_LANDING_GRACE_MS = 600;
+    //getCurrentPosition 报的是旧流位置而非落点，不能拿去对齐。
+    //提到 1200ms：DFM 的 seek 要等一次 RESUME 把 mTimeBase 重新定好，600ms 时读到的有时还是旧值
+    private static final long DANMAKU_LANDING_GRACE_MS = 1200;
     //落点校正与卡顿纠偏共用的最小有效偏差：实测两个时钟差低于它时弹幕其实没偏，
     //此时 seek 只会白白清一次屏（真机观测到启动期 431ms"卡顿"的误触发）
     private static final long DANMAKU_REALIGN_MIN_DRIFT_MS = 800;
+    //单次 seek 会话里落点校正的最多次数：连纠这么多次仍不收敛就判定"seek 修不掉这条偏移"
+    private static final int DANMAKU_LANDING_MAX_CORRECTIONS = 2;
     //落点校正窗口截止时刻：seekDanmakuTo 里刷新，progressTimer 的 tick 里消费
     private long danmakuLandingCheckUntil = 0;
+    //落点校正止损状态（真机 PJZ110 实测：弹幕时钟恒定超前 41s，每纠一次 1 秒内又回到 41s，
+    //0.5~1.5 秒清一次屏 —— 说明"读到的弹幕时钟"和"seekTo 修的时钟"不是同一个源，再纠也没用）
+    private int landingCorrectionCount = 0;
+    private long landingLastCorrectionDiff = 0;
+    private boolean landingCorrectionDisabled = false;
     //当前倍速缓存：DFM 的 prepared 回调跑在弹幕线程上，那里不能去读 SeekBar（跨线程碰 View）
     private volatile float currentSpeed = 1.0f;
 
@@ -596,11 +610,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             if (!destroyed && SharedPreferencesUtil.getBoolean("player_subtitle_autoshow", true))
                 downSubtitle(false);
 
-            // 加载高能进度条数据
-            if (!destroyed && isOnlineVideo && aid > 0 && cid > 0) {
-                loadHighEnergyData();
-            }
-
+            //高能进度条不在这里算：它依赖已解析的弹幕，由 streamDanmaku 在解析完成时调用
             if (!destroyed && isOnlineVideo && aid > 0 && cid > 0 && SharedPreferencesUtil.getBoolean("player_show_viewpoints", false)) {
                 loadViewPoints();
             }
@@ -841,11 +851,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         if (onLongClick) {
                             onLongClick = false;
                             float normalSpeed = speed_values[seekbar_speed.getProgress()];
-                            currentSpeed = normalSpeed;
-                            if (ijkPlayer != null)
-                                ijkPlayer.setSpeed(normalSpeed);
-                            if (mDanmakuView != null)
-                                mDanmakuView.setSpeed(normalSpeed);
+                            applySpeed(normalSpeed, "长按加速结束");
                             text_speed.setText(speed_strs[seekbar_speed.getProgress()]);
                         }
                         if (gesture_moved)
@@ -878,11 +884,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (motionEvent.getAction() == MotionEvent.ACTION_UP && onLongClick) {
                     onLongClick = false;
                     float normalSpeed = speed_values[seekbar_speed.getProgress()];
-                    currentSpeed = normalSpeed;
-                    if (ijkPlayer != null)
-                        ijkPlayer.setSpeed(normalSpeed);
-                    if (mDanmakuView != null)
-                        mDanmakuView.setSpeed(normalSpeed);
+                    applySpeed(normalSpeed, "手势加速结束");
                     text_speed.setText(speed_strs[seekbar_speed.getProgress()]);
                 }
                 return false;
@@ -906,11 +908,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     && !isLiveMode) {
                 if (!onLongClick && !gesture_click_disabled) {
                     hidecon.run();
-                    currentSpeed = 3.0f;
-                    if (ijkPlayer != null)
-                        ijkPlayer.setSpeed(3.0F);
-                    if (mDanmakuView != null)
-                        mDanmakuView.setSpeed(3.0f);
+                    applySpeed(3.0f, "长按加速开始");
                     text_speed.setText("x 3.0");
                     onLongClick = true;
                     Logu.v("gesture", "longclick_down");
@@ -2460,6 +2458,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void streamDanmaku(String danmakuFile, java.util.List<DmSegMobileReply> protobufSegments) {
         Logu.v("danmaku", "stream");
+        //新一场弹幕：落点校正的止损状态归零（换视频/换P/换清晰度都走这里）
+        landingCorrectionCount = 0;
+        landingLastCorrectionDiff = 0;
+        landingCorrectionDisabled = false;
 
         mContext = DanmakuContext.create();
         HashMap<Integer, Integer> maxLinesPair = new HashMap<>();
@@ -2502,9 +2504,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     lastDanmakuSyncMs = System.currentTimeMillis();
                 }
                 pendingDanmakuSeekMs = -1;
+                //高能进度条的密度统计放在这里：只有走到 prepared，弹幕集合才按正确视口解析完
+                //（parse 依赖 DanmakuFactory 的 viewport，早于此时调用要么 NPE 要么算出错误速度）。
+                //本回调就跑在 DFM 线程上，遍历弹幕集合不会与绘制线程互踩共享迭代器。
+                loadHighEnergyData(mParser);
                 //prepare() 之后 handler 才 isPrepared，此前 onPrepared 里的 setSpeed 会被静默丢弃，
                 //倍速播放时弹幕时钟就停在 1x——这里补一次
                 danmakuView.setSpeed(currentPlayerSpeed());
+                Logu.d("倍速", "prepared 后同步弹幕倍速 " + currentPlayerSpeed() + "x");
                 //弹幕通常晚于取流加载完：如果用户在这之前就按了暂停，上面的 seekTo 会顺带把
                 //绘制线程拉起来（DFM 内部 SEEK_POS → RESUME），这里再压一次
                 pauseDanmakuIfUserPaused();
@@ -3880,13 +3887,26 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //能走到这里说明播放位置正在真实推进（tick 门控了位置变化），宽限期内除外——
         //seekTo 返回后旧解码流水线还会推进几百毫秒，那不是落点，拿去对齐会把弹幕拽回过去
         long sinceSync = now - lastDanmakuSyncMs;
-        if (sinceSync >= DANMAKU_LANDING_GRACE_MS && now < danmakuLandingCheckUntil) {
+        if (!landingCorrectionDisabled && sinceSync >= DANMAKU_LANDING_GRACE_MS
+                && now < danmakuLandingCheckUntil) {
             long danmakuTimeLanding = mDanmakuView.getCurrentTime();
             long landingDiff = playerPositionMs - danmakuTimeLanding;
             if (Math.abs(landingDiff) > DANMAKU_REALIGN_MIN_DRIFT_MS) {
+                if (landingCorrectionCount >= DANMAKU_LANDING_MAX_CORRECTIONS) {
+                    //连纠仍未收敛，且每次纠完都在 1 秒内回到同一量级：这条偏移 seek 修不掉
+                    disableLandingCorrection(landingDiff, "已连纠 " + landingCorrectionCount + " 次仍不收敛");
+                    return;
+                }
+                //第一次纠偏之后又出现"同号、量级相近"的偏差 = 修好了立刻复原，不必再试第二次
+                if (landingCorrectionCount > 0 && isSameDrift(landingDiff, landingLastCorrectionDiff)) {
+                    disableLandingCorrection(landingDiff, "纠偏后立刻复现同一量级偏差（上次 "
+                            + landingLastCorrectionDiff + "ms）");
+                    return;
+                }
                 Logu.w("弹幕校正", "seek 落点偏差 " + landingDiff + "ms（弹幕=" + danmakuTimeLanding
-                        + "，player=" + playerPositionMs + "），按实际落点重新对齐");
-                seekDanmakuTo(playerPositionMs);
+                        + "，player=" + playerPositionMs + "），按实际落点重新对齐（第 "
+                        + (landingCorrectionCount + 1) + " 次）");
+                realignToLanding(playerPositionMs, landingDiff);
                 return;
             }
         }
@@ -3895,10 +3915,24 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         long danmakuTime = mDanmakuView.getCurrentTime();
         long diff = playerPositionMs - danmakuTime;
         if (now - lastDanmakuDiagMs >= 5000) {
+            long playerDelta = lastDanmakuDiagPlayer < 0 ? -1 : playerPositionMs - lastDanmakuDiagPlayer;
+            long danmakuDelta = lastDanmakuDiagDanmaku < 0 ? -1 : danmakuTime - lastDanmakuDiagDanmaku;
+            long wallDelta = lastDanmakuDiagMs == 0 ? -1 : now - lastDanmakuDiagMs;
             lastDanmakuDiagMs = now;
-            Logu.d("弹幕同步", "player=" + playerPositionMs + " danmaku=" + danmakuTime + " diff=" + diff + "ms");
+            lastDanmakuDiagPlayer = playerPositionMs;
+            lastDanmakuDiagDanmaku = danmakuTime;
+            Logu.d("弹幕同步", "player=" + playerPositionMs + " danmaku=" + danmakuTime
+                    + " diff=" + diff + "ms | 增量 player=" + playerDelta
+                    + " danmaku=" + danmakuDelta + " wall=" + wallDelta
+                    + " speed=" + currentSpeed);
         }
         if (Math.abs(diff) <= DANMAKU_EXTREME_DRIFT_MS) {
+            danmakuExtremeTickCount = 0;
+            return;
+        }
+        //这条偏移已判定为"seek 修不掉"（见 disableLandingCorrection）：极端兜底也别去碰它，
+        //否则会退化成"每 20 秒清一次屏"
+        if (landingCorrectionDisabled && isSameDrift(diff, landingLastCorrectionDiff)) {
             danmakuExtremeTickCount = 0;
             return;
         }
@@ -3910,11 +3944,48 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         seekDanmakuTo(playerPositionMs);
     }
 
+    /** 落点校正专用入口：除了对齐，还要记住"这是第几次纠"与"纠前偏差多大"（供止损判断） */
+    private void realignToLanding(long positionMs, long diffMs) {
+        int previous = landingCorrectionCount;
+        landingLastCorrectionDiff = diffMs;
+        seekDanmakuTo(positionMs);
+        landingCorrectionCount = previous + 1;
+    }
+
+    /**
+     * 两次偏差是否属于"同一条修不掉的偏移"：同号、量级相近（差 ≤ 25%，至少 1 秒容差）。
+     *
+     * <p>真机实测那种"恒定超前 41 秒"每次纠完 1 秒内就回到同一量级，靠这个判定停手。
+     */
+    private static boolean isSameDrift(long current, long previous) {
+        if (previous == 0 || current == 0) return false;
+        if ((current > 0) != (previous > 0)) return false;
+        long tolerance = Math.max(1000L, Math.abs(previous) / 4);
+        return Math.abs(Math.abs(current) - Math.abs(previous)) <= tolerance;
+    }
+
+    /**
+     * 本视频内停用落点校正。
+     *
+     * <p>触发条件是"纠完立刻复现同一量级偏差"或"连纠到上限仍不收敛"：说明这台设备上
+     * {@code DanmakuView.getCurrentTime()} 读到的时钟与 {@code seekTo()} 修正的不是同一个源，
+     * 继续纠的唯一效果就是每 0.5~1.5 秒把整屏弹幕清一次（用户看到的是"弹幕一闪一闪"）。
+     * 换视频 / 换 P / 换清晰度都会重新走 {@code streamDanmaku}，届时自动恢复。
+     */
+    private void disableLandingCorrection(long diffMs, String reason) {
+        landingCorrectionDisabled = true;
+        Logu.w("弹幕校正", "停用落点校正：偏差 " + diffMs + "ms，" + reason
+                + "；本视频内不再用 seek 修弹幕时钟（换P/换清晰度后恢复）");
+    }
+
     /** 清掉卡顿检测的基线（暂停/跳转/隐藏弹幕后重新开始采样） */
     private void resetDanmakuTick() {
         lastDanmakuTickPos = -1;
         lastDanmakuTickWall = 0;
         danmakuExtremeTickCount = 0;
+        //跨过一次 seek 的增量没有诊断意义（播放位置是跳变的），下一次采样只重建基线
+        lastDanmakuDiagPlayer = -1;
+        lastDanmakuDiagDanmaku = -1;
     }
 
     /**
@@ -3924,6 +3995,18 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private float currentPlayerSpeed() {
         float speed = currentSpeed;
         return speed > 0 ? speed : 1.0f;
+    }
+
+    /**
+     * 统一改倍速：播放器与弹幕必须同步改，并在日志里留一条。
+     *
+     * <p>诊断用（定位"弹幕时钟比画面跑得快"时，靠这条日志判断倍速有没有同步上），可整段删。
+     */
+    private void applySpeed(float speed, String source) {
+        currentSpeed = speed;
+        if (ijkPlayer != null) ijkPlayer.setSpeed(speed);
+        if (mDanmakuView != null) mDanmakuView.setSpeed(speed);
+        Logu.d("倍速", source + " -> " + speed + "x（播放器与弹幕同步设置）");
     }
 
     private void toggleAudioOnlyMode() {
@@ -4071,34 +4154,84 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
-     * 加载高能进度条数据
+     * 高能进度条数据：从本地已解析的弹幕算密度，<b>不再走网络</b>。
+     *
+     * <p>为什么换数据源：旧源 {@code bvc…/pbp/data} 已 404；后来改用的
+     * {@code x/player/wbi/v2} 的 {@code view_points} 是"名场面标记"（content/from/to/imgUrl，
+     * 见 PlayerApi.ViewPointData），元素里<b>没有 score 字段</b>，按 score 取值恒为 0，
+     * 归一化时 {@code maxValue<=0} 让波形一行都不画——这正是"高能进度条无法正常显示"的根因。
+     *
+     * <p>弹幕本来就要下载解析（见 {@link #streamDanmaku}），用它按 10s 分桶统计条数，
+     * 语义正好就是"高能"（弹幕越密的一段越热），且不需要登录、不额外发请求、断网也能画。
+     *
+     * <p>只读两遍弹幕集合、不产生临时大数组：10 万条弹幕的 {@code long[]} 在 64MB heap 的手表上
+     * 是不可接受的峰值。
+     *
+     * <p><b>只能在 {@code DrawHandler.Callback#prepared()} 里调用</b>（即 DFM 线程、且弹幕已按
+     * 正确视口解析完）。更早调用时 {@code parser.getDanmakus()} 会因 {@code mContext} 尚未由
+     * DrawHandler 设置而 NPE；从别的线程调用则会与绘制线程互踩 {@code Danmakus} 的共享迭代器。
      */
-    private void loadHighEnergyData() {
+    private void loadHighEnergyData(BaseDanmakuParser parser) {
+        if (seekbar_progress == null || parser == null || destroyed) return;
         if (!SharedPreferencesUtil.getBoolean("player_high_energy", false)) {
+            //本方法在 DFM 线程上被调用，碰 View 必须回主线程
+            runOnUiThread(() -> {
+                if (seekbar_progress != null) seekbar_progress.clearHighEnergyData();
+            });
             Logu.d("高能进度条", "功能已禁用");
             return;
         }
-
-        CenterThreadPool.run(() -> {
-            try {
-                Logu.d("高能进度条", "开始加载数据 aid=" + aid + " cid=" + cid);
-                //数据源已从失效的 pbp 接口切换到 x/player/wbi/v2 的 view_points（见 PlayerApi.getHighEnergyViewPoints）
-                HighEnergyData data = PlayerApi.getHighEnergyViewPoints(aid, cid);
-
-                if (data != null && data.hasValidData()) {
-                    runOnUiThread(() -> {
-                        if (!destroyed && seekbar_progress != null) {
-                            seekbar_progress.setHighEnergyData(data.events, data.stepSec);
-                            Logu.d("高能进度条", "数据加载成功并设置到进度条");
-                        }
-                    });
-                } else {
-                    Logu.d("高能进度条", "未获取到有效数据（view_points 为空或未登录）");
-                }
-            } catch (Exception e) {
-                Logu.e("高能进度条", "加载失败: " + e.getMessage());
-                e.printStackTrace();
+        final int stepSec = 10;
+        float[] events;
+        try {
+            IDanmakus danmakus = parser.getDanmakus();
+            if (danmakus == null || danmakus.size() == 0) {
+                clearHighEnergyOnUi("没有弹幕，清掉波形");
+                return;
             }
+            //第一遍：找最大时间（决定桶数）
+            long maxTime = 0;
+            IDanmakuIterator it = danmakus.iterator();
+            while (it.hasNext()) {
+                BaseDanmaku d = it.next();
+                if (d == null || d.time <= 0) continue;
+                if (d.time > maxTime) maxTime = d.time;
+            }
+            if (maxTime <= 0) {
+                clearHighEnergyOnUi("弹幕时间全为 0，清掉波形");
+                return;
+            }
+            int buckets = (int) (maxTime / (stepSec * 1000L)) + 1;
+            events = new float[buckets];
+            //第二遍：按时间落桶。iterator() 内部会 reset，可以安全地重新取一次
+            it = danmakus.iterator();
+            int total = 0;
+            while (it.hasNext()) {
+                BaseDanmaku d = it.next();
+                if (d == null || d.time <= 0) continue;
+                int b = (int) (d.time / (stepSec * 1000L));
+                if (b >= 0 && b < buckets) {
+                    events[b] += 1f;
+                    total++;
+                }
+            }
+            Logu.d("高能进度条", "本地弹幕密度：条数=" + total + " 桶数=" + buckets + " 步长=" + stepSec + "s");
+        } catch (Throwable t) {
+            //统计失败只该"没有波形"，不能让播放页崩
+            Logu.e("高能进度条", "弹幕密度统计失败: " + t);
+            return;
+        }
+        final float[] result = events;
+        runOnUiThread(() -> {
+            if (destroyed || seekbar_progress == null) return;
+            seekbar_progress.setHighEnergyData(result, stepSec);
+        });
+    }
+
+    private void clearHighEnergyOnUi(String reason) {
+        Logu.d("高能进度条", reason);
+        runOnUiThread(() -> {
+            if (seekbar_progress != null) seekbar_progress.clearHighEnergyData();
         });
     }
 
@@ -4250,10 +4383,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
                         if (!destroyed && SharedPreferencesUtil.getBoolean("player_subtitle_autoshow", true)) {
                             downSubtitle(false);
-                        }
-
-                        if (!destroyed && isOnlineVideo && aid > 0 && cid > 0) {
-                            loadHighEnergyData();
                         }
 
                         if (!destroyed && isOnlineVideo && aid > 0 && cid > 0 && SharedPreferencesUtil.getBoolean("player_show_viewpoints", false)) {
@@ -4878,9 +5007,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                             downSubtitle(false);
                         }
                         
-                        if (!destroyed && isOnlineVideo && aid > 0 && cid > 0) {
-                            loadHighEnergyData();
-                        }
                         
                         if (!destroyed && isOnlineVideo && aid > 0 && cid > 0 && SharedPreferencesUtil.getBoolean("player_show_viewpoints", false)) {
                             loadViewPoints();

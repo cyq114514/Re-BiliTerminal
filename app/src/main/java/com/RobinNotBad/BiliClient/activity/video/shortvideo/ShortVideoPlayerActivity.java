@@ -1,6 +1,8 @@
 package com.RobinNotBad.BiliClient.activity.video.shortvideo;
 
 import android.os.Bundle;
+import android.os.SystemClock;
+import android.view.MotionEvent;
 
 import androidx.annotation.Nullable;
 import androidx.viewpager.widget.ViewPager;
@@ -8,6 +10,7 @@ import androidx.viewpager.widget.ViewPager;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.model.ShortVideoItem;
+import com.RobinNotBad.BiliClient.util.MsgUtil;
 
 /**
  * 竖屏短视频外壳：横向四页（短视频 / 详情 / 评论 / 相关推荐）。
@@ -139,7 +142,11 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
             //否则菜单点「短视频」会命中 killAndJump 的回旧页分支，只关菜单 → 任务栈清空
             openMenuWithoutFrom();
         } catch (Throwable e) {
+            //拉菜单失败时绝不能 finish：本页是任务栈里唯一一页（菜单已被 killAndJump finish），
+            //finish 出去就是回桌面，用户看到的就是"返回键直接退出应用"
             android.util.Log.w("short-video", "回菜单失败：" + e);
+            MsgUtil.showMsg("回菜单失败，请再按一次返回");
+            return;
         }
         finish();
     }
@@ -147,6 +154,52 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
     @Override
     public void onBackPressed() {
         handleBack();
+    }
+
+    // ---------------------------------------------------------------- 右划回菜单
+
+    /**
+     * 右划 = 返回上一级（菜单）。
+     *
+     * <p>为什么要在 Activity 里接：外壳 ViewPager 停在第 0 页时右划无处可去，事件只会被
+     * 系统手势/窗口 dismiss 吃掉；本页主题已关掉 windowSwipeToDismiss（见
+     * {@code Theme.BiliClient.Fullscreen}），右划就必须由页面自己解释。
+     *
+     * <p>只接管"第 0 页、且这一划没有翻动 ViewPager"的情况：
+     * 右侧三页（详情/评论/相关推荐）的右划仍旧是 ViewPager 翻回第 0 页，不抢。
+     */
+    private float swipeDownX, swipeDownY;
+    private int swipeDownPage;
+    private long swipeDownAt;
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (pager != null) {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    swipeDownX = ev.getX();
+                    swipeDownY = ev.getY();
+                    swipeDownPage = pager.getCurrentItem();
+                    swipeDownAt = SystemClock.uptimeMillis();
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (swipeDownPage == PAGE_FEED && pager.getCurrentItem() == PAGE_FEED) {
+                        float dx = ev.getX() - swipeDownX;
+                        float dy = ev.getY() - swipeDownY;
+                        long cost = SystemClock.uptimeMillis() - swipeDownAt;
+                        //阈值 20% 屏宽、横向必须明显大于纵向（否则纵向刷视频会被误判）、600ms 内
+                        float threshold = getResources().getDisplayMetrics().widthPixels * 0.2f;
+                        if (dx > threshold && Math.abs(dx) > Math.abs(dy) * 1.5f && cost < 600) {
+                            handleBack();
+                            return true;
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     @Override

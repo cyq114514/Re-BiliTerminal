@@ -35,6 +35,15 @@
         <item name="colorControlActivated">@color/textwhite</item>
     </style>
 
+    <!-- 全屏、但仍要新版美学观的页面用（当前只有短视频页）。
+         必须显式关掉窗口级「右划关闭」：继承下来的 windowSwipeToDismiss=true 在手表上
+         是系统 dismiss 整个窗口，既不经过 onBackPressed，也就没机会先拉起菜单——
+         而菜单已被 MenuActivity.killAndJump() finish 掉，栈里只剩这一页，
+         结果就是"短视频页右划直接退出应用"。 -->
+    <style name="Theme.BiliClient.Fullscreen" parent="Theme.BiliClient">
+        <item name="android:windowSwipeToDismiss" tools:ignore="NewApi">false</item>
+    </style>
+
     <style name="Theme.BiliClient.Splash" parent="Theme.BiliClient">
         <item name="android:windowBackground">@drawable/splash_text</item>
     </style>

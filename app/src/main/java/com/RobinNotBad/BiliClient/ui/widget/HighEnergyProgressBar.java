@@ -106,20 +106,33 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
 
     @Override
     protected synchronized void onDraw(Canvas canvas) {
-        if (showHighEnergy && highEnergyData != null && highEnergyData.length > 0) {
-            drawHighEnergy(canvas);
+        //原来的顺序是"波形先画、super 后画"，AppCompatSeekBar 的 track/progress/thumb
+        //会整片盖在上面——手表上 20dp 高的控件里那条 2dp 折线基本看不见。
+        //现在拆成两半：填充当底色垫在轨道下，折线压在最上层。
+        boolean hasWave = showHighEnergy && renderData != null && buildPaths();
+        if (hasWave) {
+            canvas.drawPath(fillPath, fillPaint);
         }
 
         super.onDraw(canvas);
+
+        if (hasWave) {
+            canvas.drawPath(linePath, linePaint);
+        }
     }
 
-    private void drawHighEnergy(Canvas canvas) {
+    /**
+     * 按当前进度条宽度/时长把密度数组折成两条 Path（填充 + 折线）。
+     *
+     * @return 是否画得出来（数据无效、尺寸为 0、时长为 0 都返回 false）
+     */
+    private boolean buildPaths() {
         int width = getWidth() - getPaddingLeft() - getPaddingRight();
         int height = getHeight() - getPaddingTop() - getPaddingBottom();
         int max = getMax();
 
         if (max <= 0 || width <= 0 || height <= 0 || renderData == null) {
-            return;
+            return false;
         }
 
         float startX = getPaddingLeft();
@@ -149,14 +162,12 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
             }
         }
 
-        if (pathStarted) {
-            int lastIndex = Math.min(highEnergyData.length - 1, (int) (max / (stepSec * 1000f)));
-            float lastX = startX + (float) Math.min(lastIndex * stepSec * 1000, max) / max * width;
-            fillPath.lineTo(lastX, baselineY);
-            fillPath.close();
+        if (!pathStarted) return false;
 
-            canvas.drawPath(fillPath, fillPaint);
-            canvas.drawPath(linePath, linePaint);
-        }
+        int lastIndex = Math.min(highEnergyData.length - 1, (int) (max / (stepSec * 1000f)));
+        float lastX = startX + (float) Math.min(lastIndex * stepSec * 1000, max) / max * width;
+        fillPath.lineTo(lastX, baselineY);
+        fillPath.close();
+        return true;
     }
 }

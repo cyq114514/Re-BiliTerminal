@@ -128,16 +128,24 @@ public class BaseActivity extends AppCompatActivity {
     //氛围背景：新版美学下在每个页面内容层之下铺一层装饰（黑底上的粉色氛围），
     //加到 DecorView 上而不是 content 上——setContentView 会清空 content 的子 View 但不会动 DecorView
     private AmbientBackground ambientBackground;
+    //圆屏适配已经处理过的 pageName 视图：onStart 每次返回都会重调 setRound，用它判重
+    private View roundAppliedOn;
+
+    /**
+     * 主题判定的进程内缓存：{@code getActivityInfo} 是 binder IPC（低端机单次 0.3~2ms），
+     * 而结果只跟 Activity 类有关。原来 onCreate 与每次 onStart 各查一次，返回页面时
+     * 这笔 IPC 正好压在转场动画上。
+     *
+     * <p>缓存不需要失效：唯一会改主题的「新版美学设计」开关在设置里是"重启应用生效"。
+     * 只缓存查询成功的结果——查询失败（如通过 activity-alias 启动时按别名查不到）
+     * 不写入，避免一次失败把某个类永久判死。
+     */
+    private static final java.util.HashMap<String, Boolean> noSwipeThemeCache = new java.util.HashMap<>();
 
     //默认跟随"新版美学设计"总开关；播放器/图片查看器等 NoSwipe 全屏页通过主题判断排除，子类也可覆写关闭
     protected boolean ambientEnabled() {
-        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)) return false;
-        try {
-            ActivityInfo info = getPackageManager().getActivityInfo(getComponentName(), 0);
-            return info.theme != R.style.Theme_NoSwipe && info.theme != R.style.Theme_NoSwipe_AppCompat;
-        } catch (Throwable e) {
-            return false;
-        }
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)
+                && !isNoSwipeThemedPage();
     }
 
     /**
@@ -146,9 +154,15 @@ public class BaseActivity extends AppCompatActivity {
      * 失败时维持各自原本的保守行为（覆盖层照加 / 氛围背景不装）。
      */
     private boolean isNoSwipeThemedPage() {
+        String key = getClass().getName();
+        Boolean cached = noSwipeThemeCache.get(key);
+        if (cached != null) return cached;
         try {
             ActivityInfo info = getPackageManager().getActivityInfo(getComponentName(), 0);
-            return info.theme == R.style.Theme_NoSwipe || info.theme == R.style.Theme_NoSwipe_AppCompat;
+            boolean noSwipe = info.theme == R.style.Theme_NoSwipe
+                    || info.theme == R.style.Theme_NoSwipe_AppCompat;
+            noSwipeThemeCache.put(key, noSwipe);
+            return noSwipe;
         } catch (Throwable e) {
             return false;
         }
@@ -191,17 +205,36 @@ public class BaseActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 安装氛围背景层（幂等：已在树上就复用，不重复 addView）。
+     *
+     * <p>onCreate 与 onStart 各调一次：装饰层一旦被系统摘掉（部分 ROM 在页面被覆盖期间
+     * 会重建窗口装饰），只在 onCreate 装配就再也回不来——用户看到的就是"从别的页面返回后
+     * 新版 UI 的背景没了、整页纯黑"。
+     */
     private void installAmbient() {
         ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        //快路径：装饰层第 0 层已经是我们铺的层（氛围背景 / 自定义底图）→ 直接复用。
+        //onStart 每次返回都会调本方法（用于"层被系统摘掉"的自愈），走快路径时
+        //只做两次 getChildAt，不做 PackageManager IPC、不做文件探测。
+        View first = decor.getChildCount() > 0 ? decor.getChildAt(0) : null;
+        if (first instanceof AmbientBackground) {
+            //字段必须指回它，否则 setAmbientBreathing 会作用在空引用上
+            ambientBackground = (AmbientBackground) first;
+            return;
+        }
+        if (BackgroundManager.isInstalledOn(decor)) return;
+
+        //慢路径：每页只在 onCreate（以及"层被摘掉"后的第一次 onStart）走一次
         //自定义背景底图优先：装上了就不再叠氛围层，
         //否则用户自己的图会被那层粉色氛围整体染色，等于白设
         if (BackgroundManager.install(this, decor)) return;
         if (!ambientEnabled()) return;
-        if (decor.getChildAt(0) instanceof AmbientBackground) return;
         //背景风格不随「圆屏适配」变化：圆屏适配只改布局，视觉沿用直屏那套粉色径向光晕
         ambientBackground = new AmbientBackground(this);
         decor.addView(ambientBackground, 0,
                 new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        Logu.d("背景诊断", getClassName() + " 新装氛围背景层");
     }
 
     protected void setAmbientBreathing(boolean breathing) {
@@ -279,7 +312,15 @@ public class BaseActivity extends AppCompatActivity {
         //圆屏适配
 
         TextView pagename = findViewById(R.id.pageName);
+        if (pagename == null) return;
+        //onStart 每次返回都会调到这里，asyncInflate 的页面还会在内容 setContentView 后再调一次。
+        //同一个 pageName 视图只处理一遍：换成新视图（内容真正 inflate 出来）才重做，
+        //避免每次返回都 findViewById + 读 SP + 重设 LayoutParams（后者会触发 requestLayout）
+        if (pagename == roundAppliedOn) return;
+        roundAppliedOn = pagename;
+
         TextView clock = findViewById(R.id.timeText);
+        //这里的 null 判断是冗余的（上面已 return），保留只是避免把下面 40 行整体再缩进一级
         if (pagename != null) {
             pagename.setMaxLines(1);
             pagename.setEllipsize(TextUtils.TruncateAt.END);
@@ -347,6 +388,8 @@ public class BaseActivity extends AppCompatActivity {
         super.onStart();
         if (!(this instanceof InstanceActivity)) setTopbarExit();
         setRound();
+        //每次回到前台都补一次（幂等）：装饰层若被系统摘掉/重建，这里能把它补回去
+        installAmbient();
         if (eventBusEnabled() && !eventBusInit) {
             EventBus.getDefault().register(this);
             eventBusInit = true;

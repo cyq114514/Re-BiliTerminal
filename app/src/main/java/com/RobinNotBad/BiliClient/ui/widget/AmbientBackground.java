@@ -93,7 +93,10 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
         }
         //主题色变化监听跟着视图生命周期走，不持有已销毁的 View
         ThemeManager.removeListener(this);
-        releaseRadialCache();
+        //只丢引用、不 recycle：硬件加速下这张图还被渲染线程的 DisplayList 拿着，
+        //回收之后那一层会静默停止绘制（观感就是"返回页面后氛围背景消失、只剩纯黑"）。
+        //丢掉引用后它本来就没有强引用了，交给 GC 回收即可。
+        dropRadialCache();
         super.onDetachedFromWindow();
     }
 
@@ -101,6 +104,14 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         ThemeManager.addListener(this);
+        //重新挂回窗口时尺寸没变，onSizeChanged 不会再触发，缓存被丢掉就永远不重建，
+        //只能走"每帧现算渐变"的兜底路径——这里自己补一次
+        final int w = getWidth();
+        final int h = getHeight();
+        if (radialCache == null && w > 0 && h > 0) {
+            ensureRadialShader(w, h);
+            rebuildRadialCache(w, h);
+        }
     }
 
     @Override
@@ -156,7 +167,7 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
      * 渐变本身是低频图像，降采样后放大肉眼无差，但省掉了每帧的整屏渐变求值。
      */
     private void rebuildRadialCache(int w, int h) {
-        releaseRadialCache();
+        dropRadialCache();
         if (w <= 0 || h <= 0) return;
         int bw = Math.max(1, w / CACHE_SCALE);
         int bh = Math.max(1, h / CACHE_SCALE);
@@ -184,8 +195,11 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
         radialCache = bitmap;
     }
 
-    private void releaseRadialCache() {
-        if (radialCache != null && !radialCache.isRecycled()) radialCache.recycle();
+    /**
+     * 只丢引用、<b>不 recycle</b>：这张位图会被硬件加速的 DisplayList 继续引用，
+     * 回收它是"某一层突然不画了"的典型成因（见 onDetachedFromWindow 的注释）。
+     */
+    private void dropRadialCache() {
         radialCache = null;
     }
 

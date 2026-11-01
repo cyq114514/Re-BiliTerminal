@@ -216,7 +216,9 @@ public class BiliTerminal extends Application {
             //日志落文件：开上面三个开关的用户多半没有 adb（logcat 只能用电脑取），
             //所以额外给一个直接落在 Download/ReBiliDiag/ 的日志文件。
             //开关为关闭时这里会顺手清掉历史日志文件（"关掉开关即清理"的不变式由 Logu 保证）
-            Logu.setFileLoggingEnabled(SharedPreferencesUtil.getBoolean(Logu.KEY_FILE_LOG, false));
+            //第二个参数 false：冷启动不做目录探测（探测是 3 次真实写盘），
+            //历史日志的清理交给设置页切换开关时那一次（cleanExisting=true）
+            Logu.setFileLoggingEnabled(SharedPreferencesUtil.getBoolean(Logu.KEY_FILE_LOG, false), false);
             //注册设置项监听，让开关切换立即生效（SharedPreferences 只持弱引用，强引用在 Logu 内部）
             Logu.registerPreferenceListener();
 

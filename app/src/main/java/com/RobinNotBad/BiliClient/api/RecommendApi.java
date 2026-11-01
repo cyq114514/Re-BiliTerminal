@@ -11,7 +11,12 @@ import com.RobinNotBad.BiliClient.util.AppSign;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
+import com.google.gson.TypeAdapter;
+import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.annotations.SerializedName;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import org.json.JSONArray;
@@ -91,9 +96,75 @@ public class RecommendApi {
         public Stat stat;
     }
 
+    /**
+     * 推荐理由：B 站对同一字段返回两种形态——老数据是对象
+     * {@code {"content":"…","reason_type":1}}，新数据/部分视频是纯字符串（多数是空串 {@code ""}）。
+     *
+     * <p>原来只按对象声明，只要有一条是字符串，Gson 就在第一条抛
+     * {@code Expected BEGIN_OBJECT but was STRING ... path $.data[0].rcmd_reason}，
+     * 整包解析成 null → {@link #getRelated} 返回空列表 → 相关推荐整页空白
+     * （真机 aid=117534531525560 复现：接口 code=0、40 条数据，客户端一条都显示不出来）。
+     * 这里按实际形态两态兼容：字符串直接当作 content。
+     */
+    @JsonAdapter(RcmdReason.Adapter.class)
     public static class RcmdReason {
         @SerializedName("content")
         public String content;
+        @SerializedName("reason_type")
+        public int reasonType;
+
+        public static class Adapter extends TypeAdapter<RcmdReason> {
+
+            @Override
+            public void write(JsonWriter out, RcmdReason value) throws IOException {
+                if (value == null) {
+                    out.nullValue();
+                    return;
+                }
+                out.beginObject();
+                if (value.content != null) out.name("content").value(value.content);
+                out.name("reason_type").value(value.reasonType);
+                out.endObject();
+            }
+
+            @Override
+            public RcmdReason read(JsonReader in) throws IOException {
+                JsonToken token = in.peek();
+                if (token == JsonToken.NULL) {
+                    in.nextNull();
+                    return null;
+                }
+                RcmdReason reason = new RcmdReason();
+                if (token == JsonToken.STRING) {
+                    //空串就保持空串：VideoCard.rcmdReason 的语义就是"空串=没有推荐理由"
+                    reason.content = in.nextString();
+                    return reason;
+                }
+                if (token != JsonToken.BEGIN_OBJECT) {
+                    //数字/数组等意外形态：跳过这一项，不能让它牵连整包解析
+                    in.skipValue();
+                    return null;
+                }
+                in.beginObject();
+                while (in.hasNext()) {
+                    String name = in.nextName();
+                    if ("content".equals(name)) {
+                        JsonToken valueToken = in.peek();
+                        if (valueToken == JsonToken.NULL) in.nextNull();
+                        else if (valueToken == JsonToken.BEGIN_OBJECT || valueToken == JsonToken.BEGIN_ARRAY)
+                            in.skipValue();
+                        else reason.content = in.nextString();
+                    } else if ("reason_type".equals(name)) {
+                        if (in.peek() == JsonToken.NUMBER) reason.reasonType = in.nextInt();
+                        else in.skipValue();
+                    } else {
+                        in.skipValue();
+                    }
+                }
+                in.endObject();
+                return reason;
+            }
+        }
     }
 
     public static class Owner {
@@ -444,7 +515,15 @@ public class RecommendApi {
         ApiResponse<List<Item>> resp = GsonUtil.fromJson(json,
                 new com.google.gson.reflect.TypeToken<ApiResponse<List<Item>>>(){}.getType());
         ArrayList<VideoCard> videoList = new ArrayList<>();
-        if (resp == null || !resp.isSuccess() || resp.data == null) return videoList;
+        if (resp == null || !resp.isSuccess() || resp.data == null || resp.data.isEmpty()) {
+            //原来这里直接 return 空列表：解析失败（字段类型变化）与非 0 code 都表现为
+            //"相关推荐一片空白、没有报错、没有日志"，线上根本查不到原因。补一行诊断
+            Logu.w("相关推荐", "aid=" + aid + " url=" + url + " 结果="
+                    + (resp == null ? "JSON 解析失败（看上一行 GsonUtil 的 W 日志）"
+                    : "code=" + resp.code + " message=" + resp.message
+                    + " 条数=" + (resp.data == null ? "null" : resp.data.size())));
+            return videoList;
+        }
 
         for (Item card : resp.data) {
             if (card == null) continue;

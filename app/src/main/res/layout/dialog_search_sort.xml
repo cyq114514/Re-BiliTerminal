@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  搜索结果排序弹窗的**内容**。
+  外面套 AdaptiveDialog（宽度 92%、高度 86% 封顶、超出部分内部滚动），
+  所以这里不自带圆角/背景，也不自己算尺寸；标题竖条与圆点、对勾的颜色在
+  SearchActivity.showSortDialog 里按 ThemeManager.getPrimary() 设置。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="6dp"
+    android:paddingBottom="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="6dp">
+
+        <!-- 标题左侧的强调色竖条 -->
+        <View
+            android:id="@+id/sort_title_bar"
+            android:layout_width="3dp"
+            android:layout_height="14dp"
+            android:background="@color/bili_pink" />
+
+        <TextView
+            android:id="@+id/sort_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/search_sort_dialog_title"
+            android:textColor="@color/textwhite"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 选项行由 Java 按当前分类的 sortOptions() 动态填充 -->
+    <LinearLayout
+        android:id="@+id/sort_options"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/sort_dismiss_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp"
+        android:text="@string/search_sort_dismiss_hint"
+        android:textColor="@color/text_gray"
+        android:textSize="12sp" />
+</LinearLayout>

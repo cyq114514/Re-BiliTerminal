@@ -509,7 +509,8 @@
             android:name=".activity.video.shortvideo.ShortVideoPlayerActivity"
             android:exported="false"
             android:label="短视频"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:theme="@style/Theme.BiliClient.Fullscreen" />
         <activity
             android:name=".activity.video.TimelineActivity"
             android:exported="false"
