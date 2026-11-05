@@ -466,6 +466,15 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
             //按视频自身宽高比把画面放进容器（contain，留黑边），
             //此前 TextureView 恒为 match_parent，任何非容器比例的稿件都会被拉伸
             applyVideoAspect(x);
+            //无极调音：与播放页共用 player_volume_gain（0~100 → 0~1 软件增益）。
+            //ijk 的 setVolume 是实例级采样乘算，短视频换条会 dropPlayer 重建实例，
+            //所以每次 prepared 都要重套，否则增益永远只对上一次设置的实例生效
+            try {
+                float gain = Math.max(0f, Math.min(1f,
+                        SharedPreferencesUtil.getFloat("player_volume_gain", 100f) / 100f));
+                if (gain < 0.999f) x.setVolume(gain, gain);
+            } catch (Throwable ignored) {
+            }
             if (!userPaused && shellActive) {
                 try {
                     x.start();
