@@ -9,6 +9,7 @@ import com.RobinNotBad.BiliClient.adapter.SettingsAdapter;
 import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.util.SegmentSkipController;
 import com.RobinNotBad.BiliClient.util.SegmentSkipMode;
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +28,10 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "横滑调进度", "player_swipe_seek",
                         "在播放画面上左右滑动调整进度，松手才跳转；画面放大后单指拖动仍然是拖动画布",
                         "true"));
+                add(new SettingSection("input_float", "横滑调进度灵敏度", "player_swipe_seek_scale",
+                        "满屏滑动对应的进度倍率，支持 0.25 / 0.5 / 1.0 / 1.5 / 2.0 / 3.0；"
+                                + "手表低 DPI 手指一动跳太多时调小，想划一点就跳远时调大",
+                        "1.0"));
                 add(new SettingSection("input_int", "快进快退秒数", "player_doubletap_seek_seconds", "", "10"));
                 add(new SettingSection("switch", "显示快进快退按钮", "player_seek_buttons",
                         "在播放页左侧（倍速那一列）显示 ±N 秒按钮；关掉后只保留双击/横滑调进度", "true"));
@@ -45,11 +50,21 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "从历史位置播放", "player_from_last",
                         getString(R.string.desc_fromlast),
                         "true"));
+                add(new SettingSection("switch", "本地缓存续播", "player_local_resume",
+                        "本地缓存视频从上次离开的位置继续播放；进度存在视频目录里，不联网。"
+                                + "隐私模式下不记录",
+                        "true"));
                 add(new SettingSection("switch", "显示实时人数", "player_show_online",
                         getString(R.string.desc_showonline),
                         "false"));
                 add(new SettingSection("switch", "听视频模式", "player_audio_only",
                         getString(R.string.desc_audio_only), "false"));
+                //收藏夹「听全部（纯音频）」的加载策略：预取下一首 + 音频落盘缓存，
+                //切歌与拖动进度条直接命中本地；关掉后回到"每次回源"的直连方式
+                add(new SettingSection("switch", "听歌快速加载", SharedPreferencesUtil.AUDIO_FAST_LOAD,
+                        "预取下一首，并把听过的音频缓存到本地：切歌、拖动进度条都更快。"
+                                + "最多占用 80MB 本地空间，超出后自动清理最久没听的；关掉后不占用空间，但加载变慢",
+                        "true"));
                 add(new SettingSection("switch", "视频可缩放", "player_scale",
                         getString(R.string.desc_scale), "true"));
                 add(new SettingSection("switch", "缩放时可移动", "player_doublemove",

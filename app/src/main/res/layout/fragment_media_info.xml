@@ -48,77 +48,98 @@
 
         <TextView
             android:id="@+id/text_title"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:text="加载中"
             android:textSize="16sp"
             android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/indexShow" />
 
         <TextView
             android:id="@+id/text_subtitle"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textSize="12sp"
             android:alpha="0.7"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_title"
             tools:text="副标题" />
 
         <TextView
             android:id="@+id/text_area_type"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textSize="12sp"
             android:alpha="0.8"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_subtitle"
             tools:text="日本 | 动画" />
 
         <TextView
             android:id="@+id/text_rating"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textSize="12sp"
-            android:textColor="@color/pink"
+            android:textColor="@color/bili_pink"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_area_type"
             tools:text="评分：9.8 (12345人)" />
 
         <TextView
             android:id="@+id/text_pub_time"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textSize="12sp"
             android:alpha="0.7"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_rating"
             tools:text="2023-01-01 开播" />
 
         <TextView
             android:id="@+id/text_stats"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textSize="12sp"
             android:alpha="0.7"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_pub_time"
             tools:text="播放：1.2万 追番：8.9万" />
 
         <TextView
             android:id="@+id/text_styles"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textSize="12sp"
             android:alpha="0.8"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_stats"
             tools:text="标签：奇幻 冒险 热血" />
@@ -341,7 +362,7 @@
                 android:layout_marginStart="8dp"
                 android:text="追番"
                 android:textColor="@color/bili_pink"
-                app:strokeColor="#FB7299" />
+                app:strokeColor="@color/bili_pink" />
 
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>

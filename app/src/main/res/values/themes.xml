@@ -5,6 +5,9 @@
         <item name="android:windowBackground">@color/bgblack</item>
         <item name="statusBarBackground">@color/pink</item>
         <item name="android:colorForeground">@color/textwhite</item>
+        <!-- 列表滑到头时的"拉伸发光"颜色：不写就取 colorForeground（本项目是近白 #ebe0e2），
+             表现为顶部一条刺眼的白条。改成卡片描边色后与 UI 融合 -->
+        <item name="android:colorEdgeEffect">@color/card_border_new</item>
         <item name="colorOnPrimary">@color/textwhite</item>
         <item name="colorPrimary">@color/textwhite</item>
         <item name="android:windowIsTranslucent">false</item>
@@ -59,6 +62,7 @@
         <item name="android:windowBackground">@color/bgblack</item>
         <item name="statusBarBackground">@color/pink</item>
         <item name="colorOnPrimary">@color/textwhite</item>
+        <item name="android:colorEdgeEffect">@color/card_border_new</item>
     </style>
 
     <style name="Theme.NoSwipe.AppCompat" parent="Theme.BiliClient">

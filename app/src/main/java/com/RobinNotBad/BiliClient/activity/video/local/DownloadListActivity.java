@@ -14,6 +14,7 @@ import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener;
 import com.RobinNotBad.BiliClient.model.DownloadSection;
 import com.RobinNotBad.BiliClient.service.DownloadService;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -111,6 +112,35 @@ public class DownloadListActivity extends RefreshListActivity {
         return -1;
     }
 
+    //确认框点「删除」后的实际删除动作：原长按直删逻辑原样迁移（后台线程执行）
+    private void deleteSection(final DownloadSection delete) {
+        try {
+            if (delete.state.equals("downloading") && DownloadService.started) {
+                stopService(new Intent(DownloadListActivity.this, DownloadService.class));
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ignored) {
+                }
+            }
+
+            //type 脏数据（非 video_*）时 getPath 会回退到相册目录，
+            //不加类型校验会递归删光整个"哔哩终端"图片目录
+            if (delete.type != null && delete.type.contains("video")) {
+                File folder = delete.getPath();
+                if (folder != null && folder.exists()) {
+                    FileUtil.deleteFolder(folder);
+                }
+            }
+
+            DownloadService.deleteSection(delete.id);
+
+            refreshList(false);
+            MsgUtil.showMsg("删除成功");
+        } catch (Exception e) {
+            MsgUtil.err(e);
+        }
+    }
+
     @SuppressLint("NotifyDataSetChanged")
     public void refreshList(boolean fromOutside) {
         if (this.isDestroyed() || !created)
@@ -175,43 +205,20 @@ public class DownloadListActivity extends RefreshListActivity {
                 adapter.setOnLongClickListener(new OnItemLongClickListener() {
                     @Override
                     public void onItemLongClick(int position) {
-                        CenterThreadPool.run(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    if (sections == null || position < 0 || position >= sections.size())
-                                        return;
-
-                                    final DownloadSection delete = sections.get(position);
-                                    if (delete == null)
-                                        return;
-
-                                    if (delete.state.equals("downloading") && DownloadService.started) {
-                                        stopService(new Intent(DownloadListActivity.this, DownloadService.class));
-                                        try {
-                                            Thread.sleep(500);
-                                        } catch (InterruptedException ignored) {
-                                        }
-                                    }
-
-                                    //type 脏数据（非 video_*）时 getPath 会回退到相册目录，
-                                    //不加类型校验会递归删光整个"哔哩终端"图片目录
-                                    if (delete.type != null && delete.type.contains("video")) {
-                                        File folder = delete.getPath();
-                                        if (folder != null && folder.exists()) {
-                                            FileUtil.deleteFolder(folder);
-                                        }
-                                    }
-
-                                    DownloadService.deleteSection(delete.id);
-
-                                    refreshList(false);
-                                    MsgUtil.showMsg("删除成功");
-                                } catch (Exception e) {
-                                    MsgUtil.err(e);
-                                }
-                            }
-                        });
+                        if (sections == null || position < 0 || position >= sections.size())
+                            return;
+                        final DownloadSection delete = sections.get(position);
+                        if (delete == null)
+                            return;
+                        //删除的是本地文件+下载记录，不可恢复：先弹确认框，
+                        //误触长按不再直接删（此前无任何确认，双长按口径也到不了这里）
+                        new AdaptiveDialog.Builder(DownloadListActivity.this)
+                                .setTitle("删除下载")
+                                .setMessage("将删除「" + delete.title + "」的已下载文件，确定吗？")
+                                .setPositiveButton("删除", (dialog, which) ->
+                                        CenterThreadPool.run(() -> deleteSection(delete)))
+                                .setNegativeButton("取消", null)
+                                .show();
                     }
                 });
 

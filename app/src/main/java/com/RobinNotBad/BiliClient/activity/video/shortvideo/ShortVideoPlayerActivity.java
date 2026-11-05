@@ -3,6 +3,9 @@ package com.RobinNotBad.BiliClient.activity.video.shortvideo;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.SeekBar;
 
 import androidx.annotation.Nullable;
 import androidx.viewpager.widget.ViewPager;
@@ -171,6 +174,8 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
     private float swipeDownX, swipeDownY;
     private int swipeDownPage;
     private long swipeDownAt;
+    //落点是否在进度条上：进度条上的右拖是"拖进度"，绝不能被解释成右滑返回（B-03）
+    private boolean swipeStartedOnSeekBar;
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
@@ -181,9 +186,11 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
                     swipeDownY = ev.getY();
                     swipeDownPage = pager.getCurrentItem();
                     swipeDownAt = SystemClock.uptimeMillis();
+                    swipeStartedOnSeekBar = downOnSeekBar(ev.getX(), ev.getY());
                     break;
                 case MotionEvent.ACTION_UP:
-                    if (swipeDownPage == PAGE_FEED && pager.getCurrentItem() == PAGE_FEED) {
+                    if (swipeDownPage == PAGE_FEED && pager.getCurrentItem() == PAGE_FEED
+                            && !swipeStartedOnSeekBar) {
                         float dx = ev.getX() - swipeDownX;
                         float dy = ev.getY() - swipeDownY;
                         long cost = SystemClock.uptimeMillis() - swipeDownAt;
@@ -200,6 +207,29 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
             }
         }
         return super.dispatchTouchEvent(ev);
+    }
+
+    /** 触点是否落在某个可见 SeekBar 上（windowFullscreen 下窗口坐标≈屏幕坐标） */
+    private boolean downOnSeekBar(float x, float y) {
+        return hitSeekBar(getWindow().getDecorView(), x, y);
+    }
+
+    private boolean hitSeekBar(View view, float x, float y) {
+        if (view instanceof SeekBar && view.isShown()) {
+            int[] loc = new int[2];
+            view.getLocationOnScreen(loc);
+            if (x >= loc[0] && x <= loc[0] + view.getWidth()
+                    && y >= loc[1] && y <= loc[1] + view.getHeight()) {
+                return true;
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (hitSeekBar(group.getChildAt(i), x, y)) return true;
+            }
+        }
+        return false;
     }
 
     @Override

@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.util.ClickGuard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +85,8 @@ public class MenuGridAdapter extends RecyclerView.Adapter<MenuGridAdapter.MenuHo
         } else {
             holder.badge.setVisibility(View.GONE);
         }
-        holder.itemView.setOnClickListener(view -> listener.onMenuClick(entry.key));
+        //菜单双击会触发两次 killAndJump，第二次时目标页已在关闭中（X-01）
+        holder.itemView.setOnClickListener(view -> ClickGuard.protect(view, () -> listener.onMenuClick(entry.key)));
         holder.itemView.setOnLongClickListener(view -> listener.onMenuLongClick(entry.key));
     }
 

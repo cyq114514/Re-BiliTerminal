@@ -86,6 +86,8 @@ public class LocalListActivity extends InstanceActivity {
                 recyclerView.setAdapter(adapter);
                 swipeRefreshLayout.setRefreshing(false);
                 started = true;
+                //首载路径此前不查空态：清缓存后首次进入整页空白，只有删除/刷新路径才补查（D-05）
+                checkEmpty();
             });
         });
     }

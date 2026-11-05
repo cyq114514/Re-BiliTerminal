@@ -9,6 +9,8 @@ import android.content.SharedPreferences;
 public class SharedPreferencesUtil {
     public static final String LINK_ENABLE = "link_enable";
     public static final String MENU_SORT = "menu_sort";
+    //番剧页是否显示「推荐」页签（关闭后退化为 追番/索引/新番 三页签）
+    public static final String BANGUMI_SHOW_RECOMMEND = "bangumi_show_recommend";
     //搜索类别排序：分号分隔的类别键序（如 video;bangumi;article;user;live），空串 = 默认顺序。
     //解析入口只有 SearchSortActivity.loadOrderedKeys()，视频钉死首位
     public static final String SEARCH_CATEGORY_SORT = "search_category_sort";
@@ -55,6 +57,10 @@ public class SharedPreferencesUtil {
     public static final String UPDATE_CHECK_ON_START = "update_check_on_start";
     //接口出错时是否展示可复制的完整详情（接口名、参数、B站返回码与原始返回片段），默认关闭
     public static final String API_ERROR_DETAIL = "dev_api_error_detail";
+    //听歌快速加载：预取下一首 + 音频落盘缓存（切歌/拖动进度条直接命中本地），默认开启
+    public static final String AUDIO_FAST_LOAD = "audio_fast_load";
+    //是否已经就"快速加载会占用本地存储"提示过用户，只提示一次
+    public static final String AUDIO_FAST_LOAD_ASKED = "audio_fast_load_asked";
 
     public static String cookies = "cookies";
     public static String mid = "mid";

@@ -95,6 +95,21 @@ public class RefreshListActivity extends BaseActivity {
         }
     }
 
+    /**
+     * 带文案的空态/错误态：空数据与加载失败共用同一控件，但必须能靠文案区分——
+     * 此前失败态复用默认「啥都木有~」，把"加载失败"伪装成"没有记录"（批次2/X-32）。
+     * 线程安全：任意线程调用，内部切主线程。
+     */
+    public void showEmptyView(String message) {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                emptyView.setText(message);
+                recyclerView.setVisibility(View.GONE);
+                emptyView.setVisibility(View.VISIBLE);
+            });
+        }
+    }
+
     public void hideEmptyView() {
         if (emptyView != null) {
             runOnUiThread(() -> {

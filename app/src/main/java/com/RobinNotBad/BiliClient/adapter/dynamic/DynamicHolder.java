@@ -364,7 +364,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
             //parseVipColor 内部兜底解析失败返回白色，不再让坏色值冒到列表
             username.setTextColor(StringUtil.parseVipColor(dynamic.userInfo.vip_nickname_color));
         } else {
-            username.setTextColor(0xFFFFFFFF);
+            username.setTextColor(context.getResources().getColor(R.color.textwhite));
         }
         if (pubdate != null) {
             //pub_action（如"参与了投票"）优先于发布时间展示，其后拼icon_badge（如"仅自己可见"）
@@ -616,7 +616,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                     likeCount.setCompoundDrawablesWithIntrinsicBounds(
                             getLikeIcon(context, true), null, null, null);
                 } else {
-                    likeCount.setTextColor(Color.rgb(0xff, 0xff, 0xff));
+                    likeCount.setTextColor(context.getResources().getColor(R.color.textwhite));
                     likeCount.setCompoundDrawablesWithIntrinsicBounds(
                             getLikeIcon(context, false), null, null, null);
                 }
@@ -649,7 +649,7 @@ public class DynamicHolder extends RecyclerView.ViewHolder {
                             ((Activity) context).runOnUiThread(() -> {
                                 MsgUtil.showMsg("取消成功");
                                 likeCount.setText(toWan(--dynamic.stats.like));
-                                likeCount.setTextColor(Color.rgb(0xff, 0xff, 0xff));
+                                likeCount.setTextColor(context.getResources().getColor(R.color.textwhite));
                                 likeCount.setCompoundDrawablesWithIntrinsicBounds(
                                         getLikeIcon(context, false), null, null,
                                         null);

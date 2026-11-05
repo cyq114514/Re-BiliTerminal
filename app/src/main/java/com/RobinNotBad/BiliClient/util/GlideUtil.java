@@ -86,6 +86,7 @@ public class GlideUtil {
                 .format(DecodeFormat.PREFER_RGB_565)
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(placeholder)
+                .error(placeholder)
                 .into(view);
     }
 
@@ -96,6 +97,7 @@ public class GlideUtil {
                 .format(DecodeFormat.PREFER_RGB_565)
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(placeholder)
+                .error(placeholder)
                 .apply(RequestOptions.circleCropTransform())
                 .into(view);
     }
@@ -144,6 +146,7 @@ public class GlideUtil {
                     .format(DecodeFormat.PREFER_RGB_565)
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(placeholder)
+                .error(placeholder)
                     .apply(coverOptions(true))
                     .into(view);
         } else {
@@ -154,6 +157,7 @@ public class GlideUtil {
                     .format(DecodeFormat.PREFER_RGB_565)
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(placeholder)
+                .error(placeholder)
                     .apply(coverOptions(false))
                     .into(view);
         }
@@ -174,6 +178,7 @@ public class GlideUtil {
                     .format(DecodeFormat.PREFER_RGB_565)
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(placeholder)
+                .error(placeholder)
                     .into(view);
             return;
         }
@@ -182,6 +187,7 @@ public class GlideUtil {
                 .format(DecodeFormat.PREFER_RGB_565)
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(placeholder)
+                .error(placeholder)
                 .apply(RequestOptions.bitmapTransform(new RoundedCorners(ToolsUtil.dp2px(roundCorners))))
                 .into(view);
     }

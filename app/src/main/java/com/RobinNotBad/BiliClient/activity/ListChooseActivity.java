@@ -44,7 +44,9 @@ public class ListChooseActivity extends BaseActivity {
             ((TextView) findViewById(R.id.pageName)).setText("请选择");
         }
         if (intent.getSerializableExtra("items") == null) {
+            //没有可展示的数据：直接退出，不再继续走 adapter 装配（否则 items=null 会一路 NPE）
             finish();
+            return;
         } else {
             this.items = (List<String>) intent.getSerializableExtra("items");
         }

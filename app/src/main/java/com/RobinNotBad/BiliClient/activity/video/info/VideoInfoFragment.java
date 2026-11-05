@@ -305,10 +305,11 @@ public class VideoInfoFragment extends BaseFragment {
             try {
                 playerData = videoInfo.toPlayerData(0);
                 PlayerApi.getVideo(playerData, false);
-                if (playerData == null) return;
                 //progress=0 意味着上次看的是别的分P（进度只跟 last_play_cid 配对），
                 //此时不能再按 cidHistory 上报 0，会把服务端那P的续播进度覆盖掉
-                if (playerData.progress > 0)
+                //playerData 可能为 null（取流失败）：只跳过上报，绝不能 return——
+                //提前 return 会连 onFinishLoad 一起跳过，详情页永久停留在 GONE 占位（A-01）
+                if (playerData != null && playerData.progress > 0)
                     HistoryApi.reportHistory(videoInfo.aid, playerData.cidHistory, playerData.progress / 1000);
             } catch (Exception e) {
                 MsgUtil.err(e);
@@ -507,6 +508,48 @@ public class VideoInfoFragment extends BaseFragment {
             addWatchlater.setVisibility(View.GONE);
             relay.setVisibility(View.GONE);
         }
+
+        //AI 视频摘要：需登录；多 P 用第一个 cid（接口是视频级摘要）
+        MaterialButton videoSummary = rootview.findViewById(R.id.video_summary);
+        videoSummary.setOnClickListener(v -> {
+            if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0) {
+                MsgUtil.showMsg("需要登录才能获取视频摘要");
+                return;
+            }
+            MsgUtil.showMsg("正在获取摘要…");
+            CenterThreadPool.run(() -> {
+                try {
+                    long cid = (videoInfo.cids != null && !videoInfo.cids.isEmpty()) ? videoInfo.cids.get(0) : 0;
+                    long upMid = (videoInfo.staff != null && !videoInfo.staff.isEmpty()) ? videoInfo.staff.get(0).mid : 0;
+                    String conclusion = VideoInfoApi.getVideoConclusion(videoInfo.aid, videoInfo.bvid, cid, upMid);
+                    if (!isAdded()) return;
+                    if (conclusion != null) {
+                        requireActivity().runOnUiThread(() ->
+                                new AdaptiveDialog.Builder(requireContext())
+                                        .setTitle("视频摘要 - " + videoInfo.title)
+                                        .setMessage(conclusion)
+                                        .setNegativeButton("关闭", null)
+                                        .show());
+                    } else {
+                        MsgUtil.showMsg("暂无视频摘要");
+                    }
+                } catch (Exception e) {
+                    MsgUtil.err(e);
+                }
+            });
+        });
+
+        //视频笔记（只读）：需登录
+        MaterialButton note = rootview.findViewById(R.id.note);
+        note.setOnClickListener(v -> {
+            if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0) {
+                MsgUtil.showMsg("需要登录才能查看笔记");
+                return;
+            }
+            Intent intent = new Intent(requireContext(), com.RobinNotBad.BiliClient.activity.video.NoteActivity.class);
+            intent.putExtra("aid", videoInfo.aid);
+            startActivity(intent);
+        });
 
         //合集按钮
         if (videoInfo.collection != null) {

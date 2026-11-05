@@ -22,6 +22,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.NetworkPlaybackQuality;
 import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
@@ -124,7 +125,7 @@ public class JumpToPlayerActivity extends BaseActivity {
 
         download = intent.getIntExtra("download", 0);
 
-        playerData.qn = playerData.qn != -1 ? playerData.qn : SharedPreferencesUtil.getInt("play_qn", 16);
+        playerData.qn = playerData.qn != -1 ? playerData.qn : NetworkPlaybackQuality.defaultQuality(this);
 
         requestVideo();
     }

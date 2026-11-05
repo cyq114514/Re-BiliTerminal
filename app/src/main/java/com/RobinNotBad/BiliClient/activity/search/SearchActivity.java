@@ -58,6 +58,7 @@ public class SearchActivity extends InstanceActivity {
     private String lastKeyword = "≠~`";
     private RecyclerView historyRecyclerview;
     private RecyclerView suggestionsRecyclerview;
+    private TextView clearHistory;
     SearchHistoryAdapter searchHistoryAdapter;
     SearchSuggestionsAdapter searchSuggestionsAdapter;
     ViewPager viewPager;
@@ -143,6 +144,8 @@ public class SearchActivity extends InstanceActivity {
             sortButton.setOnClickListener(view -> showSortDialog());
             historyRecyclerview = findViewById(R.id.history_recyclerview);
             suggestionsRecyclerview = findViewById(R.id.suggestions_recyclerview);
+            clearHistory = findViewById(R.id.clear_history);
+            clearHistory.setOnClickListener(v -> confirmClearSearchHistory());
             viewPager.setOffscreenPageLimit(4);
 
             keywordInput.setOnFocusChangeListener((view, b) -> {
@@ -155,20 +158,20 @@ public class SearchActivity extends InstanceActivity {
                     if (keyword.isEmpty()) {
                         showKeywordPanel();
                     } else if (!searchSuggestions.isEmpty()) {
-                        historyRecyclerview.setVisibility(View.GONE);
+                        setHistoryPanelVisible(false);
                         suggestionsRecyclerview.setVisibility(View.VISIBLE);
                     } else {
                         // 关键词非空但没有建议：两张卡片都不许盖在结果上，等用户继续输入再出建议
-                        historyRecyclerview.setVisibility(View.GONE);
+                        setHistoryPanelVisible(false);
                         suggestionsRecyclerview.setVisibility(View.GONE);
                     }
                 } else {
                     // 失去焦点时隐藏所有列表
-                    historyRecyclerview.setVisibility(View.GONE);
+                    setHistoryPanelVisible(false);
                     suggestionsRecyclerview.setVisibility(View.GONE);
                 }
             });
-            historyRecyclerview.setVisibility(View.VISIBLE);
+            setHistoryPanelVisible(true);
             suggestionsRecyclerview.setVisibility(View.GONE);
             List<Fragment> fragmentList = new ArrayList<>();
             //顺序来自「搜索类别排序」设置（视频钉死首位，解析口径见 SearchSortActivity.loadOrderedKeys）
@@ -209,7 +212,12 @@ public class SearchActivity extends InstanceActivity {
                 }
             });
 
-            searchBtn.setOnClickListener(view -> searchKeyword(keywordInput.getText().toString()));
+            searchBtn.setOnClickListener(view -> {
+                //输入法组词未上屏时 getText() 只有拼音，先清掉组合串再取，
+                //否则会拿拼音当关键词搜出"完全无关"的结果
+                keywordInput.clearComposingText();
+                searchKeyword(keywordInput.getText().toString());
+            });
             searchBtn.setOnLongClickListener(this::jumpToTargetId);
             //搜索执行后焦点会被结果列表抢占（requestFragmentFocus），部分ROM（一加13/ColorOS16实测）
             //上第一次点击输入框只恢复焦点、不拉起输入法，这里在点击时主动补一次
@@ -220,6 +228,8 @@ public class SearchActivity extends InstanceActivity {
             keywordInput.setOnEditorActionListener((textView, actionId, event) -> {
                 if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE || event != null
                         && KeyEvent.KEYCODE_ENTER == event.getKeyCode() && KeyEvent.ACTION_DOWN == event.getAction()) {
+                    //同搜索按钮：IME 上屏动作可能发生在组词提交之前
+                    keywordInput.clearComposingText();
                     searchKeyword(keywordInput.getText().toString());
                 }
                 return false;
@@ -239,7 +249,11 @@ public class SearchActivity extends InstanceActivity {
             //下标的有效性必须在消费端再判一次，不能只依赖绑定时的检查。
             searchHistoryAdapter.setOnClickListener(position -> {
                 if (position < 0 || position >= searchHistory.size()) return;
-                keywordInput.setText(searchHistory.get(position));
+                String historyKeyword = searchHistory.get(position);
+                keywordInput.setText(historyKeyword);
+                //setText 后光标位置由输入法决定，部分 ROM 会落回开头；
+                //显式移到末尾，用户接着输入才不会插到关键词最前面
+                keywordInput.setSelection(historyKeyword.length());
             });
             searchHistoryAdapter.setOnLongClickListener(position -> {
                 if (position < 0 || position >= searchHistory.size()) return;
@@ -344,10 +358,10 @@ public class SearchActivity extends InstanceActivity {
                                         searchSuggestionsAdapter.notifyDataSetChanged();
 
                                         if (!suggestions.isEmpty()) {
-                                            historyRecyclerview.setVisibility(View.GONE);
+                                            setHistoryPanelVisible(false);
                                             suggestionsRecyclerview.setVisibility(View.VISIBLE);
                                         } else {
-                                            historyRecyclerview.setVisibility(View.VISIBLE);
+                                            setHistoryPanelVisible(true);
                                             suggestionsRecyclerview.setVisibility(View.GONE);
                                         }
                                     });
@@ -363,6 +377,11 @@ public class SearchActivity extends InstanceActivity {
 
             if (getIntent().getStringExtra("keyword") != null) {
                 findViewById(R.id.top).setOnClickListener(view1 -> finish());
+                //顶栏行为从"开菜单"改成 finish 时，箭头图标必须同步换成返回箭头——
+                //布局默认 arrow_down（回菜单语义），图标与行为不符会误导（X-42）
+                View pageName = findViewById(R.id.pageName);
+                if (pageName instanceof TextView)
+                    ((TextView) pageName).setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.arrow_back, 0, 0, 0);
                 keywordInput.setText(getIntent().getStringExtra("keyword"));
                 MsgUtil.showMsg("可点击标题栏返回详情页");
             }
@@ -567,7 +586,7 @@ public class SearchActivity extends InstanceActivity {
         searchSuggestions.addAll(hotSearchList);
         searchSuggestionsAdapter.notifyDataSetChanged();
         if (!hotSearchList.isEmpty()) {
-            historyRecyclerview.setVisibility(View.GONE);
+            setHistoryPanelVisible(false);
             suggestionsRecyclerview.setVisibility(View.VISIBLE);
         }
     }
@@ -582,9 +601,44 @@ public class SearchActivity extends InstanceActivity {
         if (hotSearchEnabled && !hotSearchList.isEmpty()) {
             showHotSearch();
         } else {
-            historyRecyclerview.setVisibility(View.VISIBLE);
+            setHistoryPanelVisible(true);
             suggestionsRecyclerview.setVisibility(View.GONE);
         }
+    }
+
+    /**
+     * 历史卡与「清空」按钮必须同显同隐。
+     *
+     * <p>两者都是叠在结果区上的浮层，只藏列表不藏按钮会出现"搜索结果上面浮着一个清空"。
+     */
+    private void setHistoryPanelVisible(boolean visible) {
+        if (historyRecyclerview != null) {
+            historyRecyclerview.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+        if (clearHistory != null) {
+            clearHistory.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    /** 一键清空搜索记录：二次确认后同时清内存、Adapter 与落盘。 */
+    private void confirmClearSearchHistory() {
+        if (searchHistory == null) return;
+        if (searchHistory.isEmpty()) {
+            MsgUtil.showMsg("还没有搜索记录");
+            return;
+        }
+        new AdaptiveDialog.Builder(this)
+                .setTitle("清空搜索记录")
+                .setMessage("确定清空全部 " + searchHistory.size() + " 条搜索记录吗？")
+                .setPositiveButton("清空", (dialog, which) -> {
+                    searchHistory.clear();
+                    searchHistoryAdapter.notifyDataSetChanged();
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.search_history, "[]");
+                    setHistoryPanelVisible(false);
+                    MsgUtil.showMsg("已清空");
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     public boolean jumpToTargetId(View view) {
@@ -641,7 +695,7 @@ public class SearchActivity extends InstanceActivity {
             if (Objects.equals(lastKeyword, str) && currentResultsPresent()) {
                 runOnUiThread(() -> {
                     keywordInput.clearFocus();
-                    historyRecyclerview.setVisibility(View.GONE);
+                    setHistoryPanelVisible(false);
                 });
             } else {
                 refreshing = true;
@@ -651,7 +705,7 @@ public class SearchActivity extends InstanceActivity {
 
                 // 搜索记录
                 runOnUiThread(() -> {
-                    historyRecyclerview.setVisibility(View.GONE);
+                    setHistoryPanelVisible(false);
                     keywordInput.clearFocus();
                 });
 

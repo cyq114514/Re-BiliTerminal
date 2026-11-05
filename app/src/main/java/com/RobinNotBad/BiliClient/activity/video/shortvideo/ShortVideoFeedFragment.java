@@ -9,12 +9,14 @@ import android.os.Looper;
 import android.graphics.SurfaceTexture;
 import android.text.TextUtils;
 import android.view.GestureDetector;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResult;
@@ -303,6 +305,8 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
             //同一块 SurfaceTexture 只是尺寸变了（首次布局、旋屏）：Surface 不用重建。
             //重建会把旧 Surface release 掉，而 native 侧可能还持有它——既会闪一下也可能崩
             setStatus("TextureView 尺寸变化 " + textureView.getWidth() + "x" + textureView.getHeight());
+            //容器尺寸变了要按新尺寸重算画面大小（只改 View 尺寸，不动 Surface）
+            applyVideoAspect(player);
             return;
         }
         if (videoSurface != null) videoSurface.release();
@@ -324,6 +328,57 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
             } catch (Throwable ignored) {
             }
         }
+        applyVideoAspect(player);
+    }
+
+    /**
+     * 按视频自身宽高比把 TextureView 放进容器（contain，留黑边）。
+     *
+     * <p>此前 TextureView 恒为 match_parent，ijk 会按整块 Surface 铺满渲染，
+     * 任何非容器比例的稿件（尤其是横屏稿件在竖屏信息流里）都会被人为拉伸。
+     * 容器是 {@link FeedGestureLayout}（FrameLayout），所以用 FrameLayout.LayoutParams + 居中。
+     */
+    private void applyVideoAspect(tv.danmaku.ijk.media.player.IMediaPlayer mp) {
+        if (mp == null || textureView == null) return;
+        int videoWidth, videoHeight;
+        try {
+            videoWidth = mp.getVideoWidth();
+            videoHeight = mp.getVideoHeight();
+        } catch (Throwable t) {
+            return;
+        }
+        if (videoWidth <= 0 || videoHeight <= 0) return;
+
+        //以父容器的完整尺寸为基准：TextureView 本身可能已经被缩过一次，
+        //拿它自己的 width/height 重算会越缩越小
+        View parent = (View) textureView.getParent();
+        if (parent == null) return;
+        int boxWidth = parent.getWidth();
+        int boxHeight = parent.getHeight();
+        if (boxWidth <= 0 || boxHeight <= 0) return;
+
+        float videoRatio = videoWidth / (float) videoHeight;
+        float boxRatio = boxWidth / (float) boxHeight;
+        int targetWidth, targetHeight;
+        if (videoRatio > boxRatio) {
+            targetWidth = boxWidth;
+            targetHeight = Math.round(boxWidth / videoRatio);
+        } else {
+            targetHeight = boxHeight;
+            targetWidth = Math.round(boxHeight * videoRatio);
+        }
+        if (targetWidth <= 0 || targetHeight <= 0) return;
+
+        ViewGroup.LayoutParams params = textureView.getLayoutParams();
+        if (!(params instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) params;
+        if (lp.width == targetWidth && lp.height == targetHeight) return;
+        lp.width = targetWidth;
+        lp.height = targetHeight;
+        lp.gravity = Gravity.CENTER;
+        textureView.setLayoutParams(lp);
+        Logu.d(TAG, "画面适配 " + videoWidth + "x" + videoHeight + " -> "
+                + targetWidth + "x" + targetHeight + "，容器 " + boxWidth + "x" + boxHeight);
     }
 
     /**
@@ -408,6 +463,9 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
             prepared = true;
             setStatus("已准备 dur=" + getDurationSafe() + "ms");
             showPlayHint("解码中…");
+            //按视频自身宽高比把画面放进容器（contain，留黑边），
+            //此前 TextureView 恒为 match_parent，任何非容器比例的稿件都会被拉伸
+            applyVideoAspect(x);
             if (!userPaused && shellActive) {
                 try {
                     x.start();
@@ -434,6 +492,8 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         mp.setOnInfoListener((x, what, extra) -> {
             if (x != mp || token != playToken) return false;
             if (what == IjkMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                //首帧时容器已完成布局，补一次比例适配（onPrepared 时容器可能还是 0 尺寸）
+                applyVideoAspect(x);
                 revealCurrentPage();
             } else if (what == IjkMediaPlayer.MEDIA_INFO_BUFFERING_START) {
                 ShortVideoPagerAdapter.Holder holder = holderAt(currentIndex);
@@ -815,15 +875,16 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         textPlayHint.setVisibility(View.GONE);
     }
 
-    /** 页面内状态行：只在「设置 → 实验室 → 调试 → 允许Logu.d」打开时显示 */
+    /**
+     * 页面内状态行：**只写日志，不再上屏**。
+     *
+     * <p>原先在「允许Logu.d」打开时会把「首帧已出 aid=…」这类调试文字画在视频画面上，
+     * 正式包里一旦用户（或我们调试时）开了那个开关，短视频页就会一直挂着一行诊断文字，
+     * 观感像是 bug。诊断信息保留在 logcat 与 app-log.txt 里，排障不受影响。
+     */
     private void setStatus(String text) {
-        if (textStatus == null) return;
-        if (!SharedPreferencesUtil.getBoolean("dev_logd", false)) {
-            textStatus.setVisibility(View.GONE);
-            return;
-        }
-        textStatus.setVisibility(View.VISIBLE);
-        textStatus.setText(text);
+        if (textStatus != null) textStatus.setVisibility(View.GONE);
+        Logu.d("短视频", text);
     }
 
     private void onVideoCompleted() {
@@ -1225,12 +1286,23 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
                 if (player.isPlaying()) player.pause();
             } catch (Throwable ignored) {
             }
-        } else if (prepared && !userPaused) {
-            try {
-                player.start();
-            } catch (Throwable ignored) {
+        } else {
+            if (prepared && !userPaused) {
+                try {
+                    player.start();
+                } catch (Throwable ignored) {
+                }
             }
+            //翻回第 0 页要重挂进度刷新：onPause 已把这条链摘掉，不重挂则进度条与时间冻结（X-17）
+            startProgressTicker();
         }
+    }
+
+    /** 进度刷新链重启：onPause 会 removeCallbacks，回前台/翻回第 0 页必须重挂（X-17） */
+    private void startProgressTicker() {
+        if (handler == null || destroyed) return;
+        handler.removeCallbacks(progressRunnable);
+        handler.post(progressRunnable);
     }
 
     public ShortVideoItem currentItem() {
@@ -1269,6 +1341,8 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
             } catch (Throwable ignored) {
             }
         }
+        //onPause 摘掉的进度刷新链在这里重挂：否则后台回来进度条与时间文本冻结直到下一条 prepare（X-17）
+        startProgressTicker();
     }
 
     @Override

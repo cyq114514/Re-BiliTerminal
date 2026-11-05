@@ -72,7 +72,10 @@ public class ReplyInfoActivity extends BaseActivity {
         try {
             type = ContentType.getContentType(intent.getIntExtra("type", 1));
         } catch (ContentType.TerminalIllegalTypeCodeException e) {
-            throw new RuntimeException(e);
+            //非法 type（残留/恶意 intent）不再直接崩：提示后退出（批次8）
+            MsgUtil.showMsg("评论类型无效");
+            finish();
+            return;
         }
         up_mid = intent.getLongExtra("up_mid", -1);
         isManager = intent.getBooleanExtra("is_manager", false);
@@ -170,7 +173,8 @@ public class ReplyInfoActivity extends BaseActivity {
                     replyList.addAll(list);
                     //数据末位 i 对应 adapter 位 i+1（详情模式头部只有根评论+回复框一个额外格）
                     //旧代码写成 +2，插入位比实际多 1，第二批数据开始通知与数据错位导致列表卡死
-                    replyAdapter.notifyItemRangeInserted(replyList.size() - list.size() + 1, list.size());
+                    //排序是本地做的：追加后要按当前档位整体重排，保证热度序不被新页打断
+                    applySort();
                     refreshLayout.setRefreshing(false);
                 });
                 if (result == 1) {
@@ -219,9 +223,9 @@ public class ReplyInfoActivity extends BaseActivity {
                             replyAdapter.isDetail = true;
                             setOnSortSwitch();
                             recyclerView.setAdapter(replyAdapter);
-                        } else {
-                            replyAdapter.notifyDataSetChanged();
                         }
+                        //刷新拿到的是服务端顺序；本地排序档位可能是热度，重排一次保证一致
+                        applySort();
                         refreshLayout.setRefreshing(false);
                     });
                     if (result == 1) {
@@ -237,11 +241,31 @@ public class ReplyInfoActivity extends BaseActivity {
         }));
     }
 
+    /**
+     * 楼中楼排序开关。
+     *
+     * <p>服务端楼中楼接口没有 sort 参数，传了也不生效，所以这里不重新请求，
+     * 只对已加载的评论本地重排：0=按时间，1=按点赞数。
+     */
     private void setOnSortSwitch() {
         replyAdapter.setOnSortSwitchListener(position -> {
-            sort = (sort == 0 ? 1 : 0);
-            refresh();
+            sort = (sort == Reply.SORT_TIME ? Reply.SORT_LIKE : Reply.SORT_TIME);
+            //适配器里另有一份 sort，用来显示排序按钮文案，必须一起改
+            replyAdapter.sort = sort;
+            applySort();
         });
+    }
+
+    /**
+     * 按当前排序重排已加载的楼中楼并刷新列表。
+     *
+     * <p>第 0 位是根评论，不能参与排序，所以 fromIndex = 1。
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private void applySort() {
+        if (replyList == null || replyList.isEmpty()) return;
+        Reply.sortReplies(replyList, sort, 1);
+        if (replyAdapter != null) replyAdapter.notifyDataSetChanged();
     }
 
     @Override
@@ -258,7 +282,8 @@ public class ReplyInfoActivity extends BaseActivity {
         if (reply == null) return;
         //楼中楼详情页：新回复追加到子评论末尾（数据末位 i 对应 adapter 位 i+1，头部固定项是根评论+回复框）
         replyList.add(reply);
-        replyAdapter.notifyItemInserted(replyList.size());
+        //新回复也要落进当前排序口径：时间序排在末尾，热度序按点赞数落位
+        applySort();
         LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
         if (layoutManager != null)
             layoutManager.scrollToPositionWithOffset(replyList.size(), 0);

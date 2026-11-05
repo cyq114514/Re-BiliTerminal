@@ -3,9 +3,11 @@ package com.RobinNotBad.BiliClient.api;
 import android.os.Build;
 import android.text.TextUtils;
 
+import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.ShortVideoItem;
 import com.RobinNotBad.BiliClient.util.DeviceIdentity;
+import com.RobinNotBad.BiliClient.util.NetworkPlaybackQuality;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -41,7 +43,7 @@ public final class ShortVideoFeedApi {
 
     /** 「视频设置 → 分辨率」里保存的清晰度；老用户没有该键时用 16（360P） */
     public static int defaultPlayQuality() {
-        return SharedPreferencesUtil.getInt("play_qn", 16);
+        return NetworkPlaybackQuality.defaultQuality(BiliTerminal.context);
     }
 
     /**

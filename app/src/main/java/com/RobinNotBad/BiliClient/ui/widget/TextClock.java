@@ -37,31 +37,35 @@ public class TextClock extends TextView {
 
     public TextClock(Context context) {
         super(context);
-        init();
+        init(context);
     }
 
     public TextClock(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
-        init();
+        init(context);
     }
 
     public TextClock(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        init();
+        init(context);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public TextClock(Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        init();
+        init(context);
     }
 
+    //dateFormat 改为实例字段：跟随系统 12/24 小时制（此前固定 HH:mm），也消除 static 共享隐患（批次8）
     @SuppressLint("SimpleDateFormat")
-    private static final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm");
+    private SimpleDateFormat dateFormat;
     private boolean stopped = false;
 
-    public void init() {
+    private void init(Context context) {
         setTypeface(Typeface.DEFAULT_BOLD);
+        boolean is24Hour = android.text.format.DateFormat.is24HourFormat(
+                context.getApplicationContext());
+        dateFormat = new SimpleDateFormat(is24Hour ? "HH:mm" : "h:mm");
     }
 
     private final Runnable ticker = new Runnable() {
@@ -71,7 +75,7 @@ public class TextClock extends TextView {
             if (stopped) return;
 
             long now = System.currentTimeMillis();
-            setText(dateFormat.format(now));
+            if (dateFormat != null) setText(dateFormat.format(now));
 
             long next = 60000 - now % 60000;
             postDelayed(this, next);

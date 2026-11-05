@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.model.HotSearchCard;
@@ -46,8 +47,8 @@ public class HotSearchAdapter extends RecyclerView.Adapter<HotSearchAdapter.Hold
         int rank = position + 1;
 
         holder.rankText.setText(String.valueOf(rank));
-        //前三名 B站粉色高亮
-        int rankColor = rank <= 3 ? 0xFFFB7299 : 0xFF999999;
+        //前三名强调色高亮：走主题色（此前硬编码旧版粉 FB7299，不随主题）（批次6）
+        int rankColor = rank <= 3 ? ThemeManager.getPrimary() : 0xFF999999;
         holder.rankText.setTextColor(rankColor);
 
         holder.keywordText.setText(item.showName);

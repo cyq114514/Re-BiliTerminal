@@ -27,7 +27,9 @@ public class HotSearchActivity extends InstanceActivity {
 
     private RecyclerView recyclerView;
     private SwipeRefreshLayout swipeRefreshLayout;
-    private ArrayList<HotSearchCard> hotList;
+    //final + 原地更新：Adapter 构造时持有的是这个列表的引用，
+    //刷新时整体换引用会让 notifyDataSetChanged 继续刷旧数据
+    private final ArrayList<HotSearchCard> hotList = new ArrayList<>();
     private HotSearchAdapter adapter;
 
     @SuppressLint("MissingInflatedId")
@@ -56,8 +58,11 @@ public class HotSearchActivity extends InstanceActivity {
                 ArrayList<HotSearchCard> list = new ArrayList<>();
                 boolean success = HotSearchApi.getHotSearch(list);
                 if (success) {
-                    hotList = list;
                     runOnUiThread(() -> {
+                        //Adapter 持有 hotList 引用，必须原地 clear + addAll；
+                        //原来 hotList = list 换了引用，下拉刷新后列表内容其实没变
+                        hotList.clear();
+                        hotList.addAll(list);
                         if (recyclerView.getLayoutManager() == null) {
                             recyclerView.setLayoutManager(new CustomLinearManager(this));
                         }

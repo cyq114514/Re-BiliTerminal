@@ -24,6 +24,7 @@ import com.RobinNotBad.BiliClient.helper.sql.DownloadSqlHelper;
 import com.RobinNotBad.BiliClient.model.DownloadSection;
 import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
+import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
@@ -1040,6 +1041,65 @@ public class DownloadService extends Service {
                     database.close();
             }
         });
+    }
+
+    /**
+     * 批量加入音频下载（收藏夹「下载全部」用）。
+     *
+     * <p>不能逐条调 {@link #startDownload}：那是异步插库，worker 可能在全部插完前
+     * 就因为队列空而退出，后面的条目要等用户手动再点一次下载。这里同步插完这一页再启动。
+     *
+     * @param items 一页或已加载的条目，内部按 aid+cid 去重（已存在的跳过）
+     * @param qn    清晰度，音频下载用 16 即可
+     */
+    public static void startDownloadBatch(List<VideoCard> items, int qn) {
+        if (items == null || items.isEmpty()) return;
+        CenterThreadPool.run(() -> {
+            SQLiteDatabase database = null;
+            Cursor cursor = null;
+            try {
+                DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
+                database = helper.getWritableDatabase();
+                int added = 0;
+                for (VideoCard item : items) {
+                    if (item == null || item.aid <= 0 || item.cid <= 0 || item.invalid) continue;
+                    cursor = database.rawQuery("select aid from download where aid=? and cid=?",
+                            new String[]{String.valueOf(item.aid), String.valueOf(item.cid)});
+                    boolean exists = cursor != null && cursor.getCount() > 0;
+                    if (cursor != null) {
+                        cursor.close();
+                        cursor = null;
+                    }
+                    if (exists) continue;
+
+                    database.execSQL(
+                            "insert into download(type,state,aid,cid,qn,title,child,cover,download_type,audio_url) values(?,?,?,?,?,?,?,?,?,?)",
+                            new Object[]{"video_single", "none", item.aid, item.cid, qn, item.title, "",
+                                    GlideUtil.url(item.cover), "audio_only", null});
+
+                    File path = FileUtil.getVideoDownloadPath(item.title, null);
+                    path.mkdirs();
+                    File sign = new File(path, ".DOWNLOADING");
+                    if (!sign.exists()) sign.createNewFile();
+                    added++;
+                }
+                if (added > 0) {
+                    Logu.d("批量加入 " + added + " 条音频下载");
+                    startQuiet(-1);
+                }
+            } catch (Exception e) {
+                Logu.e("批量加入下载失败: " + e);
+            } finally {
+                if (cursor != null) cursor.close();
+                if (database != null) database.close();
+            }
+        });
+    }
+
+    /** 静默启动：worker 已在跑时不弹「下载队列已在进行中」 */
+    private static void startQuiet(long first) {
+        if (started) return;
+        start(first);
     }
 
     public static synchronized void start(long first) {

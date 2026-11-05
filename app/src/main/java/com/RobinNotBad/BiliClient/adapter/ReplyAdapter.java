@@ -147,7 +147,7 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             textView.setBackgroundColor(Color.TRANSPARENT);
             return;
         }
-        ObjectAnimator anim = ObjectAnimator.ofArgb(textView, "backgroundColor", 0x66FB7299, 0x00FB7299);
+        ObjectAnimator anim = ObjectAnimator.ofArgb(textView, "backgroundColor", (ThemeManager.getPrimary() & 0x00FFFFFF) | 0x66000000, ThemeManager.getPrimary() & 0x00FFFFFF);
         anim.setDuration(1000);
         textView.setTag(R.id.tag_color_anim, anim);
         anim.start();
@@ -182,19 +182,20 @@ public class ReplyAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 intent.putExtra("replyType", replyType);
                 context.startActivity(intent);
             });
-            String[] sorts = {"未知排序", "未知排序", "时间排序", "热度排序"};
+            String[] sorts = {"时间排序", "热度排序", "时间排序", "热度排序"};
             if (isDetail) {
-                writeReply.sort.setVisibility(View.GONE);
+                // 评论详情页也显示排序按钮；楼中楼接口没有 sort 参数，排序由页面本地做
+                writeReply.sort.setVisibility(View.VISIBLE);
                 writeReply.count_label.setVisibility(View.GONE);
             } else {
-                writeReply.sort.setText(sorts[sort]);
-                writeReply.sort.setOnClickListener(view -> {
-                    if (this.listener != null)
-                        listener.onItemClick(0);
-                    writeReply.sort.setText(sorts[sort]);
-                });
                 writeReply.count_label.setText("共" + count + "条评论");
             }
+            writeReply.sort.setText(sorts[Math.max(Math.min(sort, sorts.length - 1), 0)]);
+            writeReply.sort.setOnClickListener(view -> {
+                if (this.listener != null)
+                    listener.onItemClick(0);
+                writeReply.sort.setText(sorts[Math.max(Math.min(sort, sorts.length - 1), 0)]);
+            });
         }
         if (holder instanceof ReplyHolder) {
             int realPosition;

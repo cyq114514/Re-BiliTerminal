@@ -63,12 +63,21 @@ public class SearchBangumiFragment extends SearchFragment {
                             bangumiCardList.addAll(list);
                             bangumiCardAdapter.notifyItemRangeInserted(lastSize, bangumiCardList.size() - lastSize);
                         });
-                    } else setBottom(true);
-                } else setBottom(true);
+                    } else {
+                    //null 响应=接口异常/无结果体：页1给出可重试文案，不再伪装成「啥都木有~」（X-10）
+                    setBottom(true);
+                    if (page == 1) showEmptyView("搜索失败，请检查网络后重试");
+                }
+                } else {
+                    //null 响应=接口异常/无结果体：页1给出可重试文案，不再伪装成「啥都木有~」（X-10）
+                    setBottom(true);
+                    if (page == 1) showEmptyView("搜索失败，请检查网络后重试");
+                }
                 setRefreshing(false);
             } catch (Exception e) {
                 report(e);
                 if (myGeneration == loadGeneration) setRefreshing(false);
+                if (myGeneration == loadGeneration && page == 1) showEmptyView("搜索失败，请检查网络后重试");
             }
         });
     }

@@ -158,7 +158,8 @@ public class BiliTerminal extends Application {
                 @Override
                 public void onActivityDestroyed(@NonNull Activity activity) {
                     liveActivityCount--;
-                    if (liveActivityCount <= 0) ResumePageUtil.clear();
+                    //此路径只是 Activity 全部销毁，进程不会马上被杀，用 apply 即可，避免主线程同步等写盘
+                    if (liveActivityCount <= 0) ResumePageUtil.clearAsync();
                 }
 
                 @Override

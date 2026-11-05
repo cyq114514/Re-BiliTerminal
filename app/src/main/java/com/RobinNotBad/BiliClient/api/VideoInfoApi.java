@@ -431,4 +431,29 @@ public class VideoInfoApi {
         @SerializedName("total")
         public Object total;
     }
+
+    /**
+     * AI 视频摘要：走 conclusion/get，WBI 签名，需登录。
+     *
+     * @param aid   视频 aid
+     * @param bvid  视频 bvid
+     * @param cid   当前分 P 的 cid（多 P 不能固定取第一 P）
+     * @param upMid UP 主 mid，用于接口参数 up_mid
+     * @return 摘要正文；null 表示没有摘要或接口未返回
+     */
+    public static String getVideoConclusion(long aid, String bvid, long cid, long upMid) throws IOException, JSONException {
+        String url = "https://api.bilibili.com/x/web-interface/view/conclusion/get?aid=" + aid
+                + "&bvid=" + bvid + "&cid=" + cid + "&up_mid=" + upMid;
+        JSONObject result = NetWorkUtil.getJson(ConfInfoApi.signWBI(url), NetWorkUtil.webHeaders);
+        if (result == null) return null;
+        JSONObject data = result.optJSONObject("data");
+        if (data == null) return null;
+        int code = data.optInt("code", -1);
+        if (code != 0) return null;
+        JSONObject modelResult = data.optJSONObject("model_result");
+        if (modelResult == null) return null;
+        if (modelResult.optInt("result_type", 0) < 1) return null;
+        String summary = modelResult.optString("summary", null);
+        return (summary == null || summary.isEmpty()) ? null : summary;
+    }
 }

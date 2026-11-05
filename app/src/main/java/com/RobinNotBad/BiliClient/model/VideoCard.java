@@ -27,6 +27,7 @@ public class VideoCard implements Parcelable, Serializable {
     public String uri = "";      //接口给出的跳转 uri（含 player_width/height/rotate，可判竖屏）
     public String rcmdReason = ""; //推荐理由，空串表示没有
     public boolean isFollowed = false; //是否已关注该 UP（app 端靠推荐理由推断，web 端靠 is_followed）
+    public boolean invalid = false; //稿件已失效（收藏夹 attr!=0），音频队列等场景应跳过
 
     public VideoCard(String title, String upName, String view, String cover, long aid, String bvid, String type) {
         this.title = title;
@@ -78,6 +79,7 @@ public class VideoCard implements Parcelable, Serializable {
         uri = in.readString();
         rcmdReason = in.readString();
         isFollowed = in.readInt() != 0;
+        invalid = in.readInt() != 0;
     }
 
     public static final Creator<VideoCard> CREATOR = new Creator<>() {
@@ -115,5 +117,6 @@ public class VideoCard implements Parcelable, Serializable {
         parcel.writeString(uri);
         parcel.writeString(rcmdReason);
         parcel.writeInt(isFollowed ? 1 : 0);
+        parcel.writeInt(invalid ? 1 : 0);
     }
 }

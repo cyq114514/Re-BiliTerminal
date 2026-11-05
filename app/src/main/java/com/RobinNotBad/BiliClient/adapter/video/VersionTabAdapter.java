@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 
 /**
  * 历史更新日志页的版本选项卡（横向滚动，选中粉色加粗）。
@@ -18,8 +19,7 @@ import com.RobinNotBad.BiliClient.R;
  */
 public class VersionTabAdapter extends RecyclerView.Adapter<VersionTabAdapter.VersionTabHolder> {
 
-    private static final int COLOR_SELECTED = 0xfffb7299;
-    private static final int COLOR_NORMAL = 0xbeebe0e2;
+        private static final int COLOR_NORMAL = 0xbeebe0e2;
 
     private final String[] versions;
     public int selectedIndex = 0;
@@ -63,7 +63,7 @@ public class VersionTabAdapter extends RecyclerView.Adapter<VersionTabAdapter.Ve
 
         holder.tabText.setText(versions[position]);
         boolean selected = position == selectedIndex;
-        holder.tabText.setTextColor(selected ? COLOR_SELECTED : COLOR_NORMAL);
+        holder.tabText.setTextColor(selected ? ThemeManager.getPrimary() : COLOR_NORMAL);
         holder.tabText.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
 
         holder.tabText.setOnClickListener(v -> {

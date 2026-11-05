@@ -35,7 +35,7 @@
             android:paddingVertical="@dimen/badge_padding_vertical"
             android:textAlignment="center"
             android:textColor="@color/textwhite"
-            android:textSize="9sp"
+            android:textSize="10sp"
             android:visibility="gone" />
     </FrameLayout>
 

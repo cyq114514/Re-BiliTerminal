@@ -15,6 +15,7 @@ import java.util.TimerTask;
 public class DialogActivity extends BaseActivity {
 
     int wait_time = 0;
+    private Timer waitTimer;
 
     @SuppressLint("MissingInflatedId")
     @Override
@@ -32,7 +33,8 @@ public class DialogActivity extends BaseActivity {
         if (intent.getIntExtra("wait_time", -1) > 0) {
             close_btn.setEnabled(false);
             wait_time = intent.getIntExtra("wait_time", 0);
-            Timer timer = new Timer();
+            waitTimer = new Timer();
+            Timer timer = waitTimer;
             timer.scheduleAtFixedRate(new TimerTask() {
                 @SuppressLint("SetTextI18n")
                 @Override
@@ -55,5 +57,12 @@ public class DialogActivity extends BaseActivity {
 
     @Override
     public void onBackPressed() {
+    }
+
+    @Override
+    protected void onDestroy() {
+        //倒计时用的 Timer 此前只在倒数完才 cancel：页面被提前关闭时仍会 post 一轮 runOnUiThread（批次8）
+        if (waitTimer != null) waitTimer.cancel();
+        super.onDestroy();
     }
 }

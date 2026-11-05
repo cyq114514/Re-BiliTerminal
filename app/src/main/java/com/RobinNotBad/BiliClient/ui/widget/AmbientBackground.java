@@ -138,13 +138,29 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
         invalidate();
     }
 
-    /** 光晕的渐变着色器（缓存图建不起来时直接绘制用） */
-    private void ensureRadialShader(int w, int h) {
+    /**
+     * 光晕圆心相对高度的位置：**负数 = 落在屏幕上方之外**。
+     *
+     * <p>径向渐变在圆心是一个数学奇点，个别 GPU/Skia 实现会在那一像素上算出异常色值；
+     * 再经过 1/4 分辨率缓存放大，就变成屏幕上的一个小黑点（用户实测：只在手表上出现、
+     * 会被上层 UI 盖住、位置正好在光晕最亮处）。把圆心挪到屏幕外，可见区域内不再有任何
+     * 像素落在奇点上，观感仍是"从顶部洒下来的光"。
+     */
+    private static final float CENTER_Y_RATIO = -0.04f;
+    /** 光晕半径相对屏幕长边的比例 */
+    private static final float RADIUS_RATIO = 0.72f;
+
+    private RadialGradient buildShader(int w, int h) {
         int ambient = ThemeManager.getAmbient();
-        paint.setShader(new RadialGradient(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f,
+        return new RadialGradient(w * 0.5f, h * CENTER_Y_RATIO, Math.max(w, h) * RADIUS_RATIO,
                 new int[]{ColorUtils.setAlphaComponent(ambient, 0x59),
                         ColorUtils.setAlphaComponent(ambient, 0x00)},
-                new float[]{0f, 1f}, Shader.TileMode.CLAMP));
+                new float[]{0f, 1f}, Shader.TileMode.CLAMP);
+    }
+
+    /** 光晕的渐变着色器（缓存图建不起来时直接绘制用） */
+    private void ensureRadialShader(int w, int h) {
+        paint.setShader(buildShader(w, h));
     }
 
     @Override
@@ -157,8 +173,10 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
             cacheDst.set(0, 0, w, h);
             canvas.drawBitmap(radialCache, null, cacheDst, cachePaint);
         } else if (paint.getShader() != null) {
-            //缓存建不起来时退回直接绘制：只是慢，不影响正确性
-            canvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, paint);
+            //缓存建不起来时退回直接绘制：只是慢，不影响正确性。
+            //用矩形铺满 + CLAMP 着色器，而不是画圆：半径外的像素由 CLAMP 取渐变的末端色（全透明），
+            //效果与画圆一致，但不会在圆心/圆周留下一像素级的接缝（见 rebuildRadialCache 注释）
+            canvas.drawRect(0, 0, w, h, paint);
         }
     }
 
@@ -182,12 +200,11 @@ public class AmbientBackground extends View implements ThemeManager.OnThemeChang
             //先用原尺寸坐标系画，再整体缩放到缓存分辨率，避免半径/圆心两处换算出错
             cacheCanvas.scale(bw / (float) w, bh / (float) h);
             Paint cacheShaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
-            int ambient = ThemeManager.getAmbient();
-            cacheShaderPaint.setShader(new RadialGradient(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f,
-                    new int[]{ColorUtils.setAlphaComponent(ambient, 0x59),
-                            ColorUtils.setAlphaComponent(ambient, 0x00)},
-                    new float[]{0f, 1f}, Shader.TileMode.CLAMP));
-            cacheCanvas.drawCircle(w * 0.5f, h * 0.14f, Math.max(w, h) * 0.75f, cacheShaderPaint);
+            cacheShaderPaint.setShader(buildShader(w, h));
+            //用矩形铺满整块缓存图 + CLAMP 着色器（半径外取末端色=全透明），不再 drawCircle：
+            //圆形的抗锯齿边缘有时会在"圆心"或"圆周"留下 1px 的异常像素，
+            //降采样后放大到全屏，就表现为光晕正中/边缘上的一个小黑点
+            cacheCanvas.drawRect(0, 0, w, h, cacheShaderPaint);
         } catch (Throwable t) {
             bitmap.recycle();
             return;

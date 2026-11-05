@@ -183,7 +183,7 @@ public class LiveInfoActivity extends BaseActivity {
                     startActivity(intent);
                     return true;
                 });
-                if (playInfo.playUrl == null) {
+                if (playInfo == null || playInfo.playUrl == null) {
                     MsgUtil.showMsg("直播已结束");
                     play.setVisibility(View.GONE);
                 } else {
@@ -234,8 +234,8 @@ public class LiveInfoActivity extends BaseActivity {
                     MsgUtil.showMsgLong("直播可能只有内置播放器可以正常播放");
 
             }).onFailure((e) -> {
+                //页面随即 finish，不再注册延迟报错——此前 1 分钟后的 MsgUtil.err 会从一个已死的页面弹出
                 runOnUiThread(() -> MsgUtil.showMsg("直播不存在"));
-                CenterThreadPool.runOnUIThreadAfter(1, TimeUnit.MINUTES, () -> MsgUtil.err(e));
                 finish();
             }));
         });

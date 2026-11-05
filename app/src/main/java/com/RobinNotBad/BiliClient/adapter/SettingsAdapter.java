@@ -17,6 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.Logu;
@@ -128,6 +129,11 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 switchHolder.bind(settingSection);
                 break;
         }
+
+        //cell 是绑定期才成型的，BaseActivity 在 setContentView 时的全树换色跑不到这里：
+        //bind 完成后补一次（幂等：颜色已正确时各分支按精确值比对直接跳过）。
+        //开关/单选的强调色跟随主题色就靠这一步（此前只有界面设置页手动调过 4 个开关）
+        ThemeApplier.apply(holder.itemView);
     }
 
     @Override

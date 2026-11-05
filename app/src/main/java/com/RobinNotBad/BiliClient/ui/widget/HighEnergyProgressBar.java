@@ -1,4 +1,5 @@
 package com.RobinNotBad.BiliClient.ui.widget;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -39,7 +40,8 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
     private void init() {
         linePaint = new Paint();
         linePaint.setAntiAlias(true);
-        linePaint.setColor(0xA8FB7299);
+        //高能波形走主题色派生（保留原 alpha），旧粉 FB7299 不随主题（批次6）
+        linePaint.setColor((ThemeManager.getPrimary() & 0x00FFFFFF) | 0xA8000000);
         linePaint.setStyle(Paint.Style.STROKE);
         linePaint.setStrokeWidth(2f * getContext().getResources().getDisplayMetrics().density); // 2dp线宽
         linePaint.setStrokeCap(Paint.Cap.ROUND);
@@ -47,7 +49,7 @@ public class HighEnergyProgressBar extends androidx.appcompat.widget.AppCompatSe
 
         fillPaint = new Paint();
         fillPaint.setAntiAlias(true);
-        fillPaint.setColor(0x33FB7299);
+        fillPaint.setColor((ThemeManager.getPrimary() & 0x00FFFFFF) | 0x33000000);
         fillPaint.setStyle(Paint.Style.FILL);
     }
 

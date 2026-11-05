@@ -45,7 +45,8 @@ public class FavoriteApi {
     /** 收藏夹列表最多翻几页（一页 20 个），防止服务端异常时死循环 */
     private static final int MAX_FOLDER_PAGES = 5;
     /** 收藏夹内容每页条数：与旧接口的 ps=30 不同，v3 常用 20，PiliPlus 也用 20 */
-    private static final int FOLDER_PAGE_SIZE = 20;
+    /** 收藏夹内容每页条数：与旧接口的 ps=30 不同，v3 常用 20，PiliPlus 也用 20（音频队列推算已加载页数也用它） */
+    public static final int FOLDER_PAGE_SIZE = 20;
 
     // ==================== 模型 ====================
 
@@ -316,6 +317,7 @@ public class FavoriteApi {
             VideoCard card = new VideoCard(item.title, upName, viewText, item.cover,
                     item.id, item.bvid == null ? "" : item.bvid);
             if (item.ugc != null) card.cid = item.ugc.first_cid;
+            card.invalid = item.attr != 0;
             videoList.add(card);
         }
         return resp.data.has_more ? 0 : 1;

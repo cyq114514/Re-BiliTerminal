@@ -43,7 +43,12 @@ public class HotSearchApi {
                 if (item == null) continue;
                 HotSearchCard card = new HotSearchCard();
                 card.keyword = item.optString("keyword", "");
-                card.showName = item.optString("show_name", card.keyword);
+                //show_name 字段存在但为空串时，optString 的默认值不会生效，
+                //整行文字就会空白；统一回落到 keyword（与 SearchApi 的口径一致）
+                card.showName = item.optString("show_name", "");
+                if (card.showName == null || card.showName.trim().isEmpty()) {
+                    card.showName = card.keyword;
+                }
                 card.icon = item.optString("icon", "");
                 card.position = item.optInt("position", i + 1);
                 card.heatScore = item.optLong("heat_score", 0);

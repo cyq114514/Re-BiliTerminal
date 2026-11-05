@@ -71,7 +71,11 @@ public class SearchVideoFragment extends SearchFragment {
                         if (page == 1) showEmptyView(false);
                         SearchApi.getVideosFromSearchResult(result, list, page == 1);
                         appendPage(myGeneration, list);
-                    } else setBottom(true);
+                    } else {
+                    //null 响应=接口异常/无结果体：页1给出可重试文案，不再伪装成「啥都木有~」（X-10）
+                    setBottom(true);
+                    if (page == 1) showEmptyView("搜索失败，请检查网络后重试");
+                }
                 } else {
                     com.google.gson.JsonElement result = SearchApi.searchType(keyword, page, "video", orderAtRequest);
                     if (myGeneration != loadGeneration) return;
@@ -79,12 +83,17 @@ public class SearchVideoFragment extends SearchFragment {
                         if (page == 1) showEmptyView(false);
                         SearchApi.getVideosFromTypeResult(result, list);
                         appendPage(myGeneration, list);
-                    } else setBottom(true);
+                    } else {
+                    //null 响应=接口异常/无结果体：页1给出可重试文案，不再伪装成「啥都木有~」（X-10）
+                    setBottom(true);
+                    if (page == 1) showEmptyView("搜索失败，请检查网络后重试");
+                }
                 }
                 setRefreshing(false);
             } catch (Exception e) {
                 e.printStackTrace();
                 if (myGeneration == loadGeneration) loadFail(e);
+                if (myGeneration == loadGeneration && page == 1) showEmptyView("搜索失败，请检查网络后重试");
             }
         });
     }

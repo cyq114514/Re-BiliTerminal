@@ -58,6 +58,8 @@ public class WatchLaterActivity extends RefreshListActivity {
         clearWatched.setVisibility(View.VISIBLE);
         clearWatched.setOnClickListener(view -> confirmClearWatched());
 
+        //注册下拉刷新：基类默认禁用且此前未注册，失败后只能退出重进（X-03）
+        setOnRefreshListener(this::load);
         updateFilterColors();
         load();
     }
@@ -91,7 +93,7 @@ public class WatchLaterActivity extends RefreshListActivity {
                     cards.clear();
                     cards.addAll(loaded);
                     adapter.notifyDataSetChanged();
-                    if (cards.isEmpty()) showEmptyView();
+                    if (cards.isEmpty()) showEmptyView("稍后再看是空的~");
                     else hideEmptyView();
                     loading = false;
                     setRefreshing(false);
@@ -100,6 +102,8 @@ public class WatchLaterActivity extends RefreshListActivity {
             } catch (Exception e) {
                 loading = false;
                 loadFail(e);
+                //失败态与空态区分：此前复用「啥都木有~」误导（X-32 同款）
+                if (cards.isEmpty()) showEmptyView("加载失败，请下拉重试");
             }
         });
     }

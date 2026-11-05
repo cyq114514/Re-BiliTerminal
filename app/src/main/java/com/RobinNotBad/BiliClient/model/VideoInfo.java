@@ -3,6 +3,8 @@ package com.RobinNotBad.BiliClient.model;
 import android.os.Parcel;
 import android.os.Parcelable;
 
+import com.RobinNotBad.BiliClient.BiliTerminal;
+import com.RobinNotBad.BiliClient.util.NetworkPlaybackQuality;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.google.gson.annotations.SerializedName;
@@ -119,7 +121,7 @@ public class VideoInfo implements Parcelable, Serializable { // 自定义类需�
         data.cid = cids.get(index);
         data.title = pagenames.size() == 1 ? title : pagenames.get(index);
         data.mid = SharedPreferencesUtil.getLong("mid", 0);
-        data.qn = SharedPreferencesUtil.getInt("play_qn", 16);
+        data.qn = NetworkPlaybackQuality.defaultQuality(BiliTerminal.context);
         data.pagenames = pagenames;
         data.cids = cids;
         data.currentPageIndex = index;

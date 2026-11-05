@@ -116,6 +116,36 @@
                     android:paddingVertical="3dp">
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_bangumi_recommend"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:text="番剧页显示推荐" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="6dp"
+                        android:layout_marginTop="1dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.9"
+                        android:text="关闭后番剧页只保留 追番 / 索引 / 新番 三个页签"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="3dp">
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switch_round"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

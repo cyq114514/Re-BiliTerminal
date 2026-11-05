@@ -65,7 +65,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_marginHorizontal="8dp"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:gravity="center_vertical"
                     android:text="@string/btn_setup_init"
                     android:textAlignment="textStart"

@@ -58,6 +58,12 @@ public class FollowUsersActivity extends RefreshListActivity {
 
         userList = new ArrayList<>();
 
+        //注册下拉刷新：按当前模式重新拉取（X-03）
+        setOnRefreshListener(() -> {
+            if (groupMode) loadGroupMode();
+            else loadNormalMode();
+        });
+
         if (groupMode) {
             loadGroupMode();
         } else {

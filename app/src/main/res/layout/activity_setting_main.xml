@@ -61,7 +61,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="搜索设置"
@@ -78,7 +78,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="@string/btn_login_tip"
@@ -807,7 +807,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="清除教程进度"
@@ -824,7 +824,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="功能测试"

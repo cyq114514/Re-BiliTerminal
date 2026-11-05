@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.model.PrivateMsgSession;
 import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan;
 import com.RobinNotBad.BiliClient.api.PrivateMsgApi;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
@@ -48,7 +49,8 @@ public class PrivateMsgSessionsAdapter
     final HashMap<Long, UserInfo> userMap;
     private final int cardRoundRadius;
     private static final int BADGE_TEXT_COLOR = Color.WHITE;
-    private static final int BADGE_BG_COLOR = Color.rgb(207, 75, 95);
+    //未读徽章底色走主题色：不能是 static final（构造时机晚于类加载），改实例字段（批次6）
+    private final int badgeBgColor = ThemeManager.getPrimary();
     private static final String BADGE_TEXT = "  未读 ";
     /** 置顶/删除成功后的回调，宿主用它重拉会话列表（服务端才是唯一真相） */
     private Runnable onSessionsChanged;
@@ -130,7 +132,7 @@ public class PrivateMsgSessionsAdapter
                 int nameLength = displayName.length();
                 nameStr.append(BADGE_TEXT);
                 nameStr.setSpan(
-                        new RadiusBackgroundSpan(1, cardRoundRadius, BADGE_TEXT_COLOR, BADGE_BG_COLOR),
+                        new RadiusBackgroundSpan(1, cardRoundRadius, BADGE_TEXT_COLOR, badgeBgColor),
                         nameLength + 1, nameStr.length(), Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
                 holder.nameText.setText(nameStr);
             } else {

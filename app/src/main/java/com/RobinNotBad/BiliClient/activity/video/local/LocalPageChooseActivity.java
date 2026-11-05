@@ -72,21 +72,25 @@ public class LocalPageChooseActivity extends BaseActivity {
         adapter.setOnItemLongClickListener(position -> {
             long timestamp = System.currentTimeMillis();
             if (longClickPosition == position && timestamp - longClickTimestamp < 4000) {
+                //列表增删与 notify 必须在主线程同序完成：旧实现在后台线程删数据、主线程提前 notify，
+                //RecyclerView 布局状态与 Adapter 数据量失序，滑动时抛 IndexOutOfBoundsException
+                String pageName = pageList.get(position);
+                pageList.remove(position);
+                videoFileList.remove(position);
+                danmakuFileList.remove(position);
+                adapter.notifyItemRemoved(position);
+                adapter.notifyItemRangeChanged(position, pageList.size() - position);
+                boolean empty = pageList.isEmpty();
+
                 CenterThreadPool.run(() -> {
                     File workPath = FileUtil.getVideoDownloadPath();
                     File videoPath = new File(workPath, title);
-                    File pagePath = new File(videoPath, pageList.get(position));
+                    File pagePath = new File(videoPath, pageName);
 
                     FileUtil.deleteFolder(pagePath);
-                    pageList.remove(position);
-                    videoFileList.remove(position);
-                    danmakuFileList.remove(position);
-                    if (pageList.isEmpty())
+                    if (empty)
                         FileUtil.deleteFolder(videoPath);
                 });
-
-                adapter.notifyItemRemoved(position);
-                adapter.notifyItemRangeChanged(0, pageList.size() - position);
 
                 MsgUtil.showMsg("删除成功");
                 longClickPosition = -1;

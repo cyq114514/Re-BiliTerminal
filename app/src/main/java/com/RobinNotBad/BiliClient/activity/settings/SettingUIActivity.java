@@ -17,6 +17,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.BackgroundManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CrashTrace;
@@ -75,23 +76,43 @@ public class SettingUIActivity extends BaseActivity {
             SwitchMaterial newUi = findViewById(R.id.switch_new_ui);
             newUi.setChecked(SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true));
             newUi.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, isChecked);
-                MsgUtil.showMsg(isChecked ? "已开启新版美学设计\n应用将立即重启生效" : "已关闭新版美学设计\n应用将立即重启生效");
-                //只写 SP 不重启会出现新旧混排：已打开页面保持旧样式、新开页面立即用新样式，
-                //且 GlideUtil 的封面样式缓存也按旧值建。整进程重启（随后走冷启动恢复链）最干净
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    try {
-                        Intent restart = Intent.makeRestartActivityTask(
-                                new android.content.ComponentName(SettingUIActivity.this, com.RobinNotBad.BiliClient.activity.SplashActivity.class));
-                        restart.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        startActivity(restart);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        return;   //重启失败就维持旧行为：重进应用后生效
-                    }
-                    //startActivity 已同步送达 system_server，进程退出不影响新任务拉起
-                    android.os.Process.killProcess(android.os.Process.myPid());
-                }, 600);
+                //程序化 setState（如「恢复默认」拨回开关）与现状一致时直接忽略：
+                //否则重置默认也会触发一次整进程重启
+                if (isChecked == SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true))
+                    return;
+                //整进程重启是重操作，误触即全应用重启：先确认（X-35）
+                new AdaptiveDialog.Builder(SettingUIActivity.this)
+                        .setTitle(isChecked ? "开启新版美学设计" : "关闭新版美学设计")
+                        .setMessage("应用将立即重启以应用更改，确定吗？")
+                        .setPositiveButton("确定", (dialog, which) -> {
+                            SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, isChecked);
+                            MsgUtil.showMsg(isChecked ? "已开启新版美学设计\n应用将立即重启生效" : "已关闭新版美学设计\n应用将立即重启生效");
+                            //只写 SP 不重启会出现新旧混排：已打开页面保持旧样式、新开页面立即用新样式，
+                            //且 GlideUtil 的封面样式缓存也按旧值建。整进程重启（随后走冷启动恢复链）最干净
+                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                try {
+                                    Intent restart = Intent.makeRestartActivityTask(
+                                            new android.content.ComponentName(SettingUIActivity.this, com.RobinNotBad.BiliClient.activity.SplashActivity.class));
+                                    restart.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                                    startActivity(restart);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                    return;   //重启失败就维持旧行为：重进应用后生效
+                                }
+                                //startActivity 已同步送达 system_server，进程退出不影响新任务拉起
+                                android.os.Process.killProcess(android.os.Process.myPid());
+                            }, 600);
+                        })
+                        .setNegativeButton("取消", (dialog, which) -> newUi.setChecked(!isChecked))
+                        .show();
+            });
+
+            SwitchMaterial bangumiRecommend = findViewById(R.id.switch_bangumi_recommend);
+            bangumiRecommend.setChecked(SharedPreferencesUtil.getBoolean(
+                    SharedPreferencesUtil.BANGUMI_SHOW_RECOMMEND, true));
+            bangumiRecommend.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.BANGUMI_SHOW_RECOMMEND, isChecked);
+                MsgUtil.showMsg(isChecked ? "番剧页已显示推荐\n重新进入番剧页生效" : "番剧页已隐藏推荐\n重新进入番剧页生效");
             });
 
             SwitchMaterial round = findViewById(R.id.switch_round);
@@ -156,30 +177,40 @@ public class SettingUIActivity extends BaseActivity {
             //开关的激活色来自主题属性 colorControlActivated，运行时改不了，这里逐个补 tint
             //（默认主题下 applySwitch 直接返回，保持原版渲染）
             applySwitchTheme(newUi);
+            applySwitchTheme(bangumiRecommend);
             applySwitchTheme(round);
             applySwitchTheme(bgSwitch);
-            findViewById(R.id.reset).setOnClickListener(view -> {
-                SharedPreferencesUtil.putInt("paddingH_percent", 0);
-                SharedPreferencesUtil.putInt("paddingV_percent", 0);
-                SharedPreferencesUtil.putFloat("dpi", 1.0f);
-                SharedPreferencesUtil.putInt("density", -1);
-                SharedPreferencesUtil.putBoolean("player_ui_round", false);
-                uiScaleInput.setText("1.0");
-                uiPaddingH.setText("0");
-                uiPaddingV.setText("0");
-                getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-                density_input.setText(displayMetrics.densityDpi + "(默认)");
-                round.setChecked(false);
-                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
-                newUi.setChecked(true);
-                //背景图本身不清除（那是用户自己的图片资产），只把暗度恢复默认
-                SharedPreferencesUtil.putInt(BackgroundManager.KEY_DIM, 30);
-                if (bgDimInput != null) bgDimInput.setText("30");
-                //主题配色一并恢复：#FE679A 及其派生色与原版完全一致
-                ThemeManager.resetToDefault();
-                updateBgImageState();
-                MsgUtil.showMsg("恢复完成\n主题配色已恢复默认");
-            });
+            findViewById(R.id.reset).setOnClickListener(view ->
+                    //一键清空边距/缩放/主题色等全部界面定制：加确认（X-35）
+                    new AdaptiveDialog.Builder(SettingUIActivity.this)
+                            .setTitle("恢复默认界面设置")
+                            .setMessage("将重置边距、缩放、圆屏适配与主题配色等全部界面设置，确定吗？")
+                            .setPositiveButton("恢复", (dialog, which) -> {
+                                SharedPreferencesUtil.putInt("paddingH_percent", 0);
+                                SharedPreferencesUtil.putInt("paddingV_percent", 0);
+                                SharedPreferencesUtil.putFloat("dpi", 1.0f);
+                                SharedPreferencesUtil.putInt("density", -1);
+                                SharedPreferencesUtil.putBoolean("player_ui_round", false);
+                                uiScaleInput.setText("1.0");
+                                uiPaddingH.setText("0");
+                                uiPaddingV.setText("0");
+                                getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
+                                density_input.setText(displayMetrics.densityDpi + "(默认)");
+                                round.setChecked(false);
+                                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
+                                newUi.setChecked(true);
+                                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.BANGUMI_SHOW_RECOMMEND, true);
+                                bangumiRecommend.setChecked(true);
+                                //背景图本身不清除（那是用户自己的图片资产），只把暗度恢复默认
+                                SharedPreferencesUtil.putInt(BackgroundManager.KEY_DIM, 30);
+                                if (bgDimInput != null) bgDimInput.setText("30");
+                                //主题配色一并恢复：#FE679A 及其派生色与原版完全一致
+                                ThemeManager.resetToDefault();
+                                updateBgImageState();
+                                MsgUtil.showMsg("恢复完成\n主题配色已恢复默认");
+                            })
+                            .setNegativeButton("取消", null)
+                            .show());
 
             View scrollView = findViewById(R.id.scrollView);
             scrollView.setFocusable(true);

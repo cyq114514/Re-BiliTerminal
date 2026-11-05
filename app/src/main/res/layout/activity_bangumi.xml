@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 番剧页：顶栏固定，页签与索引筛选栏随列表滚出屏幕（AppBarLayout scroll），
+     不再是"焊死在顶部"的两条固定横条 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -28,173 +30,148 @@
             android:id="@+id/timeText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
             android:layout_marginVertical="3dp"
+            android:layout_marginEnd="8dp"
             android:layout_alignParentRight="true"
             android:layout_alignParentEnd="true" />
     </RelativeLayout>
 
-    <!-- 主 Tab（3个：新番/追番/索引） -->
-    <LinearLayout
-        android:id="@+id/tabBar"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_below="@id/top"
-        android:orientation="horizontal"
-    >
-
-        <TextView android:id="@+id/tab0" android:layout_width="0dp" android:layout_height="match_parent"
-            android:layout_weight="1" android:gravity="center" android:text="新番"
-            android:textSize="14sp" android:textColor="@color/bili_pink" />
-        <TextView android:id="@+id/tab1" android:layout_width="0dp" android:layout_height="match_parent"
-            android:layout_weight="1" android:gravity="center" android:text="追番"
-            android:textSize="14sp" android:textColor="@color/text_gray" />
-        <TextView android:id="@+id/tab2" android:layout_width="0dp" android:layout_height="match_parent"
-            android:layout_weight="1" android:gravity="center" android:text="索引"
-            android:textSize="14sp" android:textColor="@color/text_gray" />
-    </LinearLayout>
-
-    <View
-        android:id="@+id/tabIndicator"
-        android:layout_width="48dp"
-        android:layout_height="2dp"
-        android:layout_below="@id/tabBar"
-        android:background="@color/bili_pink" />
-
-    <!-- 索引筛选栏（双层：主筛选 + 风格标签） -->
-    <LinearLayout
-        android:id="@+id/filterBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/tabIndicator"
-        android:orientation="vertical"
-        android:visibility="gone">
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingVertical="6dp"
-            android:paddingHorizontal="6dp">
-
-            <!-- 类型 -->
-            <TextView android:text="类型" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
-            <TextView android:id="@+id/ftTypeAnim" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="动画" android:textSize="13sp" android:textColor="@color/textwhite"
-                android:background="@drawable/sel_filter_chip"  />
-            <TextView android:id="@+id/ftTypeChina" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="国产" android:textSize="13sp" android:textColor="@color/text_dim"
-                android:background="@drawable/sel_filter_chip" />
-
-            <View android:layout_width="1dp" android:layout_height="18dp"
-                android:layout_marginHorizontal="6dp" android:background="@color/divider_gray" />
-
-            <!-- 状态 -->
-            <TextView android:text="状态" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
-            <TextView android:id="@+id/ftStatusAll" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="全部" android:textSize="13sp" android:textColor="@color/textwhite"
-                android:background="@drawable/sel_filter_chip"  />
-            <TextView android:id="@+id/ftStatusOngoing" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="连载" android:textSize="13sp" android:textColor="@color/text_dim"
-                android:background="@drawable/sel_filter_chip" />
-            <TextView android:id="@+id/ftStatusDone" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="完结" android:textSize="13sp" android:textColor="@color/text_dim"
-                android:background="@drawable/sel_filter_chip" />
-
-            <View android:layout_width="1dp" android:layout_height="18dp"
-                android:layout_marginHorizontal="6dp" android:background="@color/divider_gray" />
-
-            <!-- 地区 -->
-            <TextView android:text="地区" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
-            <TextView android:id="@+id/ftAreaAll" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="全部" android:textSize="13sp" android:textColor="@color/textwhite"
-                android:background="@drawable/sel_filter_chip"  />
-            <TextView android:id="@+id/ftAreaJapan" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="日本" android:textSize="13sp" android:textColor="@color/text_dim"
-                android:background="@drawable/sel_filter_chip" />
-            <TextView android:id="@+id/ftAreaChina" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="中国" android:textSize="13sp" android:textColor="@color/text_dim"
-                android:background="@drawable/sel_filter_chip" />
-
-            <View android:layout_width="1dp" android:layout_height="18dp"
-                android:layout_marginHorizontal="6dp" android:background="@color/divider_gray" />
-
-            <!-- 排序 -->
-            <TextView android:text="排序" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="12sp" android:textColor="@color/text_gray" android:paddingHorizontal="4dp" />
-            <TextView android:id="@+id/ftSortMixed" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="综合" android:textSize="13sp" android:textColor="@color/text_dim"
-                android:background="@drawable/sel_filter_chip" />
-            <TextView android:id="@+id/ftSortHot" android:layout_width="wrap_content"
-                android:layout_height="28dp" android:gravity="center" android:paddingHorizontal="12dp"
-                android:text="热度" android:textSize="13sp" android:textColor="@color/textwhite"
-                android:background="@drawable/sel_filter_chip"  />
-            </LinearLayout>
-        </HorizontalScrollView>
-
-        <!-- 风格标签行（程序化填充） -->
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/styleRow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="4dp"
-                android:paddingHorizontal="6dp" />
-
-        </HorizontalScrollView>
-
-    </LinearLayout>
-
-    <!-- 内容区（3 页） -->
-    <FrameLayout
-        android:id="@+id/contentArea"
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:id="@+id/bangumiCoordinator"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/filterBar"
-    >
+        android:layout_below="@id/top">
 
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/refresh0" android:layout_width="match_parent" android:layout_height="match_parent">
-            <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler0"
-                android:layout_width="match_parent" android:layout_height="match_parent" />
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        <!-- 页签 + 筛选栏：作为滚动内容的一部分，列表上滑时整块上移出屏 -->
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/headerBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            app:elevation="0dp"
+            app:liftOnScroll="false">
 
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/refresh1" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-            <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler1"
-                android:layout_width="match_parent" android:layout_height="match_parent" />
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                app:layout_scrollFlags="scroll">
 
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/refresh2" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-            <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler2"
-                android:layout_width="match_parent" android:layout_height="match_parent" />
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+                <!-- 主 Tab（4个：推荐/追番/索引/新番；推荐页可在设置中关闭）
+                     胶囊式页签：复用筛选 chip 的选择器，选中粉色底白字并加粗 -->
+                <LinearLayout
+                    android:id="@+id/tabBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
 
-    </FrameLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
+                        android:layout_weight="1" android:gravity="center">
+                        <TextView android:id="@+id/tab0" android:layout_width="wrap_content"
+                            android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
+                            android:text="推荐" android:textSize="13sp" android:textStyle="bold"
+                            android:textColor="@color/sel_bangumi_tab_text"
+                            android:background="@drawable/sel_filter_chip" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
+                        android:layout_weight="1" android:gravity="center">
+                        <TextView android:id="@+id/tab1" android:layout_width="wrap_content"
+                            android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
+                            android:text="追番" android:textSize="13sp"
+                            android:textColor="@color/sel_bangumi_tab_text"
+                            android:background="@drawable/sel_filter_chip" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
+                        android:layout_weight="1" android:gravity="center">
+                        <TextView android:id="@+id/tab2" android:layout_width="wrap_content"
+                            android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
+                            android:text="索引" android:textSize="13sp"
+                            android:textColor="@color/sel_bangumi_tab_text"
+                            android:background="@drawable/sel_filter_chip" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
+                        android:layout_weight="1" android:gravity="center">
+                        <TextView android:id="@+id/tab3" android:layout_width="wrap_content"
+                            android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
+                            android:text="新番" android:textSize="13sp"
+                            android:textColor="@color/sel_bangumi_tab_text"
+                            android:background="@drawable/sel_filter_chip" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 索引筛选栏（动态条件：排序 + 9 组筛选项，默认折叠为 3 行） -->
+                <LinearLayout
+                    android:id="@+id/filterBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/filterRows"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="2dp" />
+
+                    <TextView
+                        android:id="@+id/filterToggle"
+                        android:layout_width="match_parent"
+                        android:layout_height="30dp"
+                        android:gravity="center"
+                        android:text="展开筛选 ▾"
+                        android:textColor="@color/text_gray"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <!-- 内容区（4 页）：交给 CoordinatorLayout 跟随 AppBar 一起滑动 -->
+        <FrameLayout
+            android:id="@+id/contentArea"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/refresh0" android:layout_width="match_parent" android:layout_height="match_parent">
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler0"
+                    android:layout_width="match_parent" android:layout_height="match_parent" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/refresh1" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler1"
+                    android:layout_width="match_parent" android:layout_height="match_parent" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/refresh2" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler2"
+                    android:layout_width="match_parent" android:layout_height="match_parent" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/refresh3" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler3"
+                    android:layout_width="match_parent" android:layout_height="match_parent" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <!-- 空态/失败态：4 个 tab 共用一块，列表为空或加载失败时上屏（X-11） -->
+            <TextView
+                android:id="@+id/emptyTip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="啥都木有~"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
 </RelativeLayout>

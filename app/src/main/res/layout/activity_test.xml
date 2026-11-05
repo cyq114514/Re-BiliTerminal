@@ -59,7 +59,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="deepseek猫娘请求测试"
@@ -78,7 +78,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="opus请求测试"
@@ -141,7 +141,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="Go Request!"
@@ -159,7 +159,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="查看Cookies"

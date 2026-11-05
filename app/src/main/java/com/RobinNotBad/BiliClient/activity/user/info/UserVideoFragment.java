@@ -52,18 +52,28 @@ public class UserVideoFragment extends RefreshListFragment {
 
         videoList = new ArrayList<>();
         setOnLoadMoreListener(this::continueLoading);
+        //注册下拉刷新：基类默认禁用且此前未注册，失败后只能退出重进；空态/失败态同步补齐（X-26）
+        setOnRefreshListener(() -> loadVideos());
+        loadVideos();
+    }
 
+    private void loadVideos() {
         CenterThreadPool.run(() -> {
             try {
+                //刷新=重新开始：游标与列表复位，下拉刷新复用同一入口
+                page = 1;
+                videoList.clear();
                 bottom = (UserInfoApi.getUserVideos(mid, page, "", videoList) == 1);
                 if (isAdded()) {
                     setRefreshing(false);
                     adapter = new UserVideoAdapter(requireContext(), mid, videoList);
                     setAdapter(adapter);
-                    if (bottom && videoList.isEmpty()) showEmptyView();
+                    if (bottom && videoList.isEmpty()) showEmptyView("TA 还没有投稿过视频~");
+                    else hideEmptyView();
                 }
             } catch (Exception e) {
                 loadFail(e);
+                if (videoList.isEmpty()) showEmptyView("加载失败，请下拉重试");
             }
         });
     }

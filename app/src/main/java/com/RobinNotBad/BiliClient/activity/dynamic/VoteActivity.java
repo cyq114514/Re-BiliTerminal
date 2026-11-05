@@ -8,6 +8,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
 import com.RobinNotBad.BiliClient.model.VoteInfo;
@@ -138,7 +139,7 @@ public class VoteActivity extends BaseActivity {
             for (VoteInfo.Option option : voteInfo.options) {
                 TextView cell = buildOptionCell(option.desc.isEmpty() && !option.imgUrl.isEmpty() ? "图片选项" : option.desc, option.imgUrl);
                 boolean isSelected = selected.contains(option.idx);
-                cell.setTextColor(isSelected ? Color.rgb(0xfe, 0x67, 0x9a) : 0xFFFFFFFF);
+                cell.setTextColor(isSelected ? ThemeManager.getPrimary() : 0xFFFFFFFF);
                 cell.setOnClickListener(view -> {
                     if (selected.contains(option.idx)) {
                         selected.remove(Integer.valueOf(option.idx));
@@ -161,7 +162,7 @@ public class VoteActivity extends BaseActivity {
                 TextView cell = buildOptionCell(text, option.imgUrl);
                 boolean isMyVote = false;
                 for (int my : voteInfo.myVotes) if (my == option.idx) isMyVote = true;
-                if (isMyVote) cell.setTextColor(Color.rgb(0xfe, 0x67, 0x9a));
+                if (isMyVote) cell.setTextColor(ThemeManager.getPrimary());
                 optionsContainer.addView(cell);
             }
             if (voteInfo.ended() && !voteInfo.voted()) {

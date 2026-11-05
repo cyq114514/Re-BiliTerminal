@@ -131,7 +131,15 @@ public class VipActivity extends BaseActivity {
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> MsgUtil.err(e));
+                runOnUiThread(() -> {
+                    if (isDestroyed() || isFinishing()) return;
+                    MsgUtil.err(e);
+                    //失败态可见：此前所有字段停留布局占位「加载中...」，无任何重试入口（X-31）
+                    TextView status = findViewById(R.id.vipStatus);
+                    if (status != null) status.setText("加载失败");
+                    TextView due = findViewById(R.id.vipDueDate);
+                    if (due != null) due.setText("请退出本页后重进重试");
+                });
             }
         }));
     }

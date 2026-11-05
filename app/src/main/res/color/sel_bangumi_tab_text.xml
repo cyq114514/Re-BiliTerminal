@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 番剧页签文字色：选中白字（配粉色胶囊底），未选中灰字 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:color="#FFFFFF" />
+    <item android:color="#999999" />
+</selector>

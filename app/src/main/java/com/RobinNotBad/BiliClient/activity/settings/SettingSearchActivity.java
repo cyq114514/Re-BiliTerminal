@@ -128,6 +128,8 @@ public class SettingSearchActivity extends BaseActivity {
         //整页级入口：本身就是一个设置入口的，点开即可
         addPage(list, SettingUIActivity.class, "界面设置");
         addPage(list, SettingMenuActivity.class, "菜单设置");
+        add(list, SettingMenuActivity.class, "菜单设置",
+                "显示“番剧”", "显示“短视频”", "显示“热门”", "显示“热搜”", "菜单排序");
         addPage(list, SettingTerminalPlayerActivity.class, "内置播放器设置");
         addPage(list, SettingPrefActivity.class, "偏好设置");
         addPage(list, SettingRepliesActivity.class, "评论区设置");
@@ -139,12 +141,14 @@ public class SettingSearchActivity extends BaseActivity {
         addPage(list, SearchSortActivity.class, "搜索类别排序");
         addPage(list, com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class, "隐私与伪装");
         addPage(list, SettingPlayerChooseActivity.class, "播放器选择");
+        add(list, SettingPlayerChooseActivity.class, "播放器选择",
+                "移动数据清晰度", "Wi-Fi 清晰度");
         addPage(list, UpdateActivity.class, "检查更新");
         addPage(list, UpdateLogActivity.class, "更新日志");
         addPage(list, AboutActivity.class, "关于");
 
         add(list, SettingTerminalPlayerActivity.class, "内置播放器设置",
-                "长按倍速", "双击快进快退", "横滑调进度", "快进快退秒数", "显示快进快退按钮",
+                "长按倍速", "双击快进快退", "横滑调进度", "横滑调进度灵敏度", "快进快退秒数", "显示快进快退按钮",
                 "无极调音（0-100）", "双击优先还原缩放/移动", "洗脑循环", "记住倍速",
                 "后台/熄屏继续播放", "默认横屏", "从历史位置播放", "显示实时人数", "听视频模式",
                 "视频可缩放", "缩放时可移动", "番剧片头/片尾跳过",
@@ -152,6 +156,7 @@ public class SettingSearchActivity extends BaseActivity {
                 "显示高能进度条", "弹幕防重叠", "合并重复弹幕", "强制为滚动弹幕",
                 "显示直播弹幕发送者", "空降弹幕", "弹幕最大行数", "弹幕字号大小", "弹幕不透明度", "弹幕速度",
                 "自动弹出字幕选择", "允许仅AI字幕", "字幕校准",
+                "从历史位置播放", "本地缓存续播",
                 "显示旋转按钮", "显示弹幕按钮", "显示清晰度按钮", "显示分P按钮",
                 "互动选项字体大小", "互动选项自动竖屏");
 

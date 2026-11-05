@@ -19,6 +19,8 @@ import com.RobinNotBad.BiliClient.util.UserLogStore;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import android.widget.TextView;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,7 +63,8 @@ public class ExpLogActivity extends BaseActivity {
                 runOnUiThread(() -> {
                     if (show.isEmpty()) {
                         MsgUtil.showMsg("暂无经验变化记录");
-                        findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
+                        ((TextView) findViewById(R.id.emptyTip)).setText("还没有经验变化记录~");
+                    findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
                     } else {
                         logList.clear();
                         logList.addAll(show);
@@ -84,7 +87,8 @@ public class ExpLogActivity extends BaseActivity {
                         adapter = new ExpLogAdapter(this, logList);
                         recyclerView.setAdapter(adapter);
                     } else {
-                        findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
+                        ((TextView) findViewById(R.id.emptyTip)).setText("加载失败，请检查网络后重进");
+                    findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
                     }
                 });
                 e.printStackTrace();

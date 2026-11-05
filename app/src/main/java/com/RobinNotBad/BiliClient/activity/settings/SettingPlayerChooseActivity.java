@@ -11,6 +11,7 @@ import android.widget.TextView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.NetworkPlaybackQuality;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.google.android.material.card.MaterialCardView;
@@ -44,6 +45,10 @@ public class SettingPlayerChooseActivity extends BaseActivity {
             qn_choose = findViewById(R.id.qn_choose);
 
             qn_choose.setOnClickListener((view) -> handleQnChoose());
+            findViewById(R.id.qn_mobile_choose).setOnClickListener(view ->
+                    openNetworkQuality(NetworkPlaybackQuality.MOBILE));
+            findViewById(R.id.qn_wifi_choose).setOnClickListener(view ->
+                    openNetworkQuality(NetworkPlaybackQuality.WIFI));
 
             cardViewList = new ArrayList<>();
             cardViewList.add(terminalPlayer);
@@ -84,13 +89,40 @@ public class SettingPlayerChooseActivity extends BaseActivity {
     private void updateQn() {
         if (findViewById(R.id.qn_tv) != null) {
             int savedVal = SharedPreferencesUtil.getInt("play_qn", 16);
-            for (Map.Entry<String, Integer> entry : SettingQualityActivity.qnMap.entrySet()) {
+            for (Map.Entry<String, Integer> entry : SettingQualityActivity.getQnMap().entrySet()) {
                 if (entry.getValue() == savedVal) {
                     ((TextView) findViewById(R.id.qn_tv)).setText(entry.getKey());
                     break;
                 }
             }
         }
+        updateNetworkQn(R.id.qn_mobile_tv, NetworkPlaybackQuality.MOBILE);
+        updateNetworkQn(R.id.qn_wifi_tv, NetworkPlaybackQuality.WIFI);
+    }
+
+    private void updateNetworkQn(int id, String key) {
+        TextView label = findViewById(id);
+        if (label == null) return;
+        int value = SharedPreferencesUtil.getInt(key, -1);
+        if (value < 0) {
+            label.setText("跟随全局");
+            return;
+        }
+        for (Map.Entry<String, Integer> entry : SettingQualityActivity.getQnMap().entrySet()) {
+            if (entry.getValue() == value) {
+                label.setText(entry.getKey());
+                return;
+            }
+        }
+        //存的值不在档位表里时，回退成跟随全局，避免界面显示空白
+        SharedPreferencesUtil.putInt(key, -1);
+        label.setText("跟随全局");
+    }
+
+    private void openNetworkQuality(String key) {
+        Intent intent = new Intent(this, SettingQualityActivity.class);
+        intent.putExtra(NetworkPlaybackQuality.EXTRA_KEY, key);
+        startActivity(intent);
     }
 
     private void handleQnChoose() {

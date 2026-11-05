@@ -45,35 +45,43 @@ public class CollectionInfoActivity extends RefreshListActivity {
         long mid = getIntent().getLongExtra("mid", -1);
         setPageName("合集详情");
 
-        TerminalContext.getInstance().getVideoInfoByAidOrBvId(from_aid, null).observe(this, result -> result.onSuccess((videoInfo -> {
-            if (!ToolsUtil.isHostAlive(this)) return;
-            collection = videoInfo.collection;
+        TerminalContext.getInstance().getVideoInfoByAidOrBvId(from_aid, null).observe(this, result -> {
+            //失败必须关圈+空态：此前只挂 onSuccess，失败时初始转圈永久不停（C-04）
+            result.onFailure(e -> {
+                setRefreshing(false);
+                showEmptyView("合集信息获取失败\n请检查网络后返回重进");
+            });
+            result.onSuccess((videoInfo -> {
+                if (!ToolsUtil.isHostAlive(this)) return;
+                collection = videoInfo.collection;
 
-            RecyclerView.Adapter<RecyclerView.ViewHolder> adapter;
-            if (collection.sections == null && collection.cards != null) {
-                adapter = new CardAdapter(this, collection);
-            } else if (collection.sections != null) {
-                adapter = new SectionAdapter(this, collection, recyclerView);
-                List<Collection.Section> sections = collection.sections;
-                int pos = 1;
-                for (Collection.Section section : sections) {
-                    pos++;
-                    List<Collection.Episode> episodes = section.episodes;
-                    for (Collection.Episode episode : episodes) {
+                RecyclerView.Adapter<RecyclerView.ViewHolder> adapter;
+                if (collection.sections == null && collection.cards != null) {
+                    adapter = new CardAdapter(this, collection);
+                } else if (collection.sections != null) {
+                    adapter = new SectionAdapter(this, collection, recyclerView);
+                    List<Collection.Section> sections = collection.sections;
+                    int pos = 1;
+                    for (Collection.Section section : sections) {
                         pos++;
-                        if (episode.aid == from_aid) {
-                            Objects.requireNonNull(recyclerView.getLayoutManager()).scrollToPosition(--pos);
+                        List<Collection.Episode> episodes = section.episodes;
+                        for (Collection.Episode episode : episodes) {
+                            pos++;
+                            if (episode.aid == from_aid) {
+                                Objects.requireNonNull(recyclerView.getLayoutManager()).scrollToPosition(--pos);
+                            }
                         }
                     }
+                } else {
+                    finish();
+                    return;
                 }
-            } else {
-                finish();
-                return;
-            }
 
-            setAdapter(adapter);
-            setRefreshing(false);
-        })));
+                setAdapter(adapter);
+                hideEmptyView();
+                setRefreshing(false);
+            }));
+        });
     }
 
     static class CardAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {

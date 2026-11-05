@@ -229,10 +229,32 @@ public class PlayerApi {
                 others.add(u);
             }
         }
+        //PCDN / 边缘节点（mcdn、szbdyd、edge、mountaintoys…）虽然也在 B 站域名下，
+        //但实测是最容易在移动网络/手表上 403 或读超时的一批（音频日志里 5 次 -10000 全部发生在首个候选上）。
+        //排序规则：主流 CDN(upos-) → 其它 B 站自有 → 第三方 → PCDN，稳定排序保持原有相对顺序
+        java.util.Collections.sort(trusted, (a, b) ->
+                Integer.compare(mediaUrlPriority(a), mediaUrlPriority(b)));
         ArrayList<String> ordered = new ArrayList<>(trusted.size() + others.size());
         ordered.addAll(trusted);
         ordered.addAll(others);
         return ordered;
+    }
+
+    /** 媒体地址优先级：数字越小越先尝试 */
+    private static int mediaUrlPriority(String url) {
+        try {
+            okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+            if (parsed == null) return 9;
+            String host = parsed.host() == null ? "" : parsed.host().toLowerCase(java.util.Locale.US);
+            if (host.contains("mcdn") || host.contains("pcdn") || host.contains("szbdyd")
+                    || host.contains("mountaintoys") || host.startsWith("edge.")) {
+                return 5;
+            }
+            if (host.startsWith("upos-")) return 1;
+            return 2;
+        } catch (Exception e) {
+            return 9;
+        }
     }
 
     /** 该地址是否属于 B 站自己的域名（可用于携带登录 Cookie 的媒体请求）。 */
@@ -266,6 +288,10 @@ public class PlayerApi {
     public static Map<String, String> mediaHeadersFor(String url) {
         Map<String, String> headers = new HashMap<>();
         headers.put("Referer", "https://www.bilibili.com/");
+        headers.put("Origin", "https://www.bilibili.com");
+        //B 站 CDN（尤其 bcache 与移动节点）会对非浏览器 UA 直接返回 403；
+        //拉流必须与领取 playurl 用同一套 UA，否则签名校验也可能失败
+        headers.put("User-Agent", NetWorkUtil.USER_AGENT_WEB);
         if (isTrustedMediaHost(url)) {
             headers.put("Cookie", CookieGenerator.getCookieString(true));
         }
@@ -344,6 +370,41 @@ public class PlayerApi {
             for (int i = 0; i < qnValueList.length; i++) qnValueList[i] = data.accept_quality.get(i);
             playerData.qnValueList = qnValueList;
         }
+    }
+
+    /** 分P 列表项（音频队列展开多P 时用） */
+    public static class PageInfo {
+        public long cid;
+        public int page;
+        public String part = "";
+        public long duration;
+    }
+
+    /**
+     * 取稿件的分P 列表（{@code x/player/pagelist}）。
+     *
+     * <p>音频队列里的条目只带收藏夹给的 cid（等于第一P 的 cid），多P 稿件的其余分P
+     * 从来没有进过队列——这就是"听歌模式播不了其它分P"的原因。播放某一项时按 aid 拉一次
+     * 分P 列表，把其余分P 依次插到它后面即可，队列模型不需要改。
+     */
+    public static List<PageInfo> getPageList(long aid) throws IOException, JSONException {
+        String url = "https://api.bilibili.com/x/player/pagelist?aid=" + aid + "&jsonp=jsonp";
+        JSONObject all = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders);
+        List<PageInfo> pages = new ArrayList<>();
+        if (all == null) return pages;
+        org.json.JSONArray array = all.optJSONArray("data");
+        if (array == null) return pages;
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject node = array.optJSONObject(i);
+            if (node == null) continue;
+            PageInfo info = new PageInfo();
+            info.cid = node.optLong("cid", 0);
+            info.page = node.optInt("page", i + 1);
+            info.part = node.optString("part", "");
+            info.duration = node.optLong("duration", 0);
+            if (info.cid > 0) pages.add(info);
+        }
+        return pages;
     }
 
     /**

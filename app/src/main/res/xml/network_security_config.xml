@@ -15,4 +15,12 @@
         <domain includeSubdomains="true">hdslb.com</domain>
         <domain includeSubdomains="true">bilibili.com</domain>
     </domain-config>
+    <!--
+      听歌快速加载的本地缓存代理：ijk 通过 ffmpeg 自己的 socket 访问 127.0.0.1，
+      本来就不走 Android 网络栈；这里显式放开只为本机回环，不影响外部明文策略。
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
 </network-security-config>

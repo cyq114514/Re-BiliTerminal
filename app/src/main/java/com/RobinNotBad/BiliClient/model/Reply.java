@@ -16,17 +16,26 @@ import org.json.JSONObject;
 import java.io.Serializable;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
 public class Reply implements Serializable {
+    /** 评论排序方式：按时间（发布时间升序，早的在前）。 */
+    public static final int SORT_TIME = 0;
+    /** 评论排序方式：按点赞数降序。 */
+    public static final int SORT_LIKE = 1;
+
     public long rpid;
     public long oid;
     public long root;
     public long parent;
     public boolean forceDelete;
     public String ofBvid = "";
+    /** 发布时间戳（秒，服务端 ctime 原值），只用于排序，不用于展示。 */
+    public long ctime;
     public String pubTime;
     public UserInfo sender;
     public CharSequence message;
@@ -53,6 +62,7 @@ public class Reply implements Serializable {
         this.oid = replyJson.optLong("oid", 0);
         this.root = replyJson.optLong("root", 0);
         this.parent = replyJson.optLong("parent", 0);
+        this.ctime = replyJson.optLong("ctime", 0L);
 
         JSONObject memberJson = replyJson.optJSONObject("member");
         if (memberJson == null) {
@@ -176,6 +186,37 @@ public class Reply implements Serializable {
         }
         this.isTop = top;
     }
+
+    /**
+     * 楼中楼本地排序：按时间或按点赞数重排已加载的子评论。
+     *
+     * <p>为什么按时间也要真的排：一旦切到热度排序，列表就被本地打乱，再切回时间排序时若只是返回，
+     * 顺序就永远停在热度序上。所以两个分支都必须显式重排，才能保证来回切换可逆。
+     *
+     * @param replies   要排序的列表，允许为 null
+     * @param sort      {@link #SORT_TIME} / {@link #SORT_LIKE}
+     * @param fromIndex 从这个下标开始排（前面的元素不动）。楼中楼第 0 位是根评论，必须传 1。
+     */
+    public static void sortReplies(List<Reply> replies, int sort, int fromIndex) {
+        if (replies == null) return;
+        if (fromIndex < 0) fromIndex = 0;
+        if (replies.size() - fromIndex < 2) return;
+        Collections.sort(replies.subList(fromIndex, replies.size()), sort == SORT_LIKE ? LIKE_ORDER : TIME_ORDER);
+    }
+
+    /** 热度序：点赞数降序。点赞数相同时由稳定排序保住原有（时间）顺序。null 项排到最后。 */
+    private static final Comparator<Reply> LIKE_ORDER =
+            (a, b) -> {
+                if (a == null || b == null) return (a == null ? 1 : 0) - (b == null ? 1 : 0);
+                return Integer.compare(b.likeCount, a.likeCount);
+            };
+
+    /** 时间序：ctime 升序（早的在前）。键相等时保持输入顺序。null 项排到最后。 */
+    private static final Comparator<Reply> TIME_ORDER =
+            (a, b) -> {
+                if (a == null || b == null) return (a == null ? 1 : 0) - (b == null ? 1 : 0);
+                return Long.compare(a.ctime, b.ctime);
+            };
 
     /** 置顶前先把列表里已有的置顶标记清掉：服务端一个评论区只有一个置顶位（再置顶回 12029） */
     public static void clearTopFlags(List<Reply> list) {

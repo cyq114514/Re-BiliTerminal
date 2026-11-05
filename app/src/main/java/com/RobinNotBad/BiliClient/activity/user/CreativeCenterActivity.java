@@ -52,7 +52,20 @@ public class CreativeCenterActivity extends BaseActivity {
                     scrollView.requestFocus();
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> MsgUtil.err(e));
+                runOnUiThread(() -> {
+                    if (isDestroyed() || isFinishing()) return;
+                    MsgUtil.err(e);
+                    //失败态可见：此前页面停留布局里的假数据占位（X-31）
+                    int[] ids = {R.id.totalFans_number, R.id.totalClick_number, R.id.totalLike_number,
+                            R.id.totalCoin_number, R.id.totalFavourite_number, R.id.totalShare_number,
+                            R.id.totalReply_number, R.id.totalDm_number};
+                    for (int statsId : ids) {
+                        TextView tv = findViewById(statsId);
+                        if (tv != null) tv.setText("——");
+                    }
+                    TextView beUp = findViewById(R.id.beUpTime);
+                    if (beUp != null) beUp.setText("数据加载失败，请退出重进");
+                });
             }
         }));
     }

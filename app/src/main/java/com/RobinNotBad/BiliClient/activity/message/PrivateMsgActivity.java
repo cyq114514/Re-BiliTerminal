@@ -11,6 +11,7 @@ import android.view.animation.Animation;
 import android.view.animation.TranslateAnimation;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -25,6 +26,7 @@ import com.RobinNotBad.BiliClient.api.PrivateMsgApi;
 import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.ClickGuard;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.PickImageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -75,6 +77,14 @@ public class PrivateMsgActivity extends BaseActivity {
         sendBtn = findViewById(R.id.send_btn);
         picBtn = findViewById(R.id.pic_btn);
         layout_input = findViewById(R.id.layout_input);
+
+        //手动换行：在光标处插入 \n 并后移光标；不改 Enter 键的默认行为（仍是换行，不是发送）
+        TextView newlineBtn = findViewById(R.id.newline_btn);
+        newlineBtn.setOnClickListener(view -> {
+            int start = contentEt.getSelectionStart();
+            if (start < 0) start = contentEt.getText().length();
+            contentEt.getText().insert(start, "\n");
+        });
 
         Intent intent = getIntent();
         uid = intent.getLongExtra("uid", 114514);
@@ -172,20 +182,26 @@ public class PrivateMsgActivity extends BaseActivity {
             else PickImageUtil.launchSafe(pickImageLauncher);
         });
 
-        sendBtn.setOnClickListener(view -> CenterThreadPool.run(() -> {
+        //文本发送此前无防抖，连点重复发两条（图片路径有 sendingImage 守卫，文本没有）（E-02）
+        sendBtn.setOnClickListener(view -> ClickGuard.protect(view, () -> CenterThreadPool.run(() -> {
             try {
-                String content = contentEt.getText().toString().trim();
-                if (!content.isEmpty()) {
-                    runOnUiThread(() -> contentEt.setText(""));
-                    // PiliPlus 格式：content 包裹为 JSON
+                //保留原始文本（含首尾/连续换行），只用 trim 判断是否为空
+                String content = contentEt.getText().toString();
+                if (!content.trim().isEmpty()) {
+                    // PiliPlus 格式：content 包裹为 JSON。
+                    // 原来手工拼串只转义双引号，正文出现 \n、\t、\\ 时会生成非法 JSON，
+                    // 服务端解析失败回"请求错误"——交给 JSONObject 按 JSON 规则转义
+                    String contentJson = new JSONObject().put("content", content).toString();
                     JSONObject result = PrivateMsgApi.sendMsg(
                             SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0),
                             uid,
                             PrivateMessage.TYPE_TEXT,
                             System.currentTimeMillis() / 1000,
-                            "{\"content\":\"" + content.replace("\"", "\\\"") + "\"}");
+                            contentJson);
                     runOnUiThread(() -> {
                         if (result.optInt("code", -1) == 0) {
+                            //成功才清空；失败保留原文，避免用户辛苦打的字被丢掉
+                            contentEt.setText("");
                             MsgUtil.showMsg("发送成功");
                             refresh();
                         } else {
@@ -199,7 +215,7 @@ public class PrivateMsgActivity extends BaseActivity {
             } catch (Exception e) {
                 runOnUiThread(() -> MsgUtil.showMsg("发送失败：" + e.getMessage()));
             }
-        }));
+        })));
     }
 
     private void sendPic(Uri uri) {

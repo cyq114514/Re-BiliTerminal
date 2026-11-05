@@ -130,6 +130,26 @@ public class RefreshListFragment extends BaseFragment {
         }
     }
 
+    /** 带文案的空态/错误态（与 RefreshListActivity 同口径），线程安全 */
+    public void showEmptyView(String message) {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                emptyView.setText(message);
+                recyclerView.setVisibility(View.GONE);
+                emptyView.setVisibility(View.VISIBLE);
+            });
+        }
+    }
+
+    public void hideEmptyView() {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                recyclerView.setVisibility(View.VISIBLE);
+                emptyView.setVisibility(View.GONE);
+            });
+        }
+    }
+
     public boolean isRefreshing() {
         if (swipeRefreshLayout != null) return swipeRefreshLayout.isRefreshing();
         return false;

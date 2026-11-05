@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 
 import java.util.ArrayList;
@@ -74,7 +75,7 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
             pageName.setText("P" + (currentIndex + 1) + " " + pagenames.get(currentIndex));
 
             if (isSelected) {
-                pageName.setTextColor(0xffff6699);
+                pageName.setTextColor(ThemeManager.getPrimary());
                 itemView.setBackgroundResource(R.drawable.background_card);
             } else {
                 pageName.setTextColor(0xffebe0e2);

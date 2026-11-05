@@ -71,6 +71,9 @@ public class NoticeActivity extends RefreshListActivity {
                     setAdapter(noticeAdapter);
                     setRefreshing(false);
                     setOnLoadMoreListener(this::continueLoading);
+                    //空列表此前无任何提示，页面纯空白（X-24）
+                    if (messageList.isEmpty()) showEmptyView("这里还什么都没有~");
+                    else hideEmptyView();
                 });
             } catch (Exception e) {
                 e.printStackTrace();
@@ -78,7 +81,8 @@ public class NoticeActivity extends RefreshListActivity {
                     if (isDestroyed()) return;
                     MsgUtil.showMsgLong("加载失败");
                     setRefreshing(false);
-                    finish();
+                    //失败不再直接 finish 打回消息中心：留在原地给空态提示（X-24）
+                    showEmptyView("加载失败\n请返回后重进重试");
                 });
             }
         });

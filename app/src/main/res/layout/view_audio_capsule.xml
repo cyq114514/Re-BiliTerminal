@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 顶部音频悬浮胶囊：只作入口（显示队列进度），点击拉起全屏播放页 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/capsuleRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="30dp"
+    android:background="@drawable/bg_audio_capsule"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp"
+    android:visibility="gone">
+
+    <ImageView
+        android:id="@+id/capsuleIcon"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:contentDescription="音频播放"
+        android:src="@drawable/icon_audio_only_on"
+        app:tint="@color/textwhite" />
+
+    <TextView
+        android:id="@+id/capsuleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:singleLine="true"
+        android:text="1/20"
+        android:textColor="@color/textwhite"
+        android:textSize="10sp" />
+
+</LinearLayout>

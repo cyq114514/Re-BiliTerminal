@@ -62,134 +62,110 @@ public class MySpaceActivity extends InstanceActivity {
             editSign = findViewById(R.id.edit_sign);
             logout = findViewById(R.id.logout);
 
+            //导航入口只依赖页面本身，与用户信息加载成败无关：全部移出成功分支绑定。
+            //此前监听器都在成功分支里，加载失败时整页是"死按钮"且无重试（D-02）。
+            //当前用户 mid 一律读 SP（与成功分支里的 userInfo.mid 同源）
+            myInfo.setOnClickListener(view -> {
+                Intent intent = new Intent();
+                intent.setClass(MySpaceActivity.this, UserInfoActivity.class);
+                intent.putExtra("mid", SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
+                startActivity(intent);
+            });
 
-            CenterThreadPool.run(() -> {
-                try {
-                    UserInfo userInfo = UserInfoApi.getCurrentUserInfo();
-                    currentUserInfo = userInfo;
-                    int userCoin = UserInfoApi.getCurrentUserCoin();
-                    runOnUiThread(() -> {
-                        //判断必须放在 runnable 内部：post 出去到真正执行之间页面可能已被销毁，
-                        //Glide.with(Activity) 在 destroyed/finishing 后会抛
-                        //"You cannot start a load for a destroyed activity"（线上 1 例）
-                        if (isDestroyed() || isFinishing()) return;
-                        Glide.with(MySpaceActivity.this).load(GlideUtil.url(userInfo.avatar))
-                                .transition(GlideUtil.getTransitionOptions())
-                                .placeholder(R.mipmap.akari).apply(RequestOptions.circleCropTransform())
-                                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                                .into(userAvatar);
-                        userName.setText(userInfo.name);
-                        userFans.setText(StringUtil.toWan(userInfo.fans) + "粉丝 " + userCoin + "硬币");
-                        userExp.setText("EXP:" + userInfo.current_exp + (userInfo.level >= 6 ? "" : "/" + userInfo.next_exp));
+            follow.setOnClickListener(view -> {
+                Intent intent = new Intent();
+                intent.setClass(MySpaceActivity.this, FollowUsersActivity.class);
+                intent.putExtra("mid", SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
+                intent.putExtra("mode", 0);
+                startActivity(intent);
+            });
 
-                        myInfo.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, UserInfoActivity.class);
-                            intent.putExtra("mid", userInfo.mid);
-                            startActivity(intent);
-                        });
+            watchLater.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, WatchLaterActivity.class)));
+            favorite.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, FavoriteFolderListActivity.class)));
+            bangumi.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, FollowingBangumisActivity.class)));
+            history.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, HistoryActivity.class)));
 
-                        follow.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, FollowUsersActivity.class);
-                            intent.putExtra("mid", userInfo.mid);
-                            intent.putExtra("mode", 0);
-                            startActivity(intent);
-                        });
+            creative.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, CreativeCenterActivity.class)));
+            if (!SharedPreferencesUtil.getBoolean("creative_enable", true))
+                creative.setVisibility(View.GONE);
 
-                        watchLater.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, WatchLaterActivity.class);
-                            startActivity(intent);
-                        });
+            vip.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, VipActivity.class)));
+            loginRecord.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, LoginRecordActivity.class)));
+            coinLog.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, CoinLogActivity.class)));
+            expLog.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, ExpLogActivity.class)));
+            editSign.setOnClickListener(view -> startActivity(new Intent(MySpaceActivity.this, EditProfileActivity.class)));
 
-                        favorite.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, FavoriteFolderListActivity.class);
-                            startActivity(intent);
-                        });
-
-                        bangumi.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, FollowingBangumisActivity.class);
-                            startActivity(intent);
-                        });
-
-                        history.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, HistoryActivity.class);
-                            startActivity(intent);
-                        });
-
-                        creative.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, CreativeCenterActivity.class);
-                            startActivity(intent);
-                        });
-                        if (!SharedPreferencesUtil.getBoolean("creative_enable", true))
-                            creative.setVisibility(View.GONE);
-
-                        vip.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, VipActivity.class);
-                            startActivity(intent);
-                        });
-
-                        loginRecord.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, LoginRecordActivity.class);
-                            startActivity(intent);
-                        });
-
-                        coinLog.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, CoinLogActivity.class);
-                            startActivity(intent);
-                        });
-
-                        expLog.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, ExpLogActivity.class);
-                            startActivity(intent);
-                        });
-
-                        editSign.setOnClickListener(view -> {
-                            Intent intent = new Intent();
-                            intent.setClass(MySpaceActivity.this, EditProfileActivity.class);
-                            startActivity(intent);
-                        });
-
-                        logout.setOnClickListener(view -> {
-                            if (confirmLogout) {
-                                CenterThreadPool.run(UserInfoApi::exitLogin);
-                                //App 卡片 access_key 也是账号凭证：退出登录时一并清掉
-                                com.RobinNotBad.BiliClient.util.AppAuthStore.clear(
-                                        SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
-                                SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookies);
-                                SharedPreferencesUtil.removeValue(SharedPreferencesUtil.mid);
-                                SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf);
-                                SharedPreferencesUtil.removeValue(SharedPreferencesUtil.refresh_token);
-                                SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookie_refresh);
-                                //本地凭证已清空，全局请求头必须一起重建，
-                                //否则后续请求还带着已登出的 Cookie 头（残留会话头）
-                                NetWorkUtil.refreshHeaders();
-                                MsgUtil.showMsg("账号已退出");
-                                Intent intent = new Intent(this, LoginActivity.class);
-                                startActivity(intent);
-                                finish();
-                            } else MsgUtil.showMsg("再点一次退出登录！");
-                            confirmLogout = !confirmLogout;
-                        });
-
-                        View scrollView = findViewById(R.id.scrollView);
-                        scrollView.setFocusable(true);
-                        scrollView.setFocusableInTouchMode(true);
-                        scrollView.requestFocus();
-                    });
-                } catch (Exception e) {
-                    report(e);
+            logout.setOnClickListener(view -> {
+                if (confirmLogout) {
+                    CenterThreadPool.run(UserInfoApi::exitLogin);
+                    //App 卡片 access_key 也是账号凭证：退出登录时一并清掉
+                    com.RobinNotBad.BiliClient.util.AppAuthStore.clear(
+                            SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookies);
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.mid);
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf);
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.refresh_token);
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookie_refresh);
+                    //本地凭证已清空，全局请求头必须一起重建，
+                    //否则后续请求还带着已登出的 Cookie 头（残留会话头）
+                    NetWorkUtil.refreshHeaders();
+                    MsgUtil.showMsg("账号已退出");
+                    Intent intent = new Intent(this, LoginActivity.class);
+                    startActivity(intent);
+                    finish();
+                } else {
+                    confirmLogout = true;
+                    MsgUtil.showMsg("再点一次退出登录！");
+                    //3 秒内不点就复位：此前置位后永久有效，之后任意时刻误触一次即直接登出（X-29）
+                    logout.postDelayed(() -> confirmLogout = false, 3000);
                 }
             });
+
+            loadUserInfo();
+
+            View scrollView = findViewById(R.id.scrollView);
+            scrollView.setFocusable(true);
+            scrollView.setFocusableInTouchMode(true);
+            scrollView.requestFocus();
+        });
+    }
+
+    /** 拉取当前用户信息刷新头部；失败时给出可见错误态与重试入口（D-02） */
+    private void loadUserInfo() {
+        CenterThreadPool.run(() -> {
+            try {
+                UserInfo userInfo = UserInfoApi.getCurrentUserInfo();
+                currentUserInfo = userInfo;
+                int userCoin = UserInfoApi.getCurrentUserCoin();
+                runOnUiThread(() -> {
+                    //判断必须放在 runnable 内部：post 出去到真正执行之间页面可能已被销毁，
+                    //Glide.with(Activity) 在 destroyed/finishing 后会抛
+                    //"You cannot start a load for a destroyed activity"（线上 1 例）
+                    if (isDestroyed() || isFinishing()) return;
+                    Glide.with(MySpaceActivity.this).load(GlideUtil.url(userInfo.avatar))
+                            .transition(GlideUtil.getTransitionOptions())
+                            .placeholder(R.mipmap.akari).apply(RequestOptions.circleCropTransform())
+                            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                            .into(userAvatar);
+                    userName.setText(userInfo.name);
+                    userName.setOnClickListener(null);
+                    userFans.setText(StringUtil.toWan(userInfo.fans) + "粉丝 " + userCoin + "硬币");
+                    userExp.setText("EXP:" + userInfo.current_exp + (userInfo.level >= 6 ? "" : "/" + userInfo.next_exp));
+                });
+            } catch (Exception e) {
+                report(e);
+                runOnUiThread(() -> {
+                    if (isDestroyed() || isFinishing()) return;
+                    //失败可见+可重试：此前只 report(e)，页面停留「加载中...」占位
+                    userName.setText("加载失败，点此重试");
+                    userName.setOnClickListener(view -> {
+                        userName.setText("加载中……");
+                        loadUserInfo();
+                    });
+                    userFans.setText("");
+                    userExp.setText("");
+                });
+            }
         });
     }
 }

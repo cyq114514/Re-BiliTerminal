@@ -43,6 +43,9 @@ public class SearchFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        //视图重建（旋屏/切页/返回）后列表是新的，但 Fragment 实例与在途请求还在；
+        //不推进代际的话，旧请求的 appendPage 会写进刚重建的空列表
+        loadGeneration++;
         emptyView = view.findViewById(R.id.emptyTip);
 
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
@@ -133,6 +136,16 @@ public class SearchFragment extends Fragment {
     public void showEmptyView(boolean empty) {
         if (emptyView != null) {
             runOnUiThread(() -> emptyView.setVisibility(empty ? View.VISIBLE : View.GONE));
+        }
+    }
+
+    /** 带文案的空态/失败态：失败与「真没结果」必须能区分（X-10），线程安全 */
+    public void showEmptyView(String message) {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                emptyView.setText(message);
+                emptyView.setVisibility(View.VISIBLE);
+            });
         }
     }
 

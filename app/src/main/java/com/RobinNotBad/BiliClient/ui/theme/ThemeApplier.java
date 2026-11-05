@@ -3,6 +3,7 @@ package com.RobinNotBad.BiliClient.ui.theme;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.ColorDrawable;
+import android.widget.CompoundButton;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -80,6 +81,13 @@ public final class ThemeApplier {
 
         final int primary = ThemeManager.getPrimary();
         final Context context = view.getContext();
+
+        //开关/勾选控件：colorControlActivated 是主题属性，运行时改不了，只能逐实例补 tint。
+        //挂在全树遍历里，所有页面的开关自动跟随主题色——
+        //此前只有界面设置页手动调过 4 个，其余页面的开关在自定义主题下永远是默认粉
+        if (view instanceof CompoundButton) {
+            applySwitch((CompoundButton) view, primary);
+        }
 
         applyBackground(view, context, primary);
 
@@ -216,8 +224,12 @@ public final class ThemeApplier {
      * @param primary 主题强调色
      */
     public static void applySwitch(android.widget.CompoundButton button, int primary) {
-        if (!(button instanceof SwitchCompat)) return;
         if (ThemeManager.isDefault()) return;   //默认主题不动，保持主题原有渲染
+        if (!(button instanceof SwitchCompat)) {
+            //CheckBox/RadioButton：勾选态走 buttonTint（接口与 SwitchCompat 的 thumb/track 不同）
+            applyButtonTint(button, primary);
+            return;
+        }
         SwitchCompat sw = (SwitchCompat) button;
         try {
             ColorStateList thumb = sw.getThumbTintList();
@@ -247,6 +259,29 @@ public final class ThemeApplier {
             {android.R.attr.state_enabled},
             {-android.R.attr.state_enabled}
     };
+
+    /**
+     * CheckBox/RadioButton 的勾选色：buttonTint 三态重建。
+     * 已有 tint 列表时只换选中态 RGB（alpha/常态/禁用态原样保留）；没有就按主题拼一份。
+     * buttonTintList 是 API 21+ 接口，以下保持原样（与 progressTint 同口径）。
+     */
+    private static void applyButtonTint(android.widget.CompoundButton button, int primary) {
+        if (Build.VERSION.SDK_INT < 21) return;
+        try {
+            ColorStateList tint = button.getButtonTintList();
+            ColorStateList rebuilt;
+            if (tint != null) {
+                rebuilt = replaceCheckedColor(tint, primary);
+            } else {
+                int off = themeColor(button.getContext(), androidx.appcompat.R.attr.colorControlNormal, 0xFF8C8C8C);
+                int disabled = (off & 0x00FFFFFF) | 0x55000000;
+                rebuilt = new ColorStateList(SWITCH_STATES, new int[]{primary, off, disabled});
+            }
+            if (rebuilt != null) button.setButtonTintList(rebuilt);
+        } catch (Throwable ignored) {
+            //tint 拿不到就保持原色：颜色不完全跟随，但绝不崩
+        }
+    }
 
     /** 滑块：选中态用主题色，关态取主题里的 colorSwitchThumbNormal，禁用态同色半透明 */
     private static ColorStateList buildThumbFallback(Context context, int primary) {

@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.model.Bangumi;
 
 import java.util.ArrayList;
@@ -23,8 +24,7 @@ import java.util.ArrayList;
  */
 public class SeasonTabAdapter extends RecyclerView.Adapter<SeasonTabAdapter.SeasonTabHolder> {
 
-    private static final int COLOR_SELECTED = 0xfffb7299;
-    private static final int COLOR_NORMAL = 0xbeebe0e2; //默认文字带 75% 透明度，弱化未选中 tab
+        private static final int COLOR_NORMAL = 0xbeebe0e2; //默认文字带 75% 透明度，弱化未选中 tab
 
     private final ArrayList<Bangumi.Season> seasonList;
     public int selectedIndex = 0;
@@ -69,7 +69,7 @@ public class SeasonTabAdapter extends RecyclerView.Adapter<SeasonTabAdapter.Seas
 
         holder.tabText.setText(season.season_title);
         boolean selected = position == selectedIndex;
-        holder.tabText.setTextColor(selected ? COLOR_SELECTED : COLOR_NORMAL);
+        holder.tabText.setTextColor(selected ? ThemeManager.getPrimary() : COLOR_NORMAL);
         holder.tabText.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
 
         holder.tabText.setOnClickListener(v -> {

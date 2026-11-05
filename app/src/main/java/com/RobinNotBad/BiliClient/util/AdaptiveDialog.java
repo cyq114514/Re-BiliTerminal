@@ -82,11 +82,22 @@ public final class AdaptiveDialog {
         private DialogInterface.OnDismissListener dismissListener;
         private DialogInterface.OnCancelListener cancelListener;
 
+        /**
+         * 弹窗内容专用 inflater：主题套 {@code Dialog_Adaptive}（MaterialComponents 后代），
+         * 但 Factory 沿用 Activity 的（cloneInContext 会复制 Factory2，AppCompat 控件不会被降级）。
+         */
+        private final LayoutInflater inflater;
+
         public Builder(@NonNull Context context) {
             //对话框必须挂在 Activity 上，用 Application context 会拿不到 window token
             this.context = unwrapActivity(context);
             this.dialog = new Dialog(this.context, R.style.Dialog_Adaptive);
-            LayoutInflater inflater = LayoutInflater.from(this.context);
+            //弹窗内容必须用 MaterialComponents 主题 inflate：MaterialCardView / MaterialButton 在构造函数里
+            //校验主题链，而播放页与看图页用的是 Theme.NoSwipe（parent = android:Theme.Black），
+            //直接用 Activity 主题会抛
+            //“The style on this component requires your app theme to be Theme.MaterialComponents”。
+            Context themed = new android.view.ContextThemeWrapper(this.context, R.style.Dialog_Adaptive);
+            this.inflater = LayoutInflater.from(this.context).cloneInContext(themed);
             this.root = inflater.inflate(R.layout.dialog_adaptive, null);
             this.titleView = root.findViewById(R.id.dialog_title);
             this.messageView = root.findViewById(R.id.dialog_message);
@@ -253,7 +264,6 @@ public final class AdaptiveDialog {
             //按 neutral(2) → negative(3) → positive(4) 排序，和系统弹窗一致的视觉顺序
             Collections.sort(buttons, (a, b) -> Integer.compare(a.order, b.order));
 
-            LayoutInflater inflater = LayoutInflater.from(context);
             for (ButtonSpec spec : buttons) {
                 if (spec.text == null || spec.text.length() == 0) continue;
                 MaterialButton button = (MaterialButton) inflater.inflate(

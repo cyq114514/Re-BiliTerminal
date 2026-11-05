@@ -48,7 +48,8 @@ public class EmoteActivity extends BaseActivity {
         ImageView loading = findViewById(R.id.loading);
         TabLayout tabLayout = findViewById(R.id.tl_tab);
         ViewPager viewPager = findViewById(R.id.viewPager);
-        tabLayout.setBackgroundColor(getResources().getColor(R.color.bgblack));
+        //新版美学下纯黑条会压掉氛围层：改透明跟随页面底色（批次6/一致性）
+        tabLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         RecyclerView.OnScrollListener onScrollListener = new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {

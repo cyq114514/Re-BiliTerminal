@@ -27,6 +27,7 @@ import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity;
 import com.RobinNotBad.BiliClient.activity.settings.UpdateLogActivity;
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity;
 import com.RobinNotBad.BiliClient.activity.user.MySpaceActivity;
+import com.RobinNotBad.BiliClient.activity.video.BangumiActivity;
 import com.RobinNotBad.BiliClient.activity.video.PopularActivity;
 import com.RobinNotBad.BiliClient.activity.video.PreciousActivity;
 import com.RobinNotBad.BiliClient.activity.video.HotSearchActivity;
@@ -68,6 +69,7 @@ public class MenuActivity extends BaseActivity {
      */
     public static final Map<String, Pair<String, Class<? extends InstanceActivity>>> btnNames = new LinkedHashMap<>() {{
         put("recommend", new Pair<>("推荐", RecommendActivity.class));
+        put("bangumi", new Pair<>("番剧", BangumiActivity.class));
         put("short_video", new Pair<>("短视频", ShortVideoPlayerActivity.class));
         put("popular", new Pair<>("热门", PopularActivity.class));
         put("hotsearch", new Pair<>("热搜", HotSearchActivity.class));
@@ -119,7 +121,8 @@ public class MenuActivity extends BaseActivity {
             btnList.remove("myspace");
         }
 
-        //短视频是本次新增的入口：默认显示，可在「设置 → 菜单」里关掉
+        //入口开关：默认值见各项第二个参数，用户可在「设置 → 菜单」里关掉
+        if (!SharedPreferencesUtil.getBoolean("menu_bangumi", true)) btnList.remove("bangumi");
         if (!SharedPreferencesUtil.getBoolean("menu_short_video", true)) btnList.remove("short_video");
         if (!SharedPreferencesUtil.getBoolean("menu_popular", true)) btnList.remove("popular");
         if (!SharedPreferencesUtil.getBoolean("menu_hotsearch", true)) btnList.remove("hotsearch");
@@ -284,6 +287,8 @@ public class MenuActivity extends BaseActivity {
         switch (key) {
             case "recommend":
                 return R.drawable.icon_home;
+            case "bangumi":
+                return R.drawable.icon_bangumi;
             case "short_video":
                 return R.drawable.icon_play_16;
             case "popular":
@@ -382,6 +387,7 @@ public class MenuActivity extends BaseActivity {
     private List<String> getDefaultSortList() {
         return new ArrayList<>() {{
             add("recommend");
+            add("bangumi");
             add("short_video");
             add("popular");
             add("hotsearch");

@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener;
 import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.ClickGuard;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -103,7 +104,8 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
         }
         holder.itemView.setAlpha(1f);
 
-        holder.itemView.setOnClickListener(view -> {
+        //双击双开详情页是手表卡顿下的普遍体验：统一防抖（X-01）
+        holder.itemView.setOnClickListener(view -> ClickGuard.protect(view, () -> {
             switch (videoCard.type) {
                 case "video":
                     TerminalContext.getInstance().enterVideoDetailPage(context, videoCard.aid, videoCard.bvid, "video");
@@ -147,7 +149,7 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
                     MsgUtil.showMsg("该类型暂不支持打开");
                     break;
             }
-        });
+        }));
 
         holder.itemView.setOnLongClickListener(view -> {
             if (longClickListener != null) {

@@ -38,23 +38,43 @@ public class HistoryActivity extends RefreshListActivity {
 
         videoList = new ArrayList<>();
 
+        //注册下拉刷新：基类默认禁用且此前从未注册，加载失败后只能退出重进（D-01/X-03）
+        setOnRefreshListener(this::loadHistory);
+        loadHistory();
+    }
+
+    private void loadHistory() {
+        if (loading) return;
         loading = true;
         CenterThreadPool.run(() -> {
             try {
                 lastResult = HistoryApi.getHistory(lastResult, videoList);
                 if (lastResult.code == 0) {
-                    videoCardAdapter = new VideoCardAdapter(this, videoList);
-                    setOnLoadMoreListener(this::continueLoading);
-                    setRefreshing(false);
-                    setAdapter(videoCardAdapter);
-
+                    runOnUiThread(() -> {
+                        if (videoCardAdapter == null) {
+                            videoCardAdapter = new VideoCardAdapter(this, videoList);
+                            setOnLoadMoreListener(this::continueLoading);
+                            setAdapter(videoCardAdapter);
+                        } else {
+                            videoCardAdapter.notifyDataSetChanged();
+                        }
+                    });
                     if (lastResult.isBottom) {
                         setBottom(true);
                     }
-                } else MsgUtil.showMsg(lastResult.message);
-
+                    setRefreshing(false);
+                    //空历史此前从不调 showEmptyView，整页纯空白（D-01）
+                    if (videoList.isEmpty()) showEmptyView("这里还什么都没有~");
+                    else hideEmptyView();
+                } else {
+                    //失败也要关圈：此前只弹 toast，初始转圈永久卡住（D-01）
+                    setRefreshing(false);
+                    if (videoList.isEmpty()) showEmptyView("加载失败：" + lastResult.message + "\n下拉可重试");
+                    MsgUtil.showMsg(lastResult.message);
+                }
             } catch (Exception e) {
                 loadFail(e);
+                if (videoList.isEmpty()) showEmptyView("加载失败，请检查网络后下拉重试");
             } finally {
                 loading = false;
             }

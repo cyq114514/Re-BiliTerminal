@@ -333,14 +333,12 @@
 
     </com.RobinNotBad.BiliClient.ui.widget.RotaryNestedScrollView>
 
+    <!--父容器是 RelativeLayout：0dp=0px、constraint 属性全部无效，加载图此前实际 0 高不可见（C-03）-->
     <ImageView
         android:id="@+id/loading"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:src="@mipmap/loading_2233"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/top" />
+        android:layout_height="match_parent"
+        android:layout_below="@id/top"
+        android:src="@mipmap/loading_2233" />
 
 </RelativeLayout>

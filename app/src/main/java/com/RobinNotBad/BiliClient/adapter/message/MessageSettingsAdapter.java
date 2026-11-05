@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.model.message.MessageSettingItem;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
@@ -56,6 +57,8 @@ public class MessageSettingsAdapter extends RecyclerView.Adapter<RecyclerView.Vi
         } else if (holder instanceof ChooseHolder) {
             ((ChooseHolder) holder).bind(item, listener);
         }
+        //绑定期补全树换色：开关强调色跟随主题色（与 SettingsAdapter 同口径）
+        ThemeApplier.apply(holder.itemView);
     }
 
     @Override

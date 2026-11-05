@@ -126,7 +126,7 @@
                         android:text="9"
                         android:textAlignment="center"
                         android:textColor="@color/textwhite"
-                        android:textSize="9sp" />
+                        android:textSize="10sp" />
                 </FrameLayout>
 
                 <TextView

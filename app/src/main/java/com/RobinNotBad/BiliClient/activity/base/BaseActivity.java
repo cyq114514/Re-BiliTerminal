@@ -9,13 +9,18 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -28,7 +33,10 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
 import com.RobinNotBad.BiliClient.event.SnackEvent;
+import com.RobinNotBad.BiliClient.model.AudioQueue;
+import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
@@ -52,6 +60,14 @@ public class BaseActivity extends AppCompatActivity {
     public Context old_context;
     public final ActivityResultLauncher<Intent> relayDynamicLauncher = getRelayDynamicLauncher(this);
     public boolean force_single_column = false;
+
+    //顶部音频悬浮胶囊（音频服务活跃时显示，点击拉起全屏播放页）
+    private View audioCapsule;
+    private TextView audioCapsuleText;
+    private Handler audioCapsuleHandler;
+    private Runnable audioCapsuleRefresh;
+
+
 
     //调整应用内dpi的代码，其他Activity要继承于BaseActivity才能调大小
     @Override
@@ -181,18 +197,91 @@ public class BaseActivity extends AppCompatActivity {
     public void setContentView(int layoutResID) {
         super.setContentView(layoutResID);
         applyThemeColors();
+        installAudioCapsule();
     }
 
     @Override
     public void setContentView(View view) {
         super.setContentView(view);
         applyThemeColors();
+        installAudioCapsule();
     }
 
     @Override
     public void setContentView(View view, ViewGroup.LayoutParams params) {
         super.setContentView(view, params);
         applyThemeColors();
+        installAudioCapsule();
+    }
+
+    /**
+     * 顶部音频悬浮胶囊：挂在 DecorView 右上角、标题栏下方，音频服务活跃时显示。
+     * 只作入口（点击拉起全屏播放页），不承载播放控制；播放器页/音频页/启动页不装。
+     */
+    private void installAudioCapsule() {
+        if (audioCapsule != null) return;
+        String cls = getClass().getSimpleName();
+        //全屏视频/音频队列页也不装：胶囊会盖住短视频画面右上角与队列页顶栏（X-18）
+        if ("AudioPlayerActivity".equals(cls) || "PlayerActivity".equals(cls)
+                || "SplashActivity".equals(cls) || "ShortVideoPlayerActivity".equals(cls)
+                || "AudioQueueActivity".equals(cls)) return;
+        try {
+            ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+            View capsule = LayoutInflater.from(this).inflate(R.layout.view_audio_capsule, decor, false);
+            //胶囊底色跟随主题色：shape 里是实色打底，这里 setTint（SRC_IN 保留原 alpha 的 85% 观感）——
+            //此前硬编码旧版粉 #D9FB7299，自定义主题下胶囊永远是旧粉
+            android.graphics.drawable.Drawable capsuleBg = capsule.getBackground();
+            if (capsuleBg != null) {
+                capsuleBg.mutate().setTint(com.RobinNotBad.BiliClient.ui.theme.ThemeManager.getPrimary());
+                capsule.setBackground(capsuleBg);
+            }
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            //水平居中：落在左侧标题与右侧时间之间；垂直与标题栏同高
+            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            float density = getResources().getDisplayMetrics().density;
+            lp.setMargins(0, (int) (4 * density + 0.5f), 0, 0);
+            decor.addView(capsule, lp);
+            audioCapsule = capsule;
+            audioCapsuleText = capsule.findViewById(R.id.capsuleText);
+            //胶囊总宽上限 = 屏宽 38%：文字过长时省略，避免窄屏/大字号下被撑成一条横贯屏幕的横条，
+            //把顶栏的标题和时钟挤掉（文本可用的宽度已扣掉 6dp×2 内边距 + 12dp 图标 + 4dp 间距）
+            if (audioCapsuleText != null) {
+                int reserved = (int) (22 * density + 0.5f);
+                int maxText = (int) (getResources().getDisplayMetrics().widthPixels * 0.38f) - reserved;
+                if (maxText > 0) audioCapsuleText.setMaxWidth(maxText);
+            }
+            capsule.setOnClickListener(v -> {
+                if (AudioPlayerService.isRunning())
+                    startActivity(new Intent(this, AudioPlayerActivity.class));
+            });
+
+            audioCapsuleHandler = new Handler(Looper.getMainLooper());
+            audioCapsuleRefresh = new Runnable() {
+                @Override
+                public void run() {
+                    refreshAudioCapsule();
+                    if (audioCapsuleHandler != null) audioCapsuleHandler.postDelayed(this, 1500);
+                }
+            };
+            audioCapsuleHandler.post(audioCapsuleRefresh);
+        } catch (Throwable t) {
+            Logu.e("audio-capsule", "安装音频胶囊失败：" + t);
+        }
+    }
+
+    private void refreshAudioCapsule() {
+        if (audioCapsule == null) return;
+        try {
+            boolean visible = AudioPlayerService.isRunning();
+            audioCapsule.setVisibility(visible ? View.VISIBLE : View.GONE);
+            if (visible && audioCapsuleText != null) {
+                String text = AudioQueue.get().positionText();
+                if (AudioPlayerService.isResolving()) text = "…" + text;
+                audioCapsuleText.setText(text);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void applyThemeColors() {
@@ -325,6 +414,12 @@ public class BaseActivity extends AppCompatActivity {
             pagename.setMaxLines(1);
             pagename.setEllipsize(TextUtils.TruncateAt.END);
             if (SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
+                if (clock == null) {
+                    //布局没有 timeText（如投票/音频页旧版顶栏）：圆屏重排依赖时钟居中，
+                    //缺它就跳过整套重排——否则这里每次进页都解引用 null 弹"圆屏适配执行错误"（E-01）
+                    Logu.d("round", "skip (no timeText)");
+                    return;
+                }
                 try {
                     ViewGroup.LayoutParams params = pagename.getLayoutParams();
                     int paddingH = (int) (window_width * 0.18);
@@ -415,6 +510,12 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         if (isRestorablePage()) ResumePageUtil.pop(this, resumeToken);
+        //胶囊随页面销毁停止轮询（音频播放本身由 Service 承担，不受影响）
+        if (audioCapsuleHandler != null) {
+            audioCapsuleHandler.removeCallbacksAndMessages(null);
+            audioCapsuleHandler = null;
+        }
+        audioCapsuleRefresh = null;
         super.onDestroy();
         if (eventBusInit) {
             EventBus.getDefault().unregister(this);

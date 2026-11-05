@@ -126,6 +126,18 @@ public class ResumePageUtil {
         }
     }
 
+    /**
+     * 异步清空恢复栈：仅用于「所有 Activity 销毁」这类进程不会马上被杀的路径
+     * （BiliTerminal 生命周期回调），避免主线程 commit() 同步等写盘。
+     * 主动退出、崩溃收尾等马上杀进程的路径必须走 {@link #clear()} 同步写盘。
+     */
+    public static void clearAsync() {
+        try {
+            SharedPreferencesUtil.putString(KEY_RESUME_STACK, "");
+        } catch (Exception ignored) {
+        }
+    }
+
     //取出并清除整个恢复栈（栈底→栈顶）；逐条校验：只接受本应用且当前包内真实存在的组件，
     //记录可能来自旧版本，目标页面升级后可能被改名/删除，不校验的话 startActivity 直接闪退。
     //任何一条解析失败只跳过该条，不废掉整条链

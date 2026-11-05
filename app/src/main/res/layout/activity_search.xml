@@ -24,7 +24,8 @@
         android:layout_height="0dp"
         android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
         android:layout_marginVertical="3dp"
-        android:paddingVertical="2dp"
+        android:paddingTop="30dp"
+        android:paddingBottom="2dp"
         android:background="@drawable/background_searchhistory"
         android:focusable="true"
         android:focusableInTouchMode="true"
@@ -34,6 +35,20 @@
         app:layout_constraintTop_toBottomOf="@+id/searchbar"
         tools:itemCount="4"
         tools:listitem="@layout/cell_choose" />
+
+    <!-- 一键清空搜索记录：与历史卡右上角对齐，随历史卡一起显隐 -->
+    <TextView
+        android:id="@+id/clear_history"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="14dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="6dp"
+        android:text="清空"
+        android:textColor="@color/text_gray"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="@id/history_recyclerview"
+        app:layout_constraintTop_toTopOf="@id/history_recyclerview" />
 
     <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
         android:id="@+id/suggestions_recyclerview"

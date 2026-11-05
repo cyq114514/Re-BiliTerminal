@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.activity.base;
 
 import android.os.Bundle;
 import android.view.View;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -28,12 +29,15 @@ public class RefreshMainActivity extends InstanceActivity {
     public int page = 1;
     public long lastLoadTimestamp;
     protected boolean isRefreshing;
+    //布局里一直有 emptyTip 节点但从未接线：空数据/失败时列表区纯空白（批次2/X-02）
+    public TextView emptyView;
 
     //帮你findView和设置滚动监测器，自动显示转圈动画
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_simple_main_refresh);
+        emptyView = findViewById(R.id.emptyTip);
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
         swipeRefreshLayout.setEnabled(false);
         swipeRefreshLayout.setRefreshing(true);
@@ -123,6 +127,36 @@ public class RefreshMainActivity extends InstanceActivity {
 
     public void setBottom(boolean bool) {
         bottom = bool;
+    }
+
+    //空态/错误态（与 RefreshListActivity 同口径）；此前布局节点从未接线，失败时纯空白
+    public void showEmptyView() {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                recyclerView.setVisibility(View.GONE);
+                emptyView.setVisibility(View.VISIBLE);
+            });
+        }
+    }
+
+    /** 带文案的空态/错误态，线程安全 */
+    public void showEmptyView(String message) {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                emptyView.setText(message);
+                recyclerView.setVisibility(View.GONE);
+                emptyView.setVisibility(View.VISIBLE);
+            });
+        }
+    }
+
+    public void hideEmptyView() {
+        if (emptyView != null) {
+            runOnUiThread(() -> {
+                recyclerView.setVisibility(View.VISIBLE);
+                emptyView.setVisibility(View.GONE);
+            });
+        }
     }
 
     public void loadFail() {

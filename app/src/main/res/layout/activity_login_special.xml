@@ -66,7 +66,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="@string/btn_login_copy"
@@ -96,7 +96,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="@string/btn_login_confirm"
@@ -114,7 +114,7 @@
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="35sp"
+                    android:layout_height="35dp"
                     android:layout_marginHorizontal="8dp"
                     android:gravity="center_vertical"
                     android:text="@string/btn_login_refuse"

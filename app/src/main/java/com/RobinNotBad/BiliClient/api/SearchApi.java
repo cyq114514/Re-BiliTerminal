@@ -19,8 +19,28 @@ import java.util.List;
 
 public class SearchApi {
 
+    //seid 必须按关键词隔离：此前是单个静态字段，5 个 tab 与多个搜索页实例共享，
+    //A 词的迟到响应会把 seid 写给 B 词，B 站按旧会话恢复上下文后返回与当前关键词无关的结果。
+    //这里保留旧字段仅作「最近一次」的只读镜像，请求拼装一律走 keyword 自己的 seid。
     public static String seid = "";
     public static String search_keyword = "";
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> SEID_BY_KEYWORD =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static String seidFor(String keyword) {
+        if (keyword == null) return "";
+        String value = SEID_BY_KEYWORD.get(keyword);
+        return value == null ? "" : value;
+    }
+
+    private static void saveSeid(String keyword, String value) {
+        if (keyword == null) return;
+        if (value == null || value.isEmpty()) SEID_BY_KEYWORD.remove(keyword);
+        else SEID_BY_KEYWORD.put(keyword, value);
+        //只做镜像，不再参与任何请求参数的拼装
+        search_keyword = keyword;
+        seid = value == null ? "" : value;
+    }
 
     public static class SearchData {
         @SerializedName("seid")
@@ -131,12 +151,12 @@ public class SearchApi {
     }
 
     public static JSONArray search(String keyword, int page) throws IOException, JSONException {
-        if (!search_keyword.equals(keyword)) { search_keyword = keyword; seid = ""; }
-        String url = "https://api.bilibili.com/x/web-interface/wbi/search/all/v2?page=" + page + "&keyword=" + URLEncoder.encode(search_keyword, "UTF-8") + "&seid=" + seid;
+        //一律用入参 keyword 拼 URL 与取 seid：静态字段在多 tab 并发时会被别的词改写
+        String url = "https://api.bilibili.com/x/web-interface/wbi/search/all/v2?page=" + page + "&keyword=" + URLEncoder.encode(keyword, "UTF-8") + "&seid=" + seidFor(keyword);
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url)).toString();
         ApiResponse<SearchData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<SearchData>>(){}.getType());
         if (resp == null || !resp.isSuccess() || resp.data == null) return null;
-        seid = resp.data.seid;
+        saveSeid(keyword, resp.data.seid);
         if (resp.data.result == null) return null;
         return new JSONArray(GsonUtil.toJson(resp.data.result));
     }
@@ -151,18 +171,17 @@ public class SearchApi {
      * 那条链路才会把番剧混进第一页，all/v2 本身不支持 order）。
      */
     public static com.google.gson.JsonElement searchType(String keyword, int page, String type, String order) throws IOException, JSONException {
-        if (!search_keyword.equals(keyword)) { search_keyword = keyword; seid = ""; }
         StringBuilder url = new StringBuilder("https://api.bilibili.com/x/web-interface/wbi/search/type?page=")
                 .append(page)
-                .append("&keyword=").append(URLEncoder.encode(search_keyword, "UTF-8"))
+                .append("&keyword=").append(URLEncoder.encode(keyword, "UTF-8"))
                 .append("&search_type=").append(type);
         if (order != null && !order.isEmpty() && !"totalrank".equals(order))
             url.append("&order=").append(order);
-        url.append("&seid=").append(seid);
+        url.append("&seid=").append(seidFor(keyword));
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url.toString())).toString();
         ApiResponse<SearchTypeData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<SearchTypeData>>(){}.getType());
         if (resp == null || !resp.isSuccess() || resp.data == null) return null;
-        seid = resp.data.seid;
+        saveSeid(keyword, resp.data.seid);
         return resp.data.result;
     }
 

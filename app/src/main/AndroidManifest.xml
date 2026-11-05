@@ -148,6 +148,20 @@
             android:label="内置播放器"
             android:theme="@style/Theme.NoSwipe" />
         <activity
+            android:name=".activity.player.AudioPlayerActivity"
+            android:exported="false"
+            android:label="正在播放"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.player.AudioQueueActivity"
+            android:exported="false"
+            android:label="播放队列"
+            android:screenOrientation="locked" />
+        <service
+            android:name=".service.AudioPlayerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <activity
             android:name=".activity.article.OpusInfoActivity"
             android:exported="false"
             android:label="文章详情"
@@ -303,15 +317,22 @@
             android:label="跳转播放"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.video.NoteActivity"
+            android:exported="false"
+            android:label="视频笔记"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.reply.WriteReplyActivity"
             android:exported="false"
             android:label="写评论"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.dynamic.send.SendDynamicActivity"
             android:exported="false"
             android:label="发动态"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.video.QualityChooserActivity"
             android:exported="false"
@@ -517,6 +538,11 @@
             android:label="时间线"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.video.BangumiActivity"
+            android:exported="false"
+            android:label="番剧"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.login.LoginActivity"
             android:exported="false"
             android:label="登录"
@@ -535,7 +561,8 @@
             android:name=".activity.message.PrivateMsgActivity"
             android:exported="false"
             android:label="私信"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.user.favorite.FavouriteOpusListActivity"
             android:exported="false"

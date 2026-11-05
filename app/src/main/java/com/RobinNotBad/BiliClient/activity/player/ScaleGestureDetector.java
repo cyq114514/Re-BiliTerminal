@@ -103,7 +103,8 @@ public class ScaleGestureDetector {
         mListener = listener;
         final ViewConfiguration viewConfiguration = ViewConfiguration.get(context);
         mSpanSlop = viewConfiguration.getScaledTouchSlop() * 2;
-        mMinSpan = 0;
+        //两指最小跨度：此前为 0，两指几乎贴住即触发缩放，小屏双指极易误触（批次8）
+        mMinSpan = (int) (context.getResources().getDisplayMetrics().density * 48);
         mHandler = handler;
 
         final int targetSdkVersion = context.getApplicationInfo().targetSdkVersion;

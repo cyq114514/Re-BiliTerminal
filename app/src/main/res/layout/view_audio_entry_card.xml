@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「听全部（纯音频）」入口卡片：与视频卡片（cell_video_list.xml）同款半透明卡片
+     —— card_bg_new(#4D262626) 半透明底 + card_border_new 描边 + card_round_new 圆角、零投影 -->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/audioEntryCard"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+    android:layout_marginVertical="@dimen/list_margin_vertical"
+    app:cardBackgroundColor="@color/card_bg_new"
+    app:cardCornerRadius="@dimen/card_round_new"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/card_border_new"
+    app:strokeWidth="@dimen/card_stroke_new">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="8dp">
+
+        <ImageView
+            android:id="@+id/audioEntryIcon"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:contentDescription="纯音频播放"
+            android:src="@drawable/icon_audio_only_on" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/audioEntryTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:text="听全部（纯音频）"
+                android:textColor="@color/textwhite"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/audioEntrySub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:text="按当前列表顺序连续播放"
+                android:textColor="@color/text_gray"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/audioEntryArrow"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:contentDescription="进入播放"
+            android:src="@drawable/arrow_forward"
+            app:tint="@color/text_dim" />
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

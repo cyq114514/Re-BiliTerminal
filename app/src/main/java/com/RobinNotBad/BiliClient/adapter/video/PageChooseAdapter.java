@@ -69,14 +69,17 @@ public class PageChooseAdapter extends RecyclerView.Adapter<PageChooseAdapter.Ho
         holder.folder_name.setText(nameList.get(position));
         holder.folder_name.setTextColor(position == historyIndex ? HISTORY_COLOR : defaultTextColor);
 
+        //点击时取 ViewHolder 当前位置，不捕获 bind 时的 position：删除后未重绑的 ViewHolder 会带回旧下标
         holder.itemView.setOnClickListener(view -> {
-            if (onItemClickListener != null)
-                onItemClickListener.onItemClick(position);
+            int currentPosition = holder.getAdapterPosition();
+            if (onItemClickListener != null && currentPosition != RecyclerView.NO_POSITION)
+                onItemClickListener.onItemClick(currentPosition);
         });
 
         holder.itemView.setOnLongClickListener(view -> {
-            if (onItemLongClickListener != null) {
-                onItemLongClickListener.onItemLongClick(position);
+            int currentPosition = holder.getAdapterPosition();
+            if (onItemLongClickListener != null && currentPosition != RecyclerView.NO_POSITION) {
+                onItemLongClickListener.onItemLongClick(currentPosition);
                 return true;
             } else
                 return false;

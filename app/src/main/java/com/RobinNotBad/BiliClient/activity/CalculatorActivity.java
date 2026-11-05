@@ -6,7 +6,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -42,6 +45,8 @@ public class CalculatorActivity extends Activity {
     private boolean freshInput = true; //刚按过运算符或等号，下一个数字应覆盖显示
 
     private static final int MAX_INPUT_LEN = 12; //显示宽度限制，超长输入挤爆 40sp 的显示区
+    //布局完成前 post 的 runnable 可能拿到 0 高度：用有限次重试兜住（最多 5 次）
+    private int fitKeypadRetry = 0;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -86,13 +91,64 @@ public class CalculatorActivity extends Activity {
                         : isOperator(label) ? R.drawable.background_calc_key_accent
                         : R.drawable.background_calc_key);
                 button.setOnClickListener(v -> onKey(label));
+                //按钮高度由行高决定（行高在布局完成后按可用空间收缩），这里先撑满
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                        0, (int) (getResources().getDisplayMetrics().density * 60), 1f);
+                        0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
                 params.setMargins(pad, pad, pad, pad);
                 line.addView(button, params);
             }
             keypad.addView(line, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    (int) (getResources().getDisplayMetrics().density * 60)));
+        }
+        //界面缩放调大后 5×60dp 会超出屏幕，Space 的 weight 被压到 0，最后一行直接裁掉；
+        //布局完成后按实际可用高度收缩（正常缩放时仍保持 60dp 外观）
+        keypad.post(this::fitKeypadToScreen);
+    }
+
+    /**
+     * 让 4×5 键盘始终完整落在屏幕内。
+     *
+     * <p>可用高度按「显示区底部 → 屏幕底部（减去根布局 paddingBottom）」算，
+     * 不能用 {@code keypad.getTop()}：键盘已经超出时它也会被布局到屏幕外，
+     * 算出来的可用高度恒等于键盘自身高度，永远检测不到溢出。
+     */
+    private void fitKeypadToScreen() {
+        LinearLayout keypad = findViewById(R.id.calc_keypad);
+        if (keypad == null || keypad.getChildCount() == 0) return;
+        View parent = (View) keypad.getParent();
+        View displayView = findViewById(R.id.calc_display);
+        if (parent == null || displayView == null) return;
+        if (parent.getHeight() <= 0 || displayView.getBottom() <= 0) {
+            //首次 post 可能早于布局完成，最多重试 5 次（500ms），避免拿到 0 高度后不再收缩
+            if (fitKeypadRetry++ < 5) keypad.postDelayed(this::fitKeypadToScreen, 100);
+            return;
+        }
+        fitKeypadRetry = 0;
+
+        int available = parent.getHeight() - parent.getPaddingBottom() - displayView.getBottom();
+        if (available <= 0) return;
+
+        int rows = keypad.getChildCount();
+        int rowHeight = available / rows;
+        int maxRowHeight = (int) (getResources().getDisplayMetrics().density * 60);
+        int finalRowHeight = Math.min(maxRowHeight, rowHeight);
+        if (finalRowHeight <= 0) return;
+
+        for (int i = 0; i < rows; i++) {
+            View line = keypad.getChildAt(i);
+            ViewGroup.LayoutParams lp = line.getLayoutParams();
+            lp.height = finalRowHeight;
+            line.setLayoutParams(lp);
+            if (!(line instanceof LinearLayout)) continue;
+            LinearLayout row = (LinearLayout) line;
+            for (int j = 0; j < row.getChildCount(); j++) {
+                View key = row.getChildAt(j);
+                if (key instanceof Button) {
+                    //字号跟随实际行高，避免行被压矮后文字上下被裁
+                    ((Button) key).setTextSize(TypedValue.COMPLEX_UNIT_PX, finalRowHeight * 0.33f);
+                }
+            }
         }
     }
 

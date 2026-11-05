@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.model.Bangumi;
 
@@ -23,9 +24,7 @@ import java.util.List;
  */
 public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.EpisodeCardHolder> {
 
-    private static final int COLOR_SELECTED = 0xfffb7299;      //B站粉，与全 app 高亮色一致
-    private static final int COLOR_NORMAL = 0xffebe0e2;        //默认浅字
-    private static final int COLOR_BADGE_VIP = 0xfffb7299;     //会员
+        private static final int COLOR_NORMAL = 0xffebe0e2;        //默认浅字
     private static final int COLOR_BADGE_FREE = 0xff6eb26e;    //限免
     private static final int COLOR_BADGE_OTHER = 0x99ebe0e2;   //预告/其它
 
@@ -70,7 +69,7 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
         boolean selected = position == selectedItemIndex;
 
         holder.title.setText(episode.title);
-        holder.title.setTextColor(selected ? COLOR_SELECTED : COLOR_NORMAL);
+        holder.title.setTextColor(selected ? ThemeManager.getPrimary() : COLOR_NORMAL);
 
         //播放中图标：仅当前集显示（官方选集卡同款声波标）
         holder.playing.setVisibility(selected ? View.VISIBLE : View.GONE);
@@ -86,7 +85,7 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
         if (episode.title_long != null && !episode.title_long.isEmpty()) {
             holder.titleLong.setVisibility(View.VISIBLE);
             holder.titleLong.setText(episode.title_long);
-            holder.titleLong.setTextColor(selected ? COLOR_SELECTED : COLOR_NORMAL);
+            holder.titleLong.setTextColor(selected ? ThemeManager.getPrimary() : COLOR_NORMAL);
         } else {
             holder.titleLong.setVisibility(View.GONE);
         }
@@ -101,7 +100,7 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
     }
 
     private static int colorOfBadge(String badge) {
-        if ("会员".equals(badge)) return COLOR_BADGE_VIP;
+        if ("会员".equals(badge)) return ThemeManager.getPrimary();
         if ("限免".equals(badge)) return COLOR_BADGE_FREE;
         return COLOR_BADGE_OTHER;
     }

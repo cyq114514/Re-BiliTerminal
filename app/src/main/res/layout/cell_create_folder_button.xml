@@ -9,7 +9,7 @@
     <TextView
         android:id="@+id/text"
         android:layout_width="match_parent"
-        android:layout_height="35sp"
+        android:layout_height="35dp"
         android:layout_marginHorizontal="8dp"
         android:gravity="center"
         android:text="+ 创建收藏夹"

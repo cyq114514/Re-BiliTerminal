@@ -76,7 +76,11 @@ public class SearchLiveFragment extends SearchFragment {
                         roomList.addAll(list);
                         liveCardAdapter.notifyItemRangeInserted(lastSize, roomList.size() - lastSize);
                     });
-                } else setBottom(true);
+                } else {
+                    //null 响应=接口异常/无结果体：页1给出可重试文案，不再伪装成「啥都木有~」（X-10）
+                    setBottom(true);
+                    if (page == 1) showEmptyView("搜索失败，请检查网络后重试");
+                }
                 setRefreshing(false);
                 if (myGeneration == loadGeneration && bottom && roomList.isEmpty()) {
                     showEmptyView(true);
@@ -84,6 +88,7 @@ public class SearchLiveFragment extends SearchFragment {
             } catch (Exception e) {
                 report(e);
                 if (myGeneration == loadGeneration) setRefreshing(false);
+                if (myGeneration == loadGeneration && page == 1) showEmptyView("搜索失败，请检查网络后重试");
             }
         });
     }

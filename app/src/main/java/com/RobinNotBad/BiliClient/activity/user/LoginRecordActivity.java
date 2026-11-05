@@ -16,6 +16,8 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
+import android.widget.TextView;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,6 +55,7 @@ public class LoginRecordActivity extends BaseActivity {
                 runOnUiThread(() -> {
                     if (recordList.isEmpty()) {
                         MsgUtil.showMsg("暂无登录记录");
+                        ((TextView) findViewById(R.id.emptyTip)).setText("还没有登录记录~");
                         findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
                     } else {
                         adapter = new LoginRecordAdapter(this, recordList);
@@ -64,6 +67,7 @@ public class LoginRecordActivity extends BaseActivity {
                 runOnUiThread(() -> {
                     MsgUtil.showMsg("加载失败：" + e.getMessage());
                     swipeRefreshLayout.setRefreshing(false);
+                    ((TextView) findViewById(R.id.emptyTip)).setText("加载失败，请检查网络后重进");
                     findViewById(R.id.emptyTip).setVisibility(View.VISIBLE);
                 });
                 e.printStackTrace();

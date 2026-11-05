@@ -102,10 +102,12 @@ public class RecommendActivity extends RefreshMainActivity {
                         //整页都被去重/接口没数据：到底了，别再无限触发加载
                         setBottom(true);
                         if (page <= 1) {
-                            MsgUtil.showMsg("推荐加载失败，下拉重试");
+                            //空态上屏而非只 toast：emptyTip 此前从未接线，用户看到的是纯空白（X-44）
+                            showEmptyView("暂无推荐内容\n下拉刷新重试");
                         }
                         return;
                     }
+                    hideEmptyView();
                     int start = videoCardList.size();
                     videoCardList.addAll(filtered);
                     if (firstRefresh) {
@@ -118,6 +120,7 @@ public class RecommendActivity extends RefreshMainActivity {
                 });
             } catch (Exception e) {
                 loadFail(e);
+                if (page <= 1) showEmptyView("推荐加载失败，下拉重试");
             }
         });
     }

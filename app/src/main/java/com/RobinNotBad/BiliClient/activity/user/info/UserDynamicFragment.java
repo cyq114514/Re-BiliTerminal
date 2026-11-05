@@ -57,7 +57,12 @@ public class UserDynamicFragment extends RefreshListFragment {
 
         dynamicList = new ArrayList<>();
         setOnLoadMoreListener(page -> continueLoading());
+        //注册下拉刷新+空态/失败态（X-26）
+        setOnRefreshListener(() -> loadDynamics());
+        loadDynamics();
+    }
 
+    private void loadDynamics() {
         CenterThreadPool.run(() -> {
             try {
                 UserInfo userInfo = UserInfoApi.getUserInfo(mid);
@@ -71,6 +76,9 @@ public class UserDynamicFragment extends RefreshListFragment {
                 Log.e("debug", "获取到用户信息");
 
                 try {
+                    //刷新=重新开始：游标与列表复位，下拉刷新复用同一入口
+                    offset = 0;
+                    dynamicList.clear();
                     offset = DynamicApi.getDynamicList(dynamicList, offset, mid, null);
                     bottom = (offset == -1);
                     Log.e("debug", "获取到用户动态");
@@ -82,9 +90,12 @@ public class UserDynamicFragment extends RefreshListFragment {
                     adapter = new UserDynamicAdapter(requireContext(), dynamicList, userInfo);
                     setAdapter(adapter);
                     setRefreshing(false);
+                    if (dynamicList.isEmpty()) showEmptyView("TA 还没有发布过动态~");
+                    else hideEmptyView();
                 }
             } catch (Exception e) {
                 loadFail(e);
+                showEmptyView("加载失败，请下拉重试");
             }
         });
     }

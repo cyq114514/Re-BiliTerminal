@@ -10,11 +10,13 @@
     android:layout_height="match_parent"
     android:background="@color/bgblack">
 
+    <!-- 封面与视频画面统一用「适应」：此前 centerCrop 会把封面裁成铺满全屏，
+         首帧后撤掉封面露出按比例 contain 的视频，翻页时就会出现"先铺满、再缩小"的跳变 -->
     <ImageView
         android:id="@+id/coverImage"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop" />
+        android:scaleType="fitCenter" />
 
     <ProgressBar
         android:id="@+id/buffering"

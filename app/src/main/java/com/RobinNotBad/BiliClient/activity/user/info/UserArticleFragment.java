@@ -51,18 +51,28 @@ public class UserArticleFragment extends RefreshListFragment {
 
         articleList = new ArrayList<>();
         setOnLoadMoreListener(this::continueLoading);
+        //注册下拉刷新+空态/失败态（X-26）
+        setOnRefreshListener(() -> loadArticles());
+        loadArticles();
+    }
 
+    private void loadArticles() {
         CenterThreadPool.run(() -> {
             try {
+                //刷新=重新开始：游标与列表复位，下拉刷新复用同一入口
+                page = 1;
+                articleList.clear();
                 bottom = (UserInfoApi.getUserArticles(mid, page, articleList) == 1);
                 if (isAdded()) {
                     adapter = new ArticleCardAdapter(requireContext(), articleList);
                     setAdapter(adapter);
                     setRefreshing(false);
-                    if (bottom && articleList.isEmpty()) showEmptyView();
+                    if (bottom && articleList.isEmpty()) showEmptyView("TA 还没有发布过专栏~");
+                    else hideEmptyView();
                 }
             } catch (Exception e) {
                 loadFail(e);
+                if (articleList.isEmpty()) showEmptyView("加载失败，请下拉重试");
             }
         });
     }

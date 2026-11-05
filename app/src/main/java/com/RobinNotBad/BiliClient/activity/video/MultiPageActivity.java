@@ -42,7 +42,13 @@ public class MultiPageActivity extends BaseActivity {
         Intent intent = getIntent();
         playerData = intent.getParcelableExtra("data");
 
-        TerminalContext.getInstance().getVideoInfoByAidOrBvId(playerData.aid, "").observe(this, result -> result.onSuccess((videoInfo -> {
+        TerminalContext.getInstance().getVideoInfoByAidOrBvId(playerData.aid, "").observe(this, result -> {
+            //失败此前无任何反馈：无 loading 无提示，列表永久空白（X-16）
+            result.onFailure(e -> {
+                MsgUtil.showMsgLong("分集信息获取失败，请返回重试");
+                finish();
+            });
+            result.onSuccess((videoInfo -> {
             if (!ToolsUtil.isHostAlive(this)) return;
             this.videoInfo = videoInfo;
             PageChooseAdapter adapter = new PageChooseAdapter(this, videoInfo.pagenames);
@@ -83,7 +89,8 @@ public class MultiPageActivity extends BaseActivity {
 
             recyclerView.setLayoutManager(new CustomLinearManager(this));
             recyclerView.setAdapter(adapter);
-        })));
+            }));
+        });
 
     }
 

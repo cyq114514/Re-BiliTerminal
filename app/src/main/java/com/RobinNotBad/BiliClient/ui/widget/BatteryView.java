@@ -57,7 +57,8 @@ public class BatteryView extends View {
 
         int fill_left = padding + inside_padding;
         int fill_top = padding + inside_padding;
-        int fill_right = (int) ((battery_width - inside_padding) * power_percent);
+        //右缘 = 左缘 + 可用宽度×电量：原式没补偿 fill_left 的偏移，电量显示非线性（批次8）
+        int fill_right = fill_left + (int) ((battery_width - fill_left - inside_padding) * power_percent);
         int fill_bottom = battery_height - inside_padding;
 
         //边框
