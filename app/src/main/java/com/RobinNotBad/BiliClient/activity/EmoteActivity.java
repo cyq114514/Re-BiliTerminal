@@ -62,7 +62,19 @@ public class EmoteActivity extends BaseActivity {
                 String from = getIntent().getStringExtra("from");
                 if (from == null) from = EmoteApi.BUSINESS_REPLY;
 
-                List<EmotePackage> packages = EmoteApi.getEmotes(from);
+                List<EmotePackage> packages;
+                try {
+                    packages = EmoteApi.getEmotes(from);
+                } catch (Throwable t) {
+                    //私信等场景传的 business（如 im）社区资料未完全定型：
+                    //拉不到就回落 reply 面板，宁可表情少一点也不能白屏
+                    if (EmoteApi.BUSINESS_REPLY.equals(from)) throw t;
+                    packages = EmoteApi.getEmotes(EmoteApi.BUSINESS_REPLY);
+                }
+                if (packages == null || packages.isEmpty()) {
+                    if (!EmoteApi.BUSINESS_REPLY.equals(from))
+                        packages = EmoteApi.getEmotes(EmoteApi.BUSINESS_REPLY);
+                }
                 runOnUiThread(() -> {
                     loading.setVisibility(View.GONE);
                     viewPager.setAdapter(new PagerAdapter(getSupportFragmentManager(), packages, origin -> {

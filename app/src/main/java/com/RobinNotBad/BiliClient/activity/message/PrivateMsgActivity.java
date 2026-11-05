@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.activity.EmoteActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.adapter.message.PrivateMsgAdapter;
 import com.RobinNotBad.BiliClient.api.ImageApi;
@@ -65,6 +66,16 @@ public class PrivateMsgActivity extends BaseActivity {
                 if (uri != null) sendPic(uri);
             });
 
+    //表情面板：选中表情码（如 [dog]）追加进输入框，随文本一起发送；
+    //拉取会话时服务端下发 e_infos，收发双方都渲染成表情图（PrivateMsgAdapter 已支持）
+    private final ActivityResultLauncher<Intent> emoteLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                Intent data = result.getData();
+                if (result.getResultCode() == RESULT_OK && data != null && data.hasExtra("text")) {
+                    contentEt.append(data.getStringExtra("text"));
+                }
+            });
+
     boolean animVisible = true;
 
     @Override
@@ -84,6 +95,13 @@ public class PrivateMsgActivity extends BaseActivity {
             int start = contentEt.getSelectionStart();
             if (start < 0) start = contentEt.getText().length();
             contentEt.getText().insert(start, "\n");
+        });
+
+        //表情面板入口：business=im 拉不到时 EmoteActivity 内部会回落到 reply 面板
+        findViewById(R.id.emote_btn).setOnClickListener(view -> {
+            Intent emoteIntent = new Intent(this, EmoteActivity.class);
+            emoteIntent.putExtra("from", "im");
+            emoteLauncher.launch(emoteIntent);
         });
 
         Intent intent = getIntent();
