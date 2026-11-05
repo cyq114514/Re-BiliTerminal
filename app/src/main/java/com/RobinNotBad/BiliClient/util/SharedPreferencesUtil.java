@@ -86,7 +86,25 @@ public class SharedPreferencesUtil {
     //所有读取方法都做空保护：webHeaders 等静态初始化器会在 Application.onCreate 赋值 sharedPreferences
     //之前触发类加载，不保护的话一个读取顺序变化就是启动即 NPE
     public static String getString(String key, String def) {
-        return sharedPreferences != null ? sharedPreferences.getString(key, def) : def;
+        if (sharedPreferences == null) return def;
+        try {
+            return sharedPreferences.getString(key, def);
+        } catch (ClassCastException e) {
+            //历史存档类型对不上时的保险丝：SP 里存的是数字/布尔而代码按字符串读
+            //（如 player_swipe_seek_scale 曾被 input_float 写成 float），裸读会抛
+            //ClassCastException 并崩掉调用页（1.2.9 横滑调进度实测）。这里原地转成字符串，
+            //保住用户已存的值；取出失败才退回默认
+            try {
+                Object value = sharedPreferences.getAll().get(key);
+                if (value instanceof Number || value instanceof Boolean) {
+                    String converted = String.valueOf(value);
+                    Logu.w("sp", "getString 类型兜底 " + key + ": " + converted);
+                    return converted;
+                }
+            } catch (Throwable ignored) {
+            }
+            return def;
+        }
     }
 
     public static void putString(String key, String value) {
