@@ -51,6 +51,15 @@ public class LikeCoinFavApi {
         return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post("https://api.bilibili.com/x/web-interface/coin/add", per, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
     }
 
+    /**
+     * 每日分享任务上报（手机端每日分享加经验）。与点赞同构。
+     * 返回码 0 仅代表上报成功；经验是否到账由服务端风控判定，客户端无法保证。
+     */
+    public static int share(long aid) throws IOException, JSONException {
+        String per = "aid=" + aid + "&csrf=" + csrf();
+        return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post("https://api.bilibili.com/x/web-interface/share/add", per, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
+    }
+
     public static int favorite(long aid, long fid) throws IOException, JSONException {
         String strMid = String.valueOf(SharedPreferencesUtil.getLong("mid", 0));
         String per = "rid=" + aid + "&type=2&add_media_ids=" + (fid + strMid.substring(strMid.length() - 2)) + "&del_media_ids=&csrf=" + csrf();

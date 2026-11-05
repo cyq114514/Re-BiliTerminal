@@ -65,6 +65,7 @@ import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
@@ -624,14 +625,60 @@ public class VideoInfoFragment extends BaseFragment {
         //复用检查更新同款自适应弹窗：深色卡片、圆角、字号放大/圆屏下按钮不会被裁
         new AdaptiveDialog.Builder(requireContext())
                 .setTitle("转发")
-                .setSingleChoiceItems(new String[]{"转发动态", "发送到消息"}, -1,
+                .setSingleChoiceItems(new String[]{"转发动态", "发送到消息", "分享得经验（每日一次）"}, -1,
                         (dialog, which) -> {
                             dialog.dismiss();
                             if (which == 0) relayToDynamic();
-                            else showShareToMsg();
+                            else if (which == 1) showShareToMsg();
+                            else shareForExp();
                         })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    /**
+     * 手机端每日分享任务：上报 share/add 换 5 点经验（是否到账由官方风控判定）。
+     * 同一稿件当天只上报一次（本地去重，服务端也不重复计）；经验到账情况可在
+     * 「经验记录」页核对（ExpLogApi）。
+     */
+    private void shareForExp() {
+        if (!isAdded() || videoInfo == null) return;
+        if (!NetWorkUtil.isLoggedIn()) {
+            MsgUtil.showMsg("请先登录");
+            return;
+        }
+        String today = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+                .format(new java.util.Date());
+        String day = SharedPreferencesUtil.getString("share_exp_day", "");
+        String aids = day.equals(today) ? SharedPreferencesUtil.getString("share_exp_aids", "") : "";
+        String key = String.valueOf(videoInfo.aid);
+        for (String item : aids.split(",")) {
+            if (item.equals(key)) {
+                MsgUtil.showMsg("这个视频今天已经分享过了，明天再来");
+                return;
+            }
+        }
+        CenterThreadPool.run(() -> {
+            try {
+                int code = LikeCoinFavApi.share(videoInfo.aid);
+                if (code == 0) {
+                    //列表只做当天去重，超长就不再追加（去重是尽力而为，上限远大于日常使用量）
+                    String merged = aids.isEmpty() ? key
+                            : (aids.length() < 4000 ? aids + "," + key : aids);
+                    SharedPreferencesUtil.putString("share_exp_day", today);
+                    SharedPreferencesUtil.putString("share_exp_aids", merged);
+                    MsgUtil.showMsg("分享上报成功，经验是否到账以官方判定为准");
+                } else if (code == -403) {
+                    MsgUtil.showMsg("分享被风控拦下了，稍后再试");
+                } else if (code == -101 || code == -111) {
+                    MsgUtil.showMsg("登录状态已失效，请重新登录");
+                } else {
+                    MsgUtil.showMsg("分享上报失败，错误码：" + code);
+                }
+            } catch (Exception e) {
+                MsgUtil.showMsg("分享上报失败");
+            }
+        });
     }
 
     /** 转发到动态（原「转发」按钮的逻辑，原样保留） */
