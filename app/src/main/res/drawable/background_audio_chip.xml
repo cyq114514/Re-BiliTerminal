@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--听歌页顶栏胶囊按钮底：中性半透明圆角，深浅主题下都成立；
+    点击涟漪用 foreground 的 selectableItemBackground，不遮内容-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <solid android:color="#1A888888" />
+</shape>

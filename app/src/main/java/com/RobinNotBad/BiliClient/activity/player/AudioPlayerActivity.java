@@ -146,6 +146,9 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
             seekBar.setProgressTintList(primary);
             seekBar.setThumbTintList(primary);
         }
+        //顶栏「队列/停止」胶囊：图标跟主题 accent 走，和进度条强调色一致（新版美学）
+        ((ImageView) findViewById(R.id.queueIcon)).setColorFilter(ThemeManager.getPrimary());
+        ((ImageView) findViewById(R.id.stopIcon)).setColorFilter(ThemeManager.getPrimary());
 
         findViewById(R.id.top).setOnClickListener(v -> finish());
         findViewById(R.id.queueBtn).setOnClickListener(v ->

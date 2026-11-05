@@ -27,35 +27,70 @@
             android:textStyle="bold"
             app:drawableStartCompat="@drawable/arrow_back" />
 
-        <TextView
+        <!--顶栏胶囊按钮（新版美学）：图标+文字的圆角 chip，accent 色在 Java 里跟主题走-->
+        <LinearLayout
             android:id="@+id/queueBtn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
             android:layout_marginVertical="3dp"
-            android:layout_marginEnd="10dp"
+            android:layout_marginEnd="8dp"
             android:layout_toStartOf="@id/stopBtn"
             android:layout_toLeftOf="@id/stopBtn"
-            android:background="?attr/selectableItemBackground"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:text="队列"
-            android:textSize="13sp" />
+            android:background="@drawable/background_audio_chip"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp">
+
+            <ImageView
+                android:id="@+id/queueIcon"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_audio_queue" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="队列"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <!--停止并退出：之前应用内没有任何能关掉播放服务的入口，
             服务只能靠通知栏关闭，顶部悬浮胶囊也因此关不掉-->
-        <TextView
+        <LinearLayout
             android:id="@+id/stopBtn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
             android:layout_marginVertical="3dp"
             android:layout_marginEnd="10dp"
             android:layout_toStartOf="@id/timeText"
             android:layout_toLeftOf="@id/timeText"
-            android:background="?attr/selectableItemBackground"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:text="停止"
-            android:textSize="13sp" />
+            android:background="@drawable/background_audio_chip"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp">
+
+            <ImageView
+                android:id="@+id/stopIcon"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_audio_stop" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="停止"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <!--补齐顶栏时钟：setRound 的圆屏重排依赖 timeText，缺失会在圆屏模式下每次进页报错（E-01）-->
         <com.RobinNotBad.BiliClient.ui.widget.TextClock
