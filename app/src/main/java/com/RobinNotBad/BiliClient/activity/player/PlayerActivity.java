@@ -1142,8 +1142,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         } else {
             base = Math.max(30000L, Math.min(300000L, duration / 6));
         }
+        //灵敏度在设置页是 input_float（putFloat 写入），必须用 getFloat 读：
+        //getString 读 float 存档会抛 ClassCastException，横滑一触发就崩（1.2.9 实测）
         float scale = PlayerSeekPolicies.swipeScale(
-                SharedPreferencesUtil.getString(PlayerSeekPolicies.KEY_SWIPE_SEEK_SCALE, "1.0"));
+                SharedPreferencesUtil.getFloat(PlayerSeekPolicies.KEY_SWIPE_SEEK_SCALE, PlayerSeekPolicies.DEFAULT_SCALE));
         return (long) (base * scale);
     }
 

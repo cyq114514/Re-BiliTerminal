@@ -29,6 +29,17 @@ public final class PlayerSeekPolicies {
         } catch (NumberFormatException ignored) {
             return DEFAULT_SCALE;
         }
+        return swipeScale(scale);
+    }
+
+    /**
+     * 直接按数值取档：0.25/0.5/1.0/1.5/2.0/3.0 之外的值都退回默认。
+     *
+     * <p>设置页里灵敏度是 input_float（SettingsAdapter 用 putFloat 写入），
+     * 播放页必须用 getFloat 读；getString 去读 float 存档时
+     * SharedPreferencesImpl 会抛 ClassCastException，横滑一触发就崩（1.2.9 实测）。
+     */
+    public static float swipeScale(float scale) {
         for (float supported : SUPPORTED_SCALES) {
             if (Math.abs(supported - scale) < 0.005f) return supported;
         }
