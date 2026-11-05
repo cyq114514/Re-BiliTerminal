@@ -351,6 +351,14 @@ public class UserInfoApi {
         return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
     }
 
+    /** 拉黑 / 解除拉黑：与 followUser 同端点，act=5(拉黑) / act=6(取消)，re_src 与网页端一致。 */
+    public static int blockUser(long mid, boolean block) throws IOException, JSONException {
+        String url = "https://api.bilibili.com/x/relation/modify?";
+        String arg = "fid=" + mid + "&csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, ""));
+        arg += block ? "&act=5&re_src=11" : "&act=6&re_src=11";
+        return GsonUtil.fromJson(Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string(), ApiResponse.class).code;
+    }
+
     public static void exitLogin() {
         //正式的注销端点是 POST + csrf：GET 不带参数调不动它，服务端会话（含 refresh_token）不会被失效
         try {
