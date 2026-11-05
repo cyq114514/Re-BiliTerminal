@@ -91,6 +91,7 @@ public class UpdateManager {
     private static final Pattern SHA256_PATTERN = Pattern.compile("sha256\\s*=\\s*([0-9a-fA-F]{64})");
 
     private static volatile OkHttpClient updateClient;
+    private static volatile OkHttpClient metadataClient;
     private static volatile boolean downloadCanceled = false;
     private static volatile boolean autoChecked = false;   //每次进程生命周期只静默检查一次
     private static volatile UpdateInfo cachedInfo = null;
@@ -114,6 +115,32 @@ public class UpdateManager {
             }
         }
         return updateClient;
+    }
+
+    /**
+     * 版本元数据专用 client（update.json / Release API）。与下载 {@link #client()} 的区别：
+     * 元数据检查要跨 4 个源串行探测，任何一段拖太久，用户看到的就是「一直卡在检查更新中」——
+     * 所以关掉连接失败静默重试（被重置的源多试一次只是把等待翻倍）、缩短读超时、
+     * 加 callTimeout 总闸（DNS 挂死不受 connect/read 超时约束，只有总闸能兜底）。
+     * 下载大文件不能套 callTimeout（慢网整包要远超 20 秒），所以拆成两个 client。
+     */
+    private static OkHttpClient metadataClient() {
+        if (metadataClient == null) {
+            synchronized (UpdateManager.class) {
+                if (metadataClient == null) {
+                    metadataClient = NetWorkUtil.setOkHttpSsl(new OkHttpClient.Builder())
+                            .followRedirects(true)
+                            .followSslRedirects(true)
+                            .dns(new NetWorkUtil.Inet4Selector())
+                            .retryOnConnectionFailure(false)
+                            .connectTimeout(10, TimeUnit.SECONDS)
+                            .readTimeout(15, TimeUnit.SECONDS)
+                            .callTimeout(20, TimeUnit.SECONDS)
+                            .build();
+                }
+            }
+        }
+        return metadataClient;
     }
 
     /**当前生效的镜像前缀（空串 = 直连）。*/
@@ -179,7 +206,19 @@ public class UpdateManager {
      * 网络失败抛 IOException；两路都拿不到版本元数据时返回 versionCode=0 的
      * {@link UpdateInfo}（isUsable()==false，只够展示"发布页/日志"，无法自动比较版本）。
      */
+    /**
+     * 逐源探测的回调：检查页用它把「正在尝试哪个源」刷到界面上，
+     * 避免串行探测期间长时间无反馈被当成卡死。autoCheck 等静默路径传 null。
+     */
+    public interface SourceListener {
+        void onTrying(String sourceName);
+    }
+
     public static UpdateInfo fetchLatest() throws IOException {
+        return fetchLatest(null);
+    }
+
+    public static UpdateInfo fetchLatest(SourceListener listener) throws IOException {
         UpdateInfo info = null;
         //元数据信任与镜像分离：update.json 永远先走 github.com 直连（镜像无法伪造直连拿到
         //的哈希），直连失败才退回镜像取元数据；即便镜像同时篡改了哈希与 APK 包体，
@@ -187,6 +226,7 @@ public class UpdateManager {
         //候选源：直连 → 用户选择的镜像 → 没选镜像时依次试内置镜像
         //（国内默认配置下直连几乎必然失败，不探测镜像的话"启动检查更新"等于不可用）
         for (String prefix : checkSources()) {
+            if (listener != null) listener.onTrying(sourceName(prefix));
             try {
                 info = fetchViaUpdateJson(prefix);
             } catch (IOException ignored) {
@@ -198,9 +238,18 @@ public class UpdateManager {
             cachedInfo = info;
             return info;
         }
+        if (listener != null) listener.onTrying("GitHub API");
         info = fetchViaApi();
         cachedInfo = info;
         return info;
+    }
+
+    /**源的展示名：空串 = 直连，镜像取 host*/
+    private static String sourceName(String prefix) {
+        if (prefix == null || prefix.isEmpty()) return "直连";
+        String host = prefix.replaceFirst("^https?://", "");
+        int slash = host.indexOf('/');
+        return slash == -1 ? host : host.substring(0, slash);
     }
 
     /** 检查更新的候选源：空串表示直连；配了镜像就只跟用户的选择（尊重手动设置） */
@@ -219,7 +268,7 @@ public class UpdateManager {
     private static UpdateInfo fetchViaUpdateJson(String prefix) throws IOException {
         String url = applyMirror(prefix, UPDATE_JSON_URL);
         Request request = new Request.Builder().url(url).header("User-Agent", USER_AGENT).build();
-        try (Response response = client().newCall(request).execute()) {
+        try (Response response = metadataClient().newCall(request).execute()) {
             try (ResponseBody body = response.body()) {
                 if (response.code() == 404) return null;   //最新 release 还没上传 update.json：走 API 兜底
                 if (!response.isSuccessful() || body == null)
@@ -256,7 +305,7 @@ public class UpdateManager {
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", USER_AGENT)
                 .build();
-        try (Response response = client().newCall(request).execute()) {
+        try (Response response = metadataClient().newCall(request).execute()) {
             try (ResponseBody body = response.body()) {
                 if (!response.isSuccessful() || body == null)
                     throw new IOException("HTTP " + response.code() + (response.code() == 403 ? "（可能触发了接口频率限制）" : ""));

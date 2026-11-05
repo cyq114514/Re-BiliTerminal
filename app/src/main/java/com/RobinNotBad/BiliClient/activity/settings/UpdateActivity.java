@@ -164,7 +164,12 @@ public class UpdateActivity extends BaseActivity {
 
         CenterThreadPool.run(() -> {
             try {
-                UpdateInfo latest = UpdateManager.fetchLatest();
+                //逐源回调刷到界面上：串行探测直连/镜像期间不再是一行死文案，
+                //用户能看出在尝试哪个源、是慢还是死
+                UpdateInfo latest = UpdateManager.fetchLatest(source -> runOnUiThread(() -> {
+                    if (isDestroyed() || isFinishing()) return;
+                    statusView.setText("正在检查更新……（" + source + "）");
+                }));
                 runOnUiThread(() -> {
                     if (isDestroyed() || isFinishing()) return;
                     if (UpdateManager.isNewer(latest)) displayInfo(latest);
@@ -178,10 +183,13 @@ public class UpdateActivity extends BaseActivity {
                         displayNotes(latest);
                     }
                 });
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                //必须兜到 Throwable：只 catch Exception 时 Error 会击穿到线程池的兜底
+                //（只弹 toast 不回调本页），状态栏就永远停在"正在检查更新……"
+                String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 runOnUiThread(() -> {
                     if (isDestroyed() || isFinishing()) return;
-                    statusView.setText("检查更新失败：" + e.getMessage() + "\n请检查网络后点击\"重新检查\"");
+                    statusView.setText("检查更新失败：" + message + "\n请检查网络后点击\"重新检查\"");
                     downloadButton.setVisibility(View.VISIBLE);
                     downloadButton.setText("重新检查");
                 });
