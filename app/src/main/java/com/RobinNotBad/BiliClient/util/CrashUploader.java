@@ -43,8 +43,16 @@ import okhttp3.Response;
 public final class CrashUploader {
 
     /** 自建收集服务（Supabase 表 crash_reports）。publishable key 只能插入、读不到数据。 */
-    private static final String ENDPOINT =
+    private static final String DIRECT_ENDPOINT =
             "https://yiplvonquoxpfrcayozg.supabase.co/rest/v1/crash_reports";
+
+    /**
+     * 官网反代（netlify/functions/crash.mjs）。
+     * 实测部分网络直连 supabase.co 会被重置/拒连（类头注释「上报失败是常态」的来源），
+     * netlify 域名可达性好得多，所以先走反代、失败再回落直连。
+     */
+    private static final String PROXY_ENDPOINT =
+            "https://re-biliterminal.netlify.app/.netlify/functions/crash";
     private static final String API_KEY = "sb_publishable_c4ZISmj36Nn0stegNoAszA_SlWp-3Xr";
 
     private static final MediaType JSON_TYPE = MediaType.parse("application/json; charset=utf-8");
@@ -313,10 +321,23 @@ public final class CrashUploader {
     // ---------------------------------------------------------------- 内部实现
 
     private static boolean upload(JSONObject report) {
+        //先反代后直连：反代没连上/5xx 才付出第二次请求的代价；
+        //4xx 是服务端明确拒绝（字段/表约束），两条路结果一致，不必再试直连
+        if (post(PROXY_ENDPOINT, report)) return true;
+        int proxyCode = lastHttpCode;
+        if (proxyCode >= 400 && proxyCode < 500) return false;
+        boolean ok = post(DIRECT_ENDPOINT, report);
+        if (!ok) {
+            CrashTrace.log("上报: 反代与直连均失败（反代 HTTP " + proxyCode + "）");
+        }
+        return ok;
+    }
+
+    private static boolean post(String endpoint, JSONObject report) {
         try {
             lastHttpCode = -1;
             Request request = new Request.Builder()
-                    .url(ENDPOINT)
+                    .url(endpoint)
                     .addHeader("apikey", API_KEY)
                     .addHeader("Authorization", "Bearer " + API_KEY)
                     .addHeader("Prefer", "return=minimal")
