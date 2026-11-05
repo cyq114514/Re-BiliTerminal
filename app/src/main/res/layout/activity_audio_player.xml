@@ -33,12 +33,28 @@
             android:layout_height="wrap_content"
             android:layout_marginVertical="3dp"
             android:layout_marginEnd="10dp"
+            android:layout_toStartOf="@id/stopBtn"
+            android:layout_toLeftOf="@id/stopBtn"
+            android:background="?attr/selectableItemBackground"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:text="队列"
+            android:textSize="13sp" />
+
+        <!--停止并退出：之前应用内没有任何能关掉播放服务的入口，
+            服务只能靠通知栏关闭，顶部悬浮胶囊也因此关不掉-->
+        <TextView
+            android:id="@+id/stopBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginVertical="3dp"
+            android:layout_marginEnd="10dp"
             android:layout_toStartOf="@id/timeText"
             android:layout_toLeftOf="@id/timeText"
             android:background="?attr/selectableItemBackground"
             android:paddingHorizontal="8dp"
             android:paddingVertical="2dp"
-            android:text="队列"
+            android:text="停止"
             android:textSize="13sp" />
 
         <!--补齐顶栏时钟：setRound 的圆屏重排依赖 timeText，缺失会在圆屏模式下每次进页报错（E-01）-->

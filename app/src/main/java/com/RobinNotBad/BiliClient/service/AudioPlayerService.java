@@ -355,6 +355,22 @@ public class AudioPlayerService extends Service {
         return START_NOT_STICKY;
     }
 
+    /**
+     * 用户在最近任务里划掉应用 = 明确的「退出」意图。之前前台服务继续存活，
+     * 重开应用后顶部悬浮胶囊按 {@code isRunning()} 又出现，且应用内没有任何关闭入口。
+     * 这里选择停止播放并收摊（与「清理后台」的预期一致）；想继续后台听歌请用通知栏控制，别划卡片。
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Logu.i(TAG, "onTaskRemoved: 用户清理后台，停止播放");
+        try {
+            stopPlayback();
+        } catch (Throwable t) {
+            Logu.e(TAG, "onTaskRemoved 停止失败: " + t);
+        }
+    }
+
     @Override
     public void onDestroy() {
         //先落盘再销毁：此刻 positionMs 还是最后一次轮询到的有效值
@@ -747,6 +763,15 @@ public class AudioPlayerService extends Service {
                     } catch (Throwable ignored) {
                     }
                 }
+                //无极调音：与播放页共用 player_volume_gain（0~100，换算成 0~1 软件增益）。
+                //ijk 的 setVolume 是实例级采样乘算，听歌每次换歌都重建实例，必须每次重套
+                try {
+                    float gain = Math.max(0f, Math.min(1f,
+                            SharedPreferencesUtil.getFloat("player_volume_gain", 100f) / 100f));
+                    if (gain < 0.999f) mediaPlayer.setVolume(gain, gain);
+                } catch (Throwable t) {
+                    Logu.e(TAG, "套用音量增益失败: " + t);
+                }
                 try {
                     mediaPlayer.start();
                 } catch (Throwable t) {
@@ -793,11 +818,10 @@ public class AudioPlayerService extends Service {
                         ensureMoreItems();
                         return;
                     }
-                    playing = false;
-                    positionMs = durationMs;
-                    refreshNotification();
-                    updateMediaSession();
-                    notifyState();
+                    //队列播完就收摊：以前只置 playing=false，服务带着"暂停"通知永远挂着，
+                    //顶部悬浮胶囊按 isRunning() 判定也就永远不消失
+                    diag("队列播完，停止服务");
+                    stopPlayback();
                 }
                 });
             });
@@ -1079,8 +1103,8 @@ public class AudioPlayerService extends Service {
             playCurrent(skipped + 1);
         } else {
             MsgUtil.showMsgLong("已经是最后一首");
-            playing = false;
-            notifyState();
+            //最后一首也失败了：没有可播的内容，收摊而不是挂着一个"暂停"服务永远留着
+            stopPlayback();
         }
     }
 

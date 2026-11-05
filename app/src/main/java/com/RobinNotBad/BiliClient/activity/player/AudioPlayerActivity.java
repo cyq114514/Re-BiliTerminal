@@ -150,6 +150,11 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
         findViewById(R.id.top).setOnClickListener(v -> finish());
         findViewById(R.id.queueBtn).setOnClickListener(v ->
                 startActivity(new Intent(this, AudioQueueActivity.class)));
+        //停止并退出：停掉播放服务（顶部悬浮胶囊随之消失），不只是退出本页
+        findViewById(R.id.stopBtn).setOnClickListener(v -> {
+            AudioPlayerService.stopService(this);
+            finish();
+        });
         findViewById(R.id.btnPrev).setOnClickListener(v -> AudioPlayerService.previous(this));
         findViewById(R.id.btnNext).setOnClickListener(v -> AudioPlayerService.next(this));
         btnPlay.setOnClickListener(v -> AudioPlayerService.toggle(this));
