@@ -3861,6 +3861,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //也会直接退出播放页，弹幕编辑框打开时误触即丢（X-41）
         text_title.setOnClickListener(view -> finish());
         text_title.setClickable(true);
+        //固定宽度返回热区：标题宽度=屏宽-clock_layout，1.2.9 加电量百分比后右侧块变宽，
+        //标题可点范围跟着缩水；热区钉在左侧 72dp 不随右侧宽度变化。
+        //圆屏模式下标题换行居中、左缘没有视觉锚点，隐藏该热区避免出现"看不见的退出区"
+        View backHot = findViewById(R.id.back_hot);
+        if (backHot != null) {
+            backHot.setOnClickListener(view -> finish());
+            backHot.setVisibility(screen_round ? View.GONE : View.VISIBLE);
+        }
 
         //左侧纵列的小屏保护：进度文字每次重新布局（首次布局/旋转/字号或按钮显隐变化）都重算一次
         if (text_progress != null)

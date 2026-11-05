@@ -132,6 +132,17 @@
                 android:textColor="@color/textwhite"
                 android:textSize="12sp" />
 
+            <!--固定宽度的返回热区：返回=点标题本身，而标题宽度=屏宽-clock_layout。
+                1.2.9 标题栏加了电量百分比后右侧块变宽，标题（含箭头）的可点范围跟着缩水。
+                热区钉在左侧不随右侧宽度变化；电量/时钟区域仍不可点退出（X-41）。
+                注意必须排在 text_title 之后，z 序在其上才能优先接住触摸-->
+            <View
+                android:id="@+id/back_hot"
+                android:layout_width="72dp"
+                android:layout_height="match_parent"
+                android:layout_alignParentStart="true"
+                android:layout_alignParentLeft="true" />
+
             <LinearLayout
                 android:id="@+id/clock_layout"
                 android:layout_width="wrap_content"
