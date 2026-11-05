@@ -79,8 +79,13 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
         }
         holder.desc.setText(user.sign);
 
-        //互关徽章：Holder 复用必须每次重置显隐，非互关项不能残留上一条的徽章
-        holder.badge.setVisibility(showMutualBadge && user.mutualFollow ? View.VISIBLE : View.GONE);
+        //互关徽章：Holder 复用必须每次重置显隐，非互关项不能残留上一条的徽章。
+        //UpListAdapter（详情页联合投稿列表）复用本 Holder 但 cell_up_list 没有 userBadge，
+        //badge 为 null——必须判空，否则联合投稿视频一进详情页就 NPE（CustomLinearManager
+        //会兜成"列表报错"，列表内容直接丢失）
+        if (holder.badge != null) {
+            holder.badge.setVisibility(showMutualBadge && user.mutualFollow ? View.VISIBLE : View.GONE);
+        }
 
         if (user.avatar == null || user.avatar.isEmpty()) {
             holder.avatar.setVisibility(View.GONE);
