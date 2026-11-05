@@ -51,6 +51,10 @@ public class UserInfo implements Parcelable, Serializable {
     public String sex = "";
     public String ipLocation = "";
 
+    //互相关注：relation 接口的 attribute==6（关注/粉丝/分组列表响应里自带，无需额外请求）。
+    //只在查看自己的列表时展示，看别人的列表语义会变（“与对方互关”）
+    public boolean mutualFollow = false;
+
     public UserInfo(long mid, String name, String avatar, String sign, int fans, int following, int level, boolean followed, String notice, int official, String officialDesc, int is_senior_member) {
         this.mid = mid;
         this.name = name;
@@ -183,6 +187,7 @@ public class UserInfo implements Parcelable, Serializable {
         is_follow_display = in.readByte() != 0;
         sex = in.readString();
         ipLocation = in.readString();
+        mutualFollow = in.readByte() != 0;
     }
 
     @Override
@@ -211,6 +216,7 @@ public class UserInfo implements Parcelable, Serializable {
         dest.writeByte((byte) (is_follow_display ? 1 : 0));
         dest.writeString(sex);
         dest.writeString(ipLocation);
+        dest.writeByte((byte) (mutualFollow ? 1 : 0));
     }
 
     @Override

@@ -26,6 +26,8 @@ public class FollowApi {
         @SerializedName("face") public String face;
         @SerializedName("sign") public String sign;
         @SerializedName("mtime") public long mtime;
+        //关系属性：0=无 1=悄悄关注 2=已关注 6=互相关注 128=特别关注（响应里本来就有，此前被丢弃）
+        @SerializedName("attribute") public int attribute;
     }
 
     public static class TagItem {
@@ -41,7 +43,9 @@ public class FollowApi {
         if (resp.data == null || resp.data.list == null || resp.data.list.isEmpty()) return 1;
         for (FollowItem item : resp.data.list) {
             if (item == null) continue;
-            userList.add(new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", item.mtime, 0));
+            UserInfo user = new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", item.mtime, 0);
+            user.mutualFollow = item.attribute == 6;
+            userList.add(user);
         }
         return 0;
     }
@@ -53,7 +57,9 @@ public class FollowApi {
         if (resp.data == null || resp.data.list == null || resp.data.list.isEmpty()) return 1;
         for (FollowItem item : resp.data.list) {
             if (item == null) continue;
-            userList.add(new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", item.mtime, 0));
+            UserInfo user = new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", item.mtime, 0);
+            user.mutualFollow = item.attribute == 6;
+            userList.add(user);
         }
         return 0;
     }
@@ -76,7 +82,9 @@ public class FollowApi {
         if (resp.data == null || resp.data.isEmpty()) return 1;
         for (FollowItem item : resp.data) {
             if (item == null) continue;
-            userList.add(new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", 0));
+            UserInfo user = new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", 0);
+            user.mutualFollow = item.attribute == 6;
+            userList.add(user);
         }
         return 0;
     }

@@ -41,6 +41,24 @@
             android:id="@+id/userName"
             android:text="NappuHidda" />
 
+        <!--互相关注徽章：relation 接口 attribute==6，仅在查看自己的列表时显示；
+            默认 GONE，绑定处按数据重置显隐（Holder 复用）-->
+        <TextView
+            android:id="@+id/userBadge"
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:background="@drawable/background_badge"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="1dp"
+            android:text="互关"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp"
+            android:visibility="gone"
+            android:layout_marginStart="5dp"
+            app:layout_constraintStart_toEndOf="@id/userName"
+            app:layout_constraintTop_toTopOf="@id/userName"
+            app:layout_constraintBottom_toBottomOf="@id/userName" />
+
         <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
             android:layout_height="wrap_content"
             android:layout_width="0dp"

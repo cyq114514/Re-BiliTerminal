@@ -76,6 +76,8 @@ public class FollowUsersActivity extends RefreshListActivity {
             try {
                 int result = mode == 0 ? FollowApi.getFollowingList(mid, page, userList) : FollowApi.getFollowerList(mid, page, userList);
                 adapter = new UserListAdapter(this, userList);
+                //互关徽章只在看自己的列表时展示（attribute==6 是相对被查询者的关系，别人的列表语义不同）
+                adapter.setShowMutualBadge(!pickMode && mid == SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0));
                 if (pickMode) {
                     adapter.setOnUserPickListener(user -> {
                         Intent data = new Intent();

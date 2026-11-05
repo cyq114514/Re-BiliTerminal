@@ -252,6 +252,9 @@ public class FollowGroupAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 }
                 userHolder.desc.setText(user.sign);
 
+                //分组模式只会是自己的关注分组：互关徽章直接按数据显隐（Holder 复用每次重置）
+                userHolder.badge.setVisibility(user.mutualFollow ? View.VISIBLE : View.GONE);
+
                 if (user.avatar == null || user.avatar.isEmpty()) {
                     userHolder.avatar.setVisibility(View.GONE);
                     userHolder.desc.setSingleLine(false);
@@ -310,12 +313,14 @@ public class FollowGroupAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         final TextView name;
         final TextView desc;
         final ImageView avatar;
+        final TextView badge;
 
         public UserHolder(@NonNull View itemView) {
             super(itemView);
             name = itemView.findViewById(R.id.userName);
             desc = itemView.findViewById(R.id.userDesc);
             avatar = itemView.findViewById(R.id.userAvatar);
+            badge = itemView.findViewById(R.id.userBadge);
         }
     }
 

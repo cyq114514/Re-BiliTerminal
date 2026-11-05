@@ -31,10 +31,16 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
 
     final Context context;
     final List<UserInfo> userList;
+    //互关徽章只在查看自己的关注/粉丝列表时显示（看别人的列表 attribute 语义是“与对方互关”）
+    private boolean showMutualBadge = false;
 
     public UserListAdapter(Context context, List<UserInfo> userList) {
         this.context = context;
         this.userList = userList;
+    }
+
+    public void setShowMutualBadge(boolean show) {
+        this.showMutualBadge = show;
     }
 
     /** 「分享至消息 → 更多」选人模式：只回传选中的用户，不打开用户主页 */
@@ -72,6 +78,9 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
             holder.name.setTextColor(holder.defaultNameColor);
         }
         holder.desc.setText(user.sign);
+
+        //互关徽章：Holder 复用必须每次重置显隐，非互关项不能残留上一条的徽章
+        holder.badge.setVisibility(showMutualBadge && user.mutualFollow ? View.VISIBLE : View.GONE);
 
         if (user.avatar == null || user.avatar.isEmpty()) {
             holder.avatar.setVisibility(View.GONE);
@@ -111,6 +120,7 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
         final TextView name;
         final TextView desc;
         final ImageView avatar;
+        final TextView badge;
         //构造时捕获 XML/主题默认色，供非 vip 复用恢复
         final int defaultNameColor;
 
@@ -119,6 +129,7 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
             name = itemView.findViewById(R.id.userName);
             desc = itemView.findViewById(R.id.userDesc);
             avatar = itemView.findViewById(R.id.userAvatar);
+            badge = itemView.findViewById(R.id.userBadge);
             defaultNameColor = name.getTextColors().getDefaultColor();
         }
     }
