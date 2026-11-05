@@ -139,7 +139,7 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     public static class UserInfoHolder extends RecyclerView.ViewHolder {
-        final TextView userName, userFollowings, userLevel, userFans, userMedal, userDesc, userNotice, userOfficial,
+        final TextView userName, userFollowings, userLevel, userFans, userMedal, userDesc, userMeta, userNotice, userOfficial,
                 exclusiveTipLabel, liveRoomLabel, electricPanelHeader;
         final MaterialCardView exclusiveTip, liveRoom, electricPanel;
         final ImageView userAvatar, officialIcon;
@@ -154,6 +154,7 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             super(itemView);
             userName = itemView.findViewById(R.id.userName);
             userDesc = itemView.findViewById(R.id.userDesc);
+            userMeta = itemView.findViewById(R.id.userMeta);
             userNotice = itemView.findViewById(R.id.userNotice);
             userLevel = itemView.findViewById(R.id.userLevel);
             userFans = itemView.findViewById(R.id.userFollowers);
@@ -213,6 +214,21 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 this.userName.setTextColor(Color.parseColor(userInfo.vip_nickname_color));
             this.userName.setText(userInfo.name);
             this.userDesc.setText(userInfo.sign);
+            //性别 / IP 属地：wbi/acc/info 才返回，隐私设置拿不到就整行隐藏（Holder 复用必须每次重置显隐）
+            StringBuilder metaStr = new StringBuilder();
+            if (userInfo.sex != null && !userInfo.sex.isEmpty() && !"保密".equals(userInfo.sex)) {
+                metaStr.append("性别：").append(userInfo.sex);
+            }
+            if (userInfo.ipLocation != null && !userInfo.ipLocation.isEmpty()) {
+                if (metaStr.length() > 0) metaStr.append(" · ");
+                metaStr.append("IP属地：").append(userInfo.ipLocation);
+            }
+            if (metaStr.length() > 0) {
+                this.userMeta.setText(metaStr.toString());
+                this.userMeta.setVisibility(View.VISIBLE);
+            } else {
+                this.userMeta.setVisibility(View.GONE);
+            }
             if (!userInfo.notice.isEmpty())
                 this.userNotice.setText(userInfo.notice);
             else

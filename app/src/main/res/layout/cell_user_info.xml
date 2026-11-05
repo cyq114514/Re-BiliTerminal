@@ -110,6 +110,21 @@
         app:layout_constraintTop_toBottomOf="@id/userFollowers"
         tools:ignore="TouchTargetSizeCheck" />
 
+    <!--性别与 IP 属地：wbi/acc/info 才返回，隐私设置可能拿不到，空串整行隐藏-->
+    <TextView
+        android:id="@+id/userMeta"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:alpha="0.7"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textSize="13sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/userDesc"
+        tools:ignore="TouchTargetSizeCheck" />
+
     <TextView
         android:id="@+id/userNotice"
         android:layout_width="match_parent"
@@ -122,7 +137,7 @@
         android:textSize="13sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/userDesc"
+        app:layout_constraintTop_toBottomOf="@id/userMeta"
         tools:ignore="TouchTargetSizeCheck" />
 
 

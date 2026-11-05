@@ -221,6 +221,10 @@ public class UserInfoApi {
         String sys_notice = "";
         LiveRoom liveroom = null;
         boolean is_follow_display = false;
+        //性别/IP归属地只有 wbi/acc/info 返回（card 接口没有）；
+        //隐私设置可能拿不到，空串按「不显示」处理
+        String userSex = "";
+        String userIpLocation = "";
         try {
             JSONObject spaceJson = getUserSpaceInfo(mid);
             if (spaceJson != null) {
@@ -239,6 +243,8 @@ public class UserInfoApi {
                         is_follow_display = spaceInfo.contract.is_follow_display;
                     }
                 }
+                userSex = spaceJson.optString("sex", "");
+                userIpLocation = spaceJson.optString("ip_location", "");
             }
         } catch (Exception ignored) {
         }
@@ -248,10 +254,14 @@ public class UserInfoApi {
             UserInfo result = new UserInfo(mid, name, avatar, sign, data.follower, attention, level, data.following, notice, official, officialDesc, card.vip.role, sys_notice, liveroom, is_senior_member);
             result.vip_nickname_color = card.vip.nickname_color;
             result.is_follow_display = is_follow_display;
+            result.sex = userSex;
+            result.ipLocation = userIpLocation;
             return result;
         } else {
             UserInfo result = new UserInfo(mid, name, avatar, sign, data.follower, attention, level, data.following, notice, official, officialDesc, sys_notice, liveroom, is_senior_member);
             result.is_follow_display = is_follow_display;
+            result.sex = userSex;
+            result.ipLocation = userIpLocation;
             return result;
         }
     }
