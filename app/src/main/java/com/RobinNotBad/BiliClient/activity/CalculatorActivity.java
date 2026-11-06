@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -16,8 +17,10 @@ import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.activity.privacy.CalcSettingsActivity;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.PrivacyLockUtil;
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 /**
  * 计算器锁屏：伪装与解锁的双重身份。
@@ -31,7 +34,8 @@ import com.RobinNotBad.BiliClient.util.PrivacyLockUtil;
  * 匹配就解锁，不匹配提示密码错误（计算器本身照常可用，有运算符就老老实实算数）。
  * 密码就是用户设置的数字串本身，不做万能码（做后门等于整个功能白做）。
  *
- * <p>忘了密码没有后门：只能去系统设置清除应用数据（会同时清掉登录态）。
+ * <p>忘了密码：长按显示屏 → 设置 → 用户协议，长按协议页标题 5 秒进入真身
+ * （隐藏恢复通道，不用再清数据重登；入口全程无可见提示，伪装不受影响）。
  */
 public class CalculatorActivity extends Activity {
 
@@ -64,6 +68,13 @@ public class CalculatorActivity extends Activity {
         display = findViewById(R.id.calc_display);
         preview = findViewById(R.id.calc_preview);
         buildKeypad();
+
+        //「设置」入口：长按显示屏。伪装页面上没有任何可见入口（伪装底线），
+        //机主从 设置 → 用户协议 可以不输密码进真身（忘记密码的恢复通道）
+        display.setOnLongClickListener(v -> {
+            startActivity(new Intent(this, CalcSettingsActivity.class));
+            return true;
+        });
     }
 
     /**4×5 按钮网格：{标签, 动作标记}。全部同构，代码生成。 */
@@ -158,6 +169,9 @@ public class CalculatorActivity extends Activity {
 
     @SuppressLint({"SetTextI18n", "DefaultLocale"})
     private void onKey(String key) {
+        //按键震动：设置页的「按键震动」开关真实控制这里（默认开，像普通计算器一样）
+        if (SharedPreferencesUtil.getBoolean(CalcSettingsActivity.KEY_CALC_HAPTIC, true))
+            display.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
         switch (key) {
             case "C":
                 current = "0";

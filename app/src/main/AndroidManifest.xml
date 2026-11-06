@@ -614,6 +614,17 @@
             android:exported="false"
             android:label="计算器"
             android:screenOrientation="locked" />
+        <!-- 伪装计算器的「设置」与「用户协议」：忘记密码的隐藏恢复通道（长按显示屏进入） -->
+        <activity
+            android:name=".activity.privacy.CalcSettingsActivity"
+            android:exported="false"
+            android:label="计算器设置"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.privacy.AgreementActivity"
+            android:exported="false"
+            android:label="用户协议"
+            android:screenOrientation="locked" />
         <activity
             android:name=".activity.privacy.PrivacyLockSettingsActivity"
             android:exported="false"
