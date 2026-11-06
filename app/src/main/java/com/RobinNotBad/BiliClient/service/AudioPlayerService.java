@@ -442,6 +442,8 @@ public class AudioPlayerService extends Service {
 
     private void playCurrent(int skipped) {
         final AudioQueue queue = AudioQueue.get();
+        //播放模式在每次换歌时从存档同步一次：设置页/播放页改完立即生效，无需重启服务
+        queue.setPlayMode(SharedPreferencesUtil.getInt(AudioQueue.KEY_AUDIO_PLAY_MODE, AudioQueue.MODE_LIST_LOOP));
         final VideoCard item = queue.current();
         if (item == null) {
             diag("playCurrent: 队列为空，停止");
@@ -805,19 +807,26 @@ public class AudioPlayerService extends Service {
                     diag("onCompletion 位置=" + posNow + "/" + durationMs + "，忽略（误报）");
                     return;
                 }
-                if (AudioQueue.get().hasNext()) {
-                    //播完自动切歌：先把这首落盘（播到结尾会按"听完"口径存 0，下次从头）
+                AudioQueue queue = AudioQueue.get();
+                if (queue.getPlayMode() == AudioQueue.MODE_SINGLE_LOOP) {
+                    //单曲循环：原地重播（播到结尾按"听完"口径存 0，下次从头）
                     persistProgressNow();
-                    AudioQueue.get().next();
+                    playCurrent(0);
+                    return;
+                }
+                //懒加载还有下一页且本页已见底：先等页拉完再切，否则列表循环会把
+                //没加载出来的歌永远绕过去（绕着已加载区间打转，其余页再也不播）
+                if (queue.hasMore() && !queue.hasNext()) {
+                    diag("本页播完，等待懒加载下一页");
+                    waitingForMore = true;
+                    ensureMoreItems();
+                    return;
+                }
+                if (queue.next() != null) {
+                    //播完自动切歌：先把这首落盘（next() 内部处理随机/列表循环回卷）
+                    persistProgressNow();
                     playCurrent(0);
                 } else {
-                    AudioQueue queue = AudioQueue.get();
-                    if (queue.hasMore()) {
-                        diag("本页播完，等待懒加载下一页");
-                        waitingForMore = true;
-                        ensureMoreItems();
-                        return;
-                    }
                     //队列播完就收摊：以前只置 playing=false，服务带着"暂停"通知永远挂着，
                     //顶部悬浮胶囊按 isRunning() 判定也就永远不消失
                     diag("队列播完，停止服务");

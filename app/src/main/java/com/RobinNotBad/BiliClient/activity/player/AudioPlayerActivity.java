@@ -1,7 +1,9 @@
 package com.RobinNotBad.BiliClient.activity.player;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -37,7 +39,10 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
     private ImageView cover;
     private TextView title, upName, tvPosition, tvDuration, tvQueueInfo;
     private SeekBar seekBar;
+    private SeekBar volumeBar;
+    private TextView btnPlayMode;
     private ImageButton btnPlay;
+    private AudioManager audioManager;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean dragging = false;
@@ -162,6 +167,43 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
         findViewById(R.id.btnNext).setOnClickListener(v -> AudioPlayerService.next(this));
         btnPlay.setOnClickListener(v -> AudioPlayerService.toggle(this));
 
+        //系统音量（1.3.2 反馈：听歌时要能调音量）：手表/点读笔没有音量键，给一条应用内音量条
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        volumeBar = findViewById(R.id.volumeBar);
+        if (audioManager != null && volumeBar != null) {
+            volumeBar.setMax(audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            volumeBar.setProgress(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
+            volumeBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                    if (fromUser && audioManager != null)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, progress, 0);
+                }
+
+                @Override public void onStartTrackingTouch(SeekBar bar) { }
+                @Override public void onStopTrackingTouch(SeekBar bar) { }
+            });
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                android.content.res.ColorStateList primary =
+                        android.content.res.ColorStateList.valueOf(ThemeManager.getPrimary());
+                volumeBar.setProgressTintList(primary);
+                volumeBar.setThumbTintList(primary);
+            }
+        }
+
+        //播放模式（1.3.2 反馈）：点击在 列表循环→单曲循环→随机 间轮换，立即存档并生效
+        btnPlayMode = findViewById(R.id.btnPlayMode);
+        if (btnPlayMode != null) {
+            btnPlayMode.setOnClickListener(v -> {
+                int mode = (AudioQueue.get().getPlayMode() + 1) % 3;
+                AudioQueue.get().setPlayMode(mode);
+                SharedPreferencesUtil.putInt(AudioQueue.KEY_AUDIO_PLAY_MODE, mode);
+                btnPlayMode.setText(AudioQueue.playModeName(mode));
+                MsgUtil.showMsg(AudioQueue.playModeName(mode));
+            });
+            btnPlayMode.setText(AudioQueue.playModeName(AudioQueue.get().getPlayMode()));
+        }
+
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
@@ -246,6 +288,8 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
         tvDuration.setText(formatTime(duration));
         btnPlay.setImageResource(AudioPlayerService.isPlaying()
                 ? R.drawable.btn_player_pause : R.drawable.btn_player_play);
+        if (audioManager != null && volumeBar != null && !volumeBar.isPressed())
+            volumeBar.setProgress(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
 
         String folder = AudioQueue.get().getFolderName();
         String info = AudioQueue.get().positionText()

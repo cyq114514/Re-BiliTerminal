@@ -85,6 +85,7 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.ProgressDiag;
 import com.RobinNotBad.BiliClient.util.ProtobufParser;
+import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
@@ -1823,6 +1824,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     @SuppressLint("SetTextI18n")
     @Override
     public void onPrepared(IMediaPlayer mediaPlayer) {
+        //播放视频时暂停后台音乐（1.3.2 反馈：视频一起放音乐是刻意设计，按约定加开关、默认开）。
+        //放在 onPrepared：真的要出声了才动音乐；isPlaying 兜住"本来就没在放"的情况，toggle 不会误开
+        if (SharedPreferencesUtil.getBoolean("player_pause_bg_music", true)
+                && AudioPlayerService.isPlaying()) {
+            AudioPlayerService.toggle(this);
+        }
         //旧实例的滞后回调：它的 release 已在 player-ops 排队，直接忽略，防止旧事件作用到新实例
         if (mediaPlayer != ijkPlayer) return;
         if (destroyed) {

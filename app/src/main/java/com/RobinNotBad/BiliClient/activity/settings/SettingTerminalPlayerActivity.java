@@ -46,6 +46,11 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                         "手动调整倍速后，之后的视频（含换P/换清晰度）自动应用", "false"));
                 add(new SettingSection("switch", "后台/熄屏继续播放", "player_background",
                         "退到后台或熄屏时继续播放，并挂出通知栏遥控", "false"));
+                //1.3.2 反馈：播放视频时后台音乐一起出声（原刻意设计），加开关默认暂停；
+                //被暂停的音乐从通知栏/顶部悬浮球手动继续，不做自动恢复
+                add(new SettingSection("switch", "播放视频时暂停后台音乐", "player_pause_bg_music",
+                        "开启后，视频起播会自动暂停正在放的歌（从通知栏或顶部悬浮球手动继续）；"
+                                + "关闭则保持两路同时播放", "true"));
                 add(new SettingSection("switch", "默认横屏", "player_autolandscape", "", "false"));
                 add(new SettingSection("switch", "从历史位置播放", "player_from_last",
                         getString(R.string.desc_fromlast),

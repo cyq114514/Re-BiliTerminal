@@ -26,7 +26,17 @@ public class AudioQueue {
     private final java.util.HashSet<String> keySet = new java.util.HashSet<>();
     //已经拉过并插入过其余分P 的稿件（每个稿件只展开一次，重播不会重复插入）
     private final java.util.HashSet<Long> expandedAids = new java.util.HashSet<>();
+    //播放模式（1.3.2 反馈：听歌要能切单曲循环/随机/列表循环）。
+    //存档键由调用方（服务/播放页）读写，这里只持有内存值
+    public static final int MODE_LIST_LOOP = 0;
+    public static final int MODE_SINGLE_LOOP = 1;
+    public static final int MODE_RANDOM = 2;
+    /** 播放模式的存档键 */
+    public static final String KEY_AUDIO_PLAY_MODE = "audio_play_mode";
+
     private int index = 0;
+    private int playMode = MODE_LIST_LOOP;
+    private final java.util.Random random = new java.util.Random();
     private long mediaId = 0;
     private String order = "";
     private String folderName = "";
@@ -145,8 +155,25 @@ public class AudioQueue {
         return index > 0;
     }
 
+    /** 下一首（通知栏「下一首」与播完自动切歌共用）：随机模式跳随机位，列表循环到尾回卷 */
     public synchronized VideoCard next() {
-        if (!hasNext()) return null;
+        if (items.isEmpty()) return null;
+        if (playMode == MODE_RANDOM && items.size() > 1) {
+            int target;
+            do {
+                target = random.nextInt(items.size());
+            } while (target == index);
+            index = target;
+            return items.get(index);
+        }
+        if (!hasNext()) {
+            //列表循环：回到开头（懒加载未拉完的页由服务层在调用前处理，这里只管已加载区间）
+            if (playMode == MODE_LIST_LOOP) {
+                index = 0;
+                return items.get(0);
+            }
+            return null;
+        }
         index++;
         return items.get(index);
     }
@@ -155,6 +182,23 @@ public class AudioQueue {
         if (!hasPrevious()) return null;
         index--;
         return items.get(index);
+    }
+
+    public synchronized int getPlayMode() {
+        return playMode;
+    }
+
+    public synchronized void setPlayMode(int mode) {
+        if (mode >= MODE_LIST_LOOP && mode <= MODE_RANDOM) playMode = mode;
+    }
+
+    /** 队列进度文案后缀的播放模式名（队列页/播放页展示用） */
+    public static String playModeName(int mode) {
+        switch (mode) {
+            case MODE_SINGLE_LOOP: return "单曲循环";
+            case MODE_RANDOM: return "随机播放";
+            default: return "列表循环";
+        }
     }
 
     public synchronized boolean isActive() {

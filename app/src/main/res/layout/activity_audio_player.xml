@@ -247,6 +247,47 @@
                     app:tint="@color/textwhite" />
             </LinearLayout>
 
+            <!-- 系统音量（1.3.2 反馈：听歌时要能调音量——手表大多没有音量键） -->
+            <LinearLayout
+                android:id="@+id/volumeRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="24dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="音量"
+                    android:textColor="@color/text_gray"
+                    android:textSize="11sp" />
+
+                <SeekBar
+                    android:id="@+id/volumeBar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:contentDescription="播放音量" />
+            </LinearLayout>
+
+            <!-- 播放模式（1.3.2 反馈：单曲循环/随机/列表循环）：点击在三档间轮换 -->
+            <TextView
+                android:id="@+id/btnPlayMode"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:contentDescription="播放模式"
+                android:gravity="center"
+                android:paddingHorizontal="12dp"
+                android:text="列表循环"
+                android:textColor="@color/text_gray"
+                android:textSize="13sp" />
+
             <TextView
                 android:id="@+id/tvQueueInfo"
                 android:layout_width="match_parent"
