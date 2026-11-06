@@ -13,6 +13,7 @@ import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.model.UpdateInfo;
 import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
+import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.LinkUrlUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.UpdateManager;
@@ -246,6 +247,9 @@ public class UpdateActivity extends BaseActivity {
 
     private void startDownload() {
         downloading = true;
+        //下载完成后会把校验通过的安装包导出到公共 Download 目录（供 Wear OS 等
+        //只能调试安装的设备取源文件），先把存储权限要了；不给也不影响安装
+        if (!FileUtil.checkStoragePermission()) FileUtil.requestStoragePermission(this);
         downloadButton.setVisibility(View.GONE);
         installButton.setVisibility(View.GONE);
         cancelButton.setVisibility(View.VISIBLE);
@@ -304,6 +308,14 @@ public class UpdateActivity extends BaseActivity {
         downloadButton.setVisibility(View.GONE);
         installButton.setVisibility(View.VISIBLE);
         statusView.setText(statusView.getText() + "\n\n下载完成，点击\"安装\"进行更新。");
+        //公共 Download 目录里若已有本次安装包（刚导出或上次下载的成品），把路径亮出来：
+        //Wear OS 等拉不起系统安装器的设备要用 adb/文件管理器装这个源文件
+        try {
+            File exported = UpdateManager.exportedApkFile(this, info);
+            if (exported.exists())
+                statusView.append("\n安装包已保存到：" + exported.getAbsolutePath());
+        } catch (Exception ignored) {
+        }
     }
 
     @Override

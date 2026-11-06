@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.provider.Settings;
 
 import androidx.core.content.FileProvider;
@@ -473,6 +474,49 @@ public class UpdateManager {
     }
 
     /**
+     * 公共 Download 目录下的导出位置：Download/Re-BiliTerminal/<同名>.apk。
+     * 用户反馈：部分设备（Wear OS 等）拉不起系统安装器，只能拿安装包源文件调试安装，
+     * 所以校验通过的包要额外存一份到公共目录。
+     */
+    public static File exportedApkFile(Context context, UpdateInfo info) {
+        //targetSdk 26 走 legacy 存储视图，旧 File API 在各手表系统上都可写
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "Re-BiliTerminal");
+        return new File(dir, getApkFile(context, info).getName());
+    }
+
+    /**
+     * 把已通过校验的安装包复制到公共 Download 目录。放在 verifyApkIntegrity 之后是
+     * 刻意的：公共目录里的文件其他应用可读可替换，绝不能出现未验证的包，否则等于
+     * 给"下到一半被换掉的半成品"开了展示位。无存储权限/空间不足时静默放弃，
+     * 内部的安装主流程不受影响。
+     */
+    private static void exportVerifiedApkToDownloads(UpdateInfo info, File apkFile) {
+        try {
+            File target = exportedApkFile(BiliTerminal.context, info);
+            File dir = target.getParentFile();
+            if (dir == null || (!dir.exists() && !dir.mkdirs())) return;
+            if (target.exists()) target.delete();   //同版本重下/续传后覆盖旧导出
+            InputStream in = new FileInputStream(apkFile);
+            try {
+                OutputStream out = new FileOutputStream(target);
+                try {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                    out.flush();
+                } finally {
+                    out.close();
+                }
+            } finally {
+                in.close();
+            }
+        } catch (Exception ignored) {
+            //导出是附加能力：权限没给/空间不足都不打扰用户，安装走内部文件
+        }
+    }
+
+    /**
      * 下载更新包（断点续传 + 流式完整性校验）。
      * 校验失败/取消时抛 IOException 并清理半成品，调用方在后台线程调用。
      */
@@ -547,6 +591,8 @@ public class UpdateManager {
 
             //完整性 + 签名双校验（详见 verifyApkIntegrity）：不通过会删文件并抛异常
             verifyApkIntegrity(context, info, file);
+            //校验通过后才导出到公共 Download 目录：导出失败不影响安装主流程
+            exportVerifiedApkToDownloads(info, file);
             return file;
         } catch (IOException e) {
             downloadCanceled = false;
