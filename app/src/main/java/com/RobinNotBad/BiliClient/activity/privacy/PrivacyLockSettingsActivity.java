@@ -152,7 +152,7 @@ public class PrivacyLockSettingsActivity extends BaseActivity {
                 .setPositiveButton("确定", (dialog, which) -> {
                     if (saveNewPassword(newInput, confirmInput)) {
                         PrivacyLockUtil.setEnabled(true);
-                        MsgUtil.showMsgLong("密码已设置，密码锁已开启。忘了密码只能清除应用数据，请牢记！");
+                        MsgUtil.showMsgLong("密码已设置，密码锁已开启。万一忘了密码：长按假计算器屏幕 → 设置 → 用户协议 → 进入应用。请牢记！");
                         refreshUi();
                     }
                 })

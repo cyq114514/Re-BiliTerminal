@@ -7,7 +7,7 @@ import java.security.MessageDigest;
  *
  * <p>密码只存「固定盐 + 明文」的 SHA-256，不落明文——防的是「直接翻 SharedPreferences 文件」。
  * 盐硬编码在应用里，逆向 APK 可以拿到，所以这只挡君子不挡拆包人：本功能的威胁模型是
- * 防熟人随手翻看，不是防取证，别当成保险箱用。忘了密码没有后门，只能去系统设置清数据。
+ * 防熟人随手翻看，不是防取证，别当成保险箱用。忘了密码可走假计算器设置→用户协议→进入应用兜底（AgreementActivity），不用清数据。
  */
 public class PrivacyLockUtil {
     /** SplashActivity 用它识别「已经验过密码」的回跳（伪装模式下计算器页解锁后跳 Splash）。 */

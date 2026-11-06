@@ -54,7 +54,7 @@ public class SettingPrefActivity extends RefreshListActivity {
                 //隐私与伪装：启动密码锁 + 桌面图标/名称伪装成计算器
                 add(new SettingSection("open", "隐私与伪装",
                         com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class.getName(),
-                        "启动密码锁（计算器界面输入密码进入）与桌面图标/名称伪装；忘密码无后门，只能清除应用数据", ""));
+                        "启动密码锁（计算器界面输入密码进入）与桌面图标/名称伪装；忘密码可走假计算器设置→用户协议→进入应用兜底，无需清数据", ""));
                 add(new SettingSection("switch", "识别链接", "link_enable", getString(R.string.desc_link_enable), "true"));
                 //首页推荐数据源：app 端与 web 端返回的内容不同，用户可按观感自行切换。
                 //默认值必须与 RecommendApi.getRecommend 里的默认值一致（true），否则会重演
