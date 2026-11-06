@@ -543,6 +543,39 @@
             android:label="番剧"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.video.BgmSubjectActivity"
+            android:exported="false"
+            android:label="番剧详情"
+            android:screenOrientation="locked" />
+        <!-- 第三方番剧源：搜索 / 选集 / 数据源管理 / 导入。输入页需要 adjustResize 才能看到输入框 -->
+        <activity
+            android:name=".activity.source.SourceSearchActivity"
+            android:exported="false"
+            android:label="第三方源"
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".activity.source.SourceDetailActivity"
+            android:exported="false"
+            android:label="选集"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.source.SourceMatchActivity"
+            android:exported="false"
+            android:label="选择片源"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.source.SourceListActivity"
+            android:exported="false"
+            android:label="第三方数据源"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.source.SourceImportActivity"
+            android:exported="false"
+            android:label="导入订阅"
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".activity.settings.login.LoginActivity"
             android:exported="false"
             android:label="登录"

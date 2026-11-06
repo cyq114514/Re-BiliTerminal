@@ -12,6 +12,8 @@ public class PlayerData implements Parcelable {
     public static int TYPE_BANGUMI = 1;
     public static int TYPE_LIVE = 2;
     public static int TYPE_LOCAL = 4;
+    /** 第三方番剧源：无 aid/cid/epid，进度与弹幕一律不走 B 站链路 */
+    public static int TYPE_THIRD_PARTY = 5;
 
     public String title = "";
     public String videoUrl = "";
@@ -42,6 +44,23 @@ public class PlayerData implements Parcelable {
      */
     public ArrayList<String> videoUrls = new ArrayList<>();
     public ArrayList<String> audioUrls = new ArrayList<>();
+
+    /**
+     * 第三方源的自定义请求头（只会有白名单键：Referer/User-Agent/Origin/Cookie/Accept*）。
+     *
+     * <p>格式由 {@code SourceMedia.headersForIntent()} 生成：`k\u0001v\n` 拼接。
+     * 为空表示走原来的 B 站请求头逻辑（{@code PlayerApi.mediaHeadersFor}），行为完全不变。
+     */
+    public String extraHeaders = "";
+
+    /**
+     * 第三方源的弹幕匹配信息：番剧名 + 集号。
+     *
+     * <p>第三方资源没有 B 站 cid，只能按「番剧名+集号」去外部弹幕源匹配；
+     * 为空表示不尝试（B 站番剧/普通视频走原有 cid 链路）。
+     */
+    public String danmakuTitle = "";
+    public int danmakuEpisode = 0;
 
     //番剧(PGC)专用维度：上报观看进度必须走 x/click-interface/web/heartbeat，
     //该接口只有带 epid/sid/sub_type 才会把记录记成番剧；x/v2/history/report 没有这些字段。
@@ -92,6 +111,12 @@ public class PlayerData implements Parcelable {
         if (videoUrls == null) videoUrls = new ArrayList<>();
         audioUrls = in.createStringArrayList();
         if (audioUrls == null) audioUrls = new ArrayList<>();
+        //第三方源请求头：与 writeToParcel 末尾严格同序（只能追加在最后）
+        String rawHeaders = in.readString();
+        extraHeaders = rawHeaders != null ? rawHeaders : "";
+        String rawDanmakuTitle = in.readString();
+        danmakuTitle = rawDanmakuTitle != null ? rawDanmakuTitle : "";
+        danmakuEpisode = in.readInt();
         // dashData不序列化，下载时会重新获取
     }
 
@@ -140,6 +165,10 @@ public class PlayerData implements Parcelable {
         //候选地址：只能追加在 P3 末尾，顺序必须与读取侧一致
         dest.writeStringList(videoUrls);
         dest.writeStringList(audioUrls);
+        //第三方源请求头：最后追加，写入侧兜 null（读取侧会还原成空串）
+        dest.writeString(extraHeaders != null ? extraHeaders : "");
+        dest.writeString(danmakuTitle != null ? danmakuTitle : "");
+        dest.writeInt(danmakuEpisode);
         // dashData不序列化，下载时会重新获取
     }
 
@@ -157,5 +186,9 @@ public class PlayerData implements Parcelable {
 
     public boolean isLocal() {
         return type == TYPE_LOCAL;
+    }
+
+    public boolean isThirdParty() {
+        return type == TYPE_THIRD_PARTY;
     }
 }

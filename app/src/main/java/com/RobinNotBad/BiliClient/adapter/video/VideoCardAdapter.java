@@ -59,7 +59,24 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
 
     public void toggleSelected(long aid) {
         if (!selectedAids.add(aid)) selectedAids.remove(aid);
-        notifyDataSetChanged();
+        //原先每点一次都 notifyDataSetChanged 整表重绑（每项都要重新加载封面/文字），
+        //收藏夹多选管理下点选明显掉帧。这里只刷对应那一条；
+        //同一 aid 在列表中不唯一或已不在列表里时退化为全量刷新，视觉结果与原来一致
+        if (videoCardList == null) {
+            notifyDataSetChanged();
+            return;
+        }
+        int first = -1;
+        int matched = 0;
+        for (int i = 0; i < videoCardList.size(); i++) {
+            VideoCard card = videoCardList.get(i);
+            if (card != null && card.aid == aid) {
+                if (first < 0) first = i;
+                matched++;
+            }
+        }
+        if (first >= 0 && matched == 1) notifyItemChanged(first);
+        else notifyDataSetChanged();
     }
 
     public int getSelectedCount() {
@@ -150,6 +167,44 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
                         TerminalContext.getInstance().enterVideoDetailPage(context, videoCard.aid, null, "media");
                     }
                     break;
+                case "third_source": {
+                    //第三方源条目：进「选集」页（线路 → 剧集 → 解析播放）。
+                    //aid/bvid/cid 全为 0，B 站任何按 ID 的逻辑（进度、弹幕、详情反查）都不会被触发
+                    com.RobinNotBad.BiliClient.source.model.SourceSubject subject =
+                            new com.RobinNotBad.BiliClient.source.model.SourceSubject();
+                    subject.sourceId = videoCard.sourceId == null ? "" : videoCard.sourceId;
+                    subject.sourceName = videoCard.upName == null ? "" : videoCard.upName;
+                    subject.title = videoCard.title == null ? "" : videoCard.title;
+                    subject.detailUrl = videoCard.sourceDetailUrl == null ? "" : videoCard.sourceDetailUrl;
+                    subject.sourceSubjectId = videoCard.sourceSubjectId == null ? "" : videoCard.sourceSubjectId;
+                    android.content.Intent intent = new android.content.Intent(context,
+                            com.RobinNotBad.BiliClient.activity.source.SourceDetailActivity.class);
+                    intent.putExtra(com.RobinNotBad.BiliClient.activity.source.SourceDetailActivity.EXTRA_SOURCE_ID,
+                            subject.sourceId);
+                    intent.putExtra(com.RobinNotBad.BiliClient.activity.source.SourceDetailActivity.EXTRA_SUBJECT,
+                            subject);
+                    context.startActivity(intent);
+                    break;
+                }
+                case "third_bgm": {
+                    //Bangumi 条目（B 站没有的番剧）：进「选片源」页，用规范标题去各站点找候选
+                    android.content.Intent intent = new android.content.Intent(context,
+                            com.RobinNotBad.BiliClient.activity.source.SourceMatchActivity.class);
+                    intent.putExtra(com.RobinNotBad.BiliClient.activity.source.SourceMatchActivity.EXTRA_TITLE,
+                            videoCard.title == null ? "" : videoCard.title);
+                    intent.putExtra(com.RobinNotBad.BiliClient.activity.source.SourceMatchActivity.EXTRA_ORIGINAL,
+                            videoCard.sourceOriginal == null ? "" : videoCard.sourceOriginal);
+                    intent.putExtra(com.RobinNotBad.BiliClient.activity.source.SourceMatchActivity.EXTRA_COVER,
+                            videoCard.cover == null ? "" : videoCard.cover);
+                    long bgmId = 0;
+                    try {
+                        bgmId = Long.parseLong(videoCard.sourceSubjectId == null ? "0" : videoCard.sourceSubjectId);
+                    } catch (NumberFormatException ignored) {
+                    }
+                    intent.putExtra(com.RobinNotBad.BiliClient.activity.source.SourceMatchActivity.EXTRA_BGM_ID, bgmId);
+                    context.startActivity(intent);
+                    break;
+                }
                 default:
                     MsgUtil.showMsg("该类型暂不支持打开");
                     break;

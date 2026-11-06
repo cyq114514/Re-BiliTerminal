@@ -228,6 +228,26 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private int seasonType = 0;
     private String bvid = "";
 
+    /**
+     * 第三方番剧源播放：请求头与 B 站链路完全隔离。
+     *
+     * <p>为空表示走原来的 {@code PlayerApi.mediaHeadersFor}（B 站 Referer/UA/Cookie），字节不变。
+     * 非空时只用这份白名单头，绝不附加 B 站 Cookie。
+     */
+    private java.util.Map<String, String> thirdPartyHeaders = java.util.Collections.emptyMap();
+    /** 是否第三方播放（失败文案与重试提示要与 B 站区分） */
+    private boolean isThirdPartyPlayback = false;
+    /** 第三方播放失败提示只弹一次，避免错误码刷屏 */
+    private boolean thirdPartyErrorHintShown = false;
+    /** 本次播放对应的线路 ID：播放器报错时据此自动屏蔽线路 */
+    private String thirdChannelKey = "";
+    /** 第三方弹幕匹配参数（番剧名 + 集号）；为空表示不尝试 */
+    private String thirdDanmakuTitle = "";
+    private int thirdDanmakuEpisode = 0;
+    private boolean thirdDanmakuTried = false;
+    /** 第三方弹幕首次拉取失败后的补拉延迟；只补拉一次，不是定时重试 */
+    private static final long THIRD_DANMAKU_RETRY_MS = 10_000L;
+
     //番剧片头/片尾跳过：片段随取流结果经 Intent 进入，档位来自设置项。
     //判定挂在既有的 250ms 进度 tick 上（见 progressChange），不新增定时器、不新增网络请求
     private SegmentSkipController clipSkipController = null;
@@ -514,6 +534,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         bvid = intent.getStringExtra("bvid");
         if (bvid == null) bvid = "";
 
+        //第三方源：白名单请求头 + 来源标记。为空时下面的分支一律不生效，B 站行为不变
+        thirdPartyHeaders = com.RobinNotBad.BiliClient.source.model.SourceMedia
+                .headersFromIntent(intent.getStringExtra("headers"));
+        isThirdPartyPlayback = intent.getBooleanExtra("third_party", false)
+                || !thirdPartyHeaders.isEmpty();
+        thirdDanmakuTitle = intent.getStringExtra("third_danmaku_title");
+        if (thirdDanmakuTitle == null) thirdDanmakuTitle = "";
+        thirdChannelKey = intent.getStringExtra("third_channel_key");
+        if (thirdChannelKey == null) thirdChannelKey = "";
+        thirdDanmakuEpisode = intent.getIntExtra("third_danmaku_ep", 0);
+
         //片头/片尾片段（取不到就是 null，跳过能力整体不生效）。档位只读一次，
         //播放页中途改设置不生效，避免一次播放内行为前后不一致
         java.util.ArrayList<ClipInfo> clipList = intent.getParcelableArrayListExtra("clipInfoList");
@@ -682,7 +713,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             });
             if (isOnlineVideo) {
                 danmakuFile = new File(cachepath, "danmaku.xml");
-                downdanmu();
+                if (isThirdPartyPlayback && (danmaku_url == null || danmaku_url.isEmpty())) {
+                    //第三方源没有 cid：按番剧名+集号去外部弹幕源匹配，拿到 XML 再走同一条渲染链路
+                    loadThirdPartyDanmaku();
+                } else {
+                    downdanmu();
+                }
             } else {
                 runOnUiThread(() -> btn_danmaku_send.setVisibility(View.GONE));
                 //本地缓存的弹幕必须在主线程渲染：streamDanmaku 会直接操作 DanmakuView，
@@ -755,6 +791,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         btn_auto_next = findViewById(R.id.auto_next_btn);
         btn_quality = findViewById(R.id.button_quality);
         btn_viewpoint = findViewById(R.id.viewpoint_btn);
+        //第三方源没有 B 站 cid，发弹幕必然失败：直接把入口藏掉，避免用户白打一段字
+        if (isThirdPartyPlayback && btn_danmaku_send != null)
+            btn_danmaku_send.setVisibility(View.GONE);
         clipSkipCard = findViewById(R.id.clip_skip_card);
         clipSkipText = findViewById(R.id.clip_skip_text);
         //手动跳过档位用：点了才跳，不自动干预播放
@@ -1617,13 +1656,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         PlayerSentinel.stage("设置数据源");
         try {
             if (isOnlineVideo) {
-                //ijkplayer 走 native 网络栈，不受 networkSecurityConfig 约束：http 播放地址会以明文拉流，
-                //而请求头带着全量登录 Cookie，同网段嗅探即可截获 SESSDATA。B 站媒体 CDN（bilivideo/
-                //bilivideo.cn/akamai 镜像）均支持 https，这里统一升级，老视频返回的 http:// 地址不再明文传输
                 String playUrl = upgradeMediaUrlToHttps(nowurl);
                 //请求头统一走 PlayerApi.mediaHeadersFor：登录 Cookie 只发给 B 站自有媒体域，
                 //第三方 PCDN 地址不再携带 SESSDATA/bili_jct（下载链路一直这么做，播放器此前遗漏）
-                ijkPlayer.setDataSource(playUrl, PlayerApi.mediaHeadersFor(playUrl));
+                //第三方番剧源则用解析阶段得到的白名单头（Referer/UA/Origin/规则 Cookie），
+                //绝不把 B 站登录态发给外站
+                java.util.Map<String, String> headers = thirdPartyHeaders.isEmpty()
+                        ? PlayerApi.mediaHeadersFor(playUrl)
+                        : thirdPartyHeaders;
+                ijkPlayer.setDataSource(playUrl, headers);
             } else
                 ijkPlayer.setDataSource(nowurl);
         } catch (IOException e) {
@@ -1678,7 +1719,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         ijkPlayer.setOnErrorListener((iMediaPlayer, what, extra) -> {
             if (iMediaPlayer != thisPlayer) return true;
             String EReport = "播放器可能遇到错误！\n错误码：" + what + "\n附加：" + extra;
-            Logu.e("ijk-err", EReport);
+            //日志里补上地址摘要（不带 query/token）与来源标记，toast 文案保持原样不变
+            Logu.e("ijk-err", EReport
+                    + " | 第三方=" + isThirdPartyPlayback
+                    + " | url=" + com.RobinNotBad.BiliClient.source.resolve.MediaUrls.summarize(video_url)
+                    + " | 头=" + thirdPartyHeaders.keySet());
+            //第三方线路实测播不了：自动屏蔽，返回选集页后这条不会再出现，也不再为它等超时。
+            //屏蔽有 12h 期限且可在选集页「恢复」，一次 CDN 抖动不会永久丢线路。
+            if (isThirdPartyPlayback && !thirdChannelKey.isEmpty()) {
+                com.RobinNotBad.BiliClient.source.SourceChannelHealth.get()
+                        .notePlaybackFailure(thirdChannelKey);
+            }
             //原来返回 false，错误会继续走到 onCompletion 被当成“播放完毕”，用户会误以为视频播完了；
             //改为标记错误态并提示，点播放按钮重新载入重试（controlVideo 里分发）
             playerError = true;
@@ -1694,7 +1745,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     anim_loading.stop();
                     View circle = findViewById(R.id.circle);
                     if (circle != null) circle.setVisibility(View.GONE);
-                    loading_text0.setText("播放出错\n点屏幕中央的播放键重试");
+                    //第三方源没有「切清晰度重取流」这条退路，失败就是这条线路不通：
+                    //文案要直接指到「返回换线路」，否则用户只能反复点重试
+                    loading_text0.setText(isThirdPartyPlayback
+                            ? "这条线路播不了\n返回上一页可换线路，或点播放键重试"
+                            : "播放出错\n点屏幕中央的播放键重试");
+                    if (isThirdPartyPlayback && !thirdPartyErrorHintShown) {
+                        thirdPartyErrorHintShown = true;
+                        MsgUtil.showMsgLong("该线路播放失败，返回上一页可以换线路");
+                    }
                     if (hasDanmaku && mDanmakuView != null) {
                         mDanmakuView.pause();
                     }
@@ -1808,18 +1867,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
 
         if ((isLiveMode || hasDanmaku) && mDanmakuView != null) {
-            //零点必须跟播放器对齐：无参 start() 内部等价于 start(0)，会把弹幕零点定在
-            //"DFM 准备好的那一刻"；弹幕下载/解析慢于取流时，整场就固定偏后（见 DanmakuView.start）
-            long danmakuAnchor = 0;
-            if (!isLiveMode && progress_history > 5
-                    && SharedPreferencesUtil.getBoolean("player_from_last", true)) {
-                danmakuAnchor = progress_history;
-            }
-            Logu.w("弹幕控制", "start 锚点=" + danmakuAnchor + "ms（progress_history="
-                    + progress_history + "）引擎就绪=" + mDanmakuView.isPrepared());
-            mDanmakuView.start(danmakuAnchor);
-            //起播时 isPlaying 还是 false（本方法最后才置 true），只有用户主动暂停过才需要压回去
-            pauseDanmakuIfUserPaused();
+            startDanmakuEngine(-1);
         }
         if (SharedPreferencesUtil.getBoolean("player_ui_showDanmakuBtn", true)) {
             isDanmakuVisible = !SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true);
@@ -2452,6 +2500,61 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         } else {
             downdanmuOld();
         }
+    }
+
+    /**
+     * 第三方源弹幕：按「番剧名 + 集号」去弹弹play 匹配 → 转 B 站 XML → 走同一条渲染链路。
+     *
+     * <p>失败对用户静默：没凭据/没匹配到/网络失败都只是「没有弹幕」，播放与其它功能不受影响。
+     * 但日志一律走 W 级，否则真机上「为什么这集没弹幕」无迹可查（正式包 D 级不输出）。
+     */
+    private void loadThirdPartyDanmaku() {
+        if (thirdDanmakuTried) return;
+        thirdDanmakuTried = true;
+        fetchThirdPartyDanmaku(false);
+    }
+
+    /**
+     * 真正去拉第三方弹幕，拉到了就装载并启动引擎。
+     *
+     * @param retry 是否为首次失败后的补拉；补拉只做一次
+     */
+    private void fetchThirdPartyDanmaku(boolean retry) {
+        if (thirdDanmakuTitle.isEmpty()
+                || !com.RobinNotBad.BiliClient.source.danmaku.ThirdPartyDanmaku.available()) {
+            Logu.w("third-danmaku", "跳过：标题为空或未配置弹弹play凭据 title=" + thirdDanmakuTitle);
+            return;
+        }
+        final String title = thirdDanmakuTitle;
+        final int episode = thirdDanmakuEpisode;
+        CenterThreadPool.run(() -> {
+            final java.io.File file = com.RobinNotBad.BiliClient.source.danmaku.ThirdPartyDanmaku
+                    .fetch(getApplicationContext(), title, episode);
+            if (file == null) {
+                //这条请求与取流是并发发起的，起播前后正是网络最紧张的时候，首次失败更可能是
+                //超时而不是"这集真没有弹幕"；不补拉的话用户看到的就是"这场没弹幕"
+                if (!retry && !destroyed) {
+                    Logu.w("third-danmaku", "首次拉取失败，" + (THIRD_DANMAKU_RETRY_MS / 1000)
+                            + "s 后补拉一次");
+                    layout_control.postDelayed(() -> {
+                        if (!destroyed) fetchThirdPartyDanmaku(true);
+                    }, THIRD_DANMAKU_RETRY_MS);
+                }
+                return;
+            }
+            runOnUiThread(() -> {
+                if (destroyed || mDanmakuView == null) return;
+                try {
+                    streamDanmaku(file.toString());
+                    hasDanmaku = true;
+                    //装载后必须显式启动：DFM 的 prepare 只装解析器、不启动渲染循环，
+                    //而 onPrepared 里那次 start 在本路径上早被 hasDanmaku=false 挡掉了
+                    startDanmakuEngine(video_now > 0 ? video_now : 0);
+                } catch (Throwable t) {
+                    Logu.e("third-danmaku", "渲染失败：" + t);
+                }
+            });
+        });
     }
 
     private void downdanmuOld() {
@@ -3113,7 +3216,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (left_control.getVisibility() != View.VISIBLE) return;
 
         int available = text_progress.getTop() - layout_top.getBottom();
-        if (available <= 0) return;   //还没完成布局
+        if (available <= 0) {   //还没完成布局
+            //顶栏被异常撑高时这里恒为负、左右控件列会被压成 0 高（1.3.0 就是这么整列消失的）。
+            //布局已完成（进度文字已有 top）却仍不够高度时留一条日志，下次一眼能定位
+            if (layout_top.getHeight() > ToolsUtil.dp2px(80f) && text_progress.getTop() > 0)
+                Logu.w("player_ui", "顶栏高度异常 " + layout_top.getHeight() + "px，控件列可用高度 " + available + "px");
+            return;
+        }
         int budget = available - ToolsUtil.dp2px(4f);
 
         int defaultHeight = ToolsUtil.dp2px(34f);
@@ -3846,12 +3955,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             titleParams.topMargin = padding / 2;
             text_title.setLayoutParams(titleParams);
             text_title.setGravity(Gravity.CENTER);
-
-            TextView textClock = findViewById(R.id.clock);
-            LinearLayout.LayoutParams textClockParams = (LinearLayout.LayoutParams) textClock.getLayoutParams();
-            textClockParams.leftMargin = padding / 2;
-            textClockParams.topMargin = padding / 4;
-            textClock.setLayoutParams(textClockParams);
+            //顶栏的时钟已随 TextClock 一并删除（定位见上一段），圆屏这里不再需要给它补间距
         }
 
         if ((!SharedPreferencesUtil.getBoolean("player_show_online", false)) || aid == 0 || cid == 0)
@@ -3868,6 +3972,20 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (backHot != null) {
             backHot.setOnClickListener(view -> finish());
             backHot.setVisibility(screen_round ? View.GONE : View.VISIBLE);
+            //热区高度贴回顶栏实际高度。XML 里只能写 0dp：顶栏 top 是 wrap_content 的 RelativeLayout，
+            //MATCH_PARENT 子 View 在测量阶段拿到的是「给满可用空间」= AT_MOST(屏高) 再按 EXACTLY 用，
+            //顶栏会被量成整屏，随后 below=top 的左右控件列上下两边全被钉死、量出 0 高度整列消失
+            //（1.3.0 控制面板消失事故）。0dp 不参与测量，这里在每次顶栏重新布局后把高度同步过来，
+            //字号缩放、竖屏/横屏切换都能跟上
+            if (layout_top != null)
+                layout_top.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                                        oldLeft, oldTop, oldRight, oldBottom) -> {
+                    int hotHeight = bottom - top;
+                    if (hotHeight <= 0 || backHot.getHeight() == hotHeight) return;
+                    ViewGroup.LayoutParams hotParams = backHot.getLayoutParams();
+                    hotParams.height = hotHeight;
+                    backHot.setLayoutParams(hotParams);
+                });
         }
 
         //左侧纵列的小屏保护：进度文字每次重新布局（首次布局/旋转/字号或按钮显隐变化）都重算一次
@@ -4221,6 +4339,40 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
         //DFM 的 seekTo 在 DrawHandler 里会落到 RESUME 分支（SEEK_POS → RESUME），
         //暂停态下等于把弹幕又跑起来了，必须立刻压回去
+        pauseDanmakuIfUserPaused();
+    }
+
+    /**
+     * 启动弹幕引擎（并把零点对齐到指定位置）。
+     *
+     * <p><b>为什么必须显式调用</b>：DFM 的 {@code prepare(parser, config)} 只装载解析器，
+     * 不会启动渲染循环——{@code DrawHandler} 的 PREPARE 分支只做 prepare + 回调，
+     * 真正跑起来要 START（{@code DanmakuView.start}）打进 RESUME 分支才行。所以"装载了弹幕文件"
+     * 与"弹幕在画"之间差一次 start。
+     *
+     * <p><b>为什么第三方源必须补这一次</b>：第三方源没有 {@code danmaku_url}，
+     * 进入播放页时 {@code hasDanmaku} 是 false，{@code onPrepared} 里那次启动会被条件挡掉；
+     * 而弹幕要等播放器 prepared 之后才异步拉回来，两者顺序天然错开。
+     *
+     * @param anchorMs 弹幕零点（毫秒）；<b>-1 表示按 B 站续播记忆自动决定</b>，
+     *                 第三方源应传当前播放位置
+     */
+    private void startDanmakuEngine(long anchorMs) {
+        if (mDanmakuView == null) return;
+        long danmakuAnchor = anchorMs;
+        if (danmakuAnchor < 0) {
+            //零点必须跟播放器对齐：无参 start() 内部等价于 start(0)，会把弹幕零点定在
+            //"DFM 准备好的那一刻"；弹幕下载/解析慢于取流时，整场就固定偏后（见 DanmakuView.start）
+            danmakuAnchor = 0;
+            if (!isLiveMode && progress_history > 5
+                    && SharedPreferencesUtil.getBoolean("player_from_last", true)) {
+                danmakuAnchor = progress_history;
+            }
+        }
+        Logu.w("弹幕控制", "start 锚点=" + danmakuAnchor + "ms（progress_history="
+                + progress_history + "）引擎就绪=" + mDanmakuView.isPrepared());
+        mDanmakuView.start(danmakuAnchor);
+        //起播时 isPlaying 还是 false（onPrepared 末尾才置 true），只有用户主动暂停过才需要压回去
         pauseDanmakuIfUserPaused();
     }
 

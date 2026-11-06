@@ -23,6 +23,7 @@ import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.api.DynamicApi;
 import com.RobinNotBad.BiliClient.api.MessageApi;
+import com.RobinNotBad.BiliClient.source.SourceDefaults;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CookieRefresher;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
@@ -222,6 +223,10 @@ public class BiliTerminal extends Application {
             Logu.setFileLoggingEnabled(SharedPreferencesUtil.getBoolean(Logu.KEY_FILE_LOG, false), false);
             //注册设置项监听，让开关切换立即生效（SharedPreferences 只持弱引用，强引用在 Logu 内部）
             Logu.registerPreferenceListener();
+
+            //第三方源开箱即用：首次启动把 assets 内置订阅快照灌进 SourceStore。
+            //延后 300ms + 后台线程：解析 170KB JSON / 63 条规则不占首屏，也避开日志开关与 SP 的初始化窗口
+            startupHandler.postDelayed(() -> CenterThreadPool.run(SourceDefaults::seedIfNeeded), 300);
 
             //登录续期：进程存活期间按小时检查一次 Cookie 是否需要刷新。
             //修复前刷新只在启动页触发一次，App 常驻不重启就会错过续期窗口，Cookie 到期即掉登录。

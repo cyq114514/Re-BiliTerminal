@@ -747,12 +747,36 @@ public class PlayerApi {
     }
 
     public static Intent jumpToPlayer(PlayerData playerData) {
+        return jumpToPlayer(playerData, false);
+    }
+
+    /**
+     * @param forceBuiltInPlayer 强制用内置播放器。
+     *
+     * <p>第三方源必须强制内置：外部播放器（mtvPlayer/aliangPlayer）拿不到我们解析出来的
+     * Referer/UA/Origin，播放请求必然被站点拒绝，用户看到的会是「外部播放器打不开」。
+     */
+    public static Intent jumpToPlayer(PlayerData playerData, boolean forceBuiltInPlayer) {
         Context context = BiliTerminal.context;
         Intent intent = new Intent();
-        switch (SharedPreferencesUtil.getString("player", "null")) {
+        String playerChoice = forceBuiltInPlayer
+                ? "terminalPlayer"
+                : SharedPreferencesUtil.getString("player", "null");
+        switch (playerChoice) {
             case "terminalPlayer":
                 intent.setClass(context, PlayerActivity.class);
                 intent.putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("aid", playerData.aid).putExtra("cid", playerData.cid).putExtra("mid", playerData.mid).putExtra("progress", playerData.progress).putExtra("live_mode", playerData.isLive());
+                //第三方源：把白名单请求头一起带进播放器；为空时播放器仍走 B 站默认头，行为不变
+                if (playerData.extraHeaders != null && !playerData.extraHeaders.isEmpty())
+                    intent.putExtra("headers", playerData.extraHeaders);
+                if (playerData.isThirdParty()) {
+                    intent.putExtra("third_party", true);
+                    //第三方弹幕靠「番剧名+集号」匹配，cid 链路拿不到
+                    if (playerData.danmakuTitle != null && !playerData.danmakuTitle.isEmpty()) {
+                        intent.putExtra("third_danmaku_title", playerData.danmakuTitle);
+                        intent.putExtra("third_danmaku_ep", playerData.danmakuEpisode);
+                    }
+                }
                 //番剧维度随播放器携带，播放中才能周期性走心跳接口上报进度（epid=0 即普通视频，无需传 type）
                 intent.putExtra("epid", playerData.epid).putExtra("seasonId", playerData.seasonId).putExtra("seasonType", playerData.seasonType);
                 if (playerData.bvid != null && !playerData.bvid.isEmpty())

@@ -309,10 +309,27 @@ public class UserInfoApi {
         public int money;
     }
 
+    /** 空间投稿：保持旧行为（按发布时间倒序、不带关键词） */
     public static int getUserVideos(long mid, int page, String searchKeyword, List<VideoCard> videoList) throws IOException, JSONException {
+        return getUserVideos(mid, page, searchKeyword, ORDER_PUBDATE, videoList);
+    }
+
+    /** 空间投稿排序档位：与 web 端 order 参数一致 */
+    public static final String ORDER_PUBDATE = "pubdate";   //最新发布
+    public static final String ORDER_CLICK = "click";       //最多播放
+    public static final String ORDER_STOW = "stow";         //最多收藏
+
+    /**
+     * 空间内搜自己的稿件 + 指定排序。
+     *
+     * <p>order 只认白名单，其余值一律回落到 pubdate：这个参数直接拼进签名串，
+     * 放开任意输入等于让调用方改请求结构。keyword 仍必须先编码再签名（见下）。
+     */
+    public static int getUserVideos(long mid, int page, String searchKeyword, String order, List<VideoCard> videoList) throws IOException, JSONException {
+        if (!ORDER_CLICK.equals(order) && !ORDER_STOW.equals(order)) order = ORDER_PUBDATE;
         //keyword 必须在签名前先编码：含 &/= 的关键词会破坏 query 结构并使 WBI 签名失配；
         //服务端校验的就是编码后的参数串，与 web 端行为一致
-        String url = "https://api.bilibili.com/x/space/wbi/arc/search?keyword=" + NetWorkUtil.urlEncode(searchKeyword) + "&mid=" + mid + "&order_avoided=true&order=pubdate&pn=" + page + "&ps=40&tid=0&web_location=333.999";
+        String url = "https://api.bilibili.com/x/space/wbi/arc/search?keyword=" + NetWorkUtil.urlEncode(searchKeyword) + "&mid=" + mid + "&order_avoided=true&order=" + order + "&pn=" + page + "&ps=40&tid=0&web_location=333.999";
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(DmImgParamUtil.getDmImgParamsUrl(url))).toString();
         ApiResponse<UserVideoData> resp = GsonUtil.fromJson(json,
                 new com.google.gson.reflect.TypeToken<ApiResponse<UserVideoData>>(){}.getType());

@@ -29,8 +29,14 @@ public class TimelineActivity extends RefreshMainActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setMenuClick();
+        //番剧分区统一：点标题栏返回。布局 activity_simple_main_refresh 被推荐/动态等页共用，
+        //不能改 XML 图标，只在本页把标题的箭头换成返回样式
+        setTopbarExit();
         setPageName("时间线");
+        android.widget.TextView pageName = findViewById(com.RobinNotBad.BiliClient.R.id.pageName);
+        if (pageName != null)
+            pageName.setCompoundDrawablesWithIntrinsicBounds(
+                    com.RobinNotBad.BiliClient.R.drawable.arrow_back, 0, 0, 0);
 
         dayInfoList = new ArrayList<>();
 

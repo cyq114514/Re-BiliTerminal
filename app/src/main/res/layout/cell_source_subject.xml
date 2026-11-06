@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 第三方源搜索结果行：封面 48x64 + 标题 + 源名/集数 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="72dp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="4dp">
+
+    <ImageView
+        android:id="@+id/img_cover"
+        android:layout_width="48dp"
+        android:layout_height="64dp"
+        android:contentDescription="@string/source_cover_desc"
+        android:scaleType="centerCrop"
+        android:src="@mipmap/placeholder" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/text_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/text_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_gray"
+            android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

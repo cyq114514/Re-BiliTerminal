@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 顶栏刷新胶囊：与视频卡片同一套 token（card_bg_new 半透明灰 / 10dp 圆角 / 0.5dp 描边）。
+     不做强调色高亮，加载中也不变色；按压时底略实一点作为即时反馈。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_bg_nested" />
+            <stroke
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
+            <corners android:radius="@dimen/card_round_new" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_bg_new" />
+            <stroke
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
+            <corners android:radius="@dimen/card_round_new" />
+        </shape>
+    </item>
+</selector>

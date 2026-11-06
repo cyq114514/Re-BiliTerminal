@@ -187,6 +187,7 @@
 
     <string name="hint_write_reply">写一条友善的评论……</string>
     <string name="hint_search">搜点什么喵~</string>
+    <string name="hint_search_space_video">搜索 TA 的稿件~</string>
     <string name="hint_private_message">爱国诚信友善……</string>
     <string name="hint_start_position">起始位置</string>
     <string name="hint_end_position">结束位置</string>
@@ -320,4 +321,94 @@
         <item>article</item>
     </array>
 
+    <!-- Bangumi 新番（番剧中心） -->
+    <string name="bgm_cover">番剧封面</string>
+    <string name="bgm_detail_title">番剧详情</string>
+    <string name="bgm_open_in_bangumi">在 Bangumi 查看条目</string>
+    <string name="bgm_expand_summary">展开简介 ▾</string>
+    <string name="bgm_collapse_summary">收起简介 ▴</string>
+
+    <!-- 第三方番剧播放源（Animeko Selector 兼容） -->
+    <string name="source_entry">源</string>
+    <string name="source_cover_desc">封面</string>
+
+    <string name="source_search_title">第三方源</string>
+    <string name="source_search_hint">搜索番剧名</string>
+    <string name="source_search_action">搜索</string>
+    <string name="source_manage_short">源</string>
+    <string name="source_search_empty">输入关键词开始搜索</string>
+    <string name="source_search_tip">输入关键词搜索第三方源；点右侧「源」管理数据源</string>
+    <string name="source_search_no_source">还没有可用的数据源\n点「源」→「导入订阅」添加</string>
+    <string name="source_search_running">%1$d/%2$d 源已返回</string>
+    <string name="source_search_count">共 %1$d 条</string>
+    <string name="source_search_none">没有搜到结果\n换个关键词试试</string>
+    <string name="source_search_all_failed">全部源都失败了\n%1$s</string>
+    <string name="source_search_done">共 %1$d 条 · 成功 %2$d 源 / 失败 %3$d 源</string>
+
+    <string name="source_detail_title">选集</string>
+    <string name="source_detail_from">来源：%1$s</string>
+    <string name="source_detail_loading">正在获取线路…</string>
+    <string name="source_detail_no_channel">这个作品没有可用剧集</string>
+    <string name="source_detail_channel_count">%1$d 条线路 · %2$d 集</string>
+    <string name="source_detail_resolving">正在解析：%1$s</string>
+    <string name="source_detail_started">已交给播放器；返回可换线路</string>
+    <string name="source_detail_failed">解析失败，可换线路重试</string>
+    <string name="source_detail_failed_title">没有线路能播</string>
+
+    <string name="source_list_title">第三方数据源</string>
+    <string name="source_list_empty">还没有数据源\n点「恢复默认源」或「导入订阅」</string>
+    <string name="source_list_count">共 %1$d 个源 · 已启用 %2$d 个</string>
+    <string name="source_import_short">导入订阅</string>
+    <string name="source_sniff_off">网页解析：关</string>
+    <string name="source_restore_short">恢复默认源</string>
+    <string name="source_restore_title">恢复默认源</string>
+    <string name="source_restore_message">内置的常用源会合并进列表：同名的按内置配置更新，启停状态与顺序保持不变。\n\n内置列表可能落后于上游，要最新可在「导入订阅」里粘贴订阅地址。</string>
+    <string name="source_restore_done">已恢复，新增 %1$d 个源</string>
+    <string name="source_restore_failed">内置源读取失败，请重试</string>
+    <string name="source_sniff_on">网页解析：开</string>
+
+    <string name="source_action_enable">启用</string>
+    <string name="source_action_disable">停用</string>
+    <string name="source_action_move_up">上移</string>
+    <string name="source_action_move_down">下移</string>
+    <string name="source_action_delete">删除</string>
+    <string name="source_action_hint">选择要执行的操作</string>
+    <string name="source_action_last_error">上次失败：%1$s</string>
+    <string name="source_delete_title">删除数据源</string>
+    <string name="source_delete_message">确定删除「%1$s」？\n订阅更新时可以重新导入。</string>
+    <string name="source_delete_confirm">删除</string>
+
+    <string name="source_import_title">导入订阅</string>
+    <string name="source_import_desc">支持 Animeko 的订阅 / 导出 JSON（factoryId=web-selector）。规则内容由你自行提供，应用不内置任何站点清单；只支持 https 地址。</string>
+    <string name="source_import_url_hint">https://…（订阅地址）</string>
+    <string name="source_import_from_url">从地址导入</string>
+    <string name="source_import_paste_title">或粘贴 JSON（订阅文件 / 导出文件 / 单条配置）</string>
+    <string name="source_import_json_hint">{ "mediaSources": [ … ] }</string>
+    <string name="source_import_parse">解析并导入</string>
+    <string name="source_import_idle">尚未导入</string>
+    <string name="source_import_fetching">正在下载订阅…</string>
+    <string name="source_import_parsing">正在解析…</string>
+
+    <!-- Bangumi 详情页的「播放来源」区块 -->
+    <string name="bgm_source_section">播放来源</string>
+    <string name="bgm_source_search">搜索第三方播放源</string>
+    <string name="bgm_source_hint">第三方源与 B 站播放互不影响，观看进度不会同步到 B 站</string>
+
+    <!-- Bangumi 卡片 → 站点匹配 -->
+    <string name="source_match_title">选择片源</string>
+    <string name="source_match_use_original">用原名搜</string>
+    <string name="source_match_empty">正在准备…</string>
+    <string name="source_match_no_title">没有可用于搜索的标题</string>
+    <string name="source_match_running">%1$s · %2$d/%3$d 源已返回</string>
+    <string name="source_match_done">共 %1$d 条候选 · 成功 %2$d 源 / 失败 %3$d 源</string>
+    <string name="source_match_none">没有站点搜到这部番\n%1$s</string>
+    <string name="source_match_filtered">已过滤 %1$d 条不相关</string>
+    <string name="source_match_search_all">搜索全部源</string>
+    <string name="source_match_all_filtered">站点返回了 %1$d 条，但没有一条标题对得上\n（这些站点在搜不到时会把整页最新内容返回）</string>
+    <string name="source_search_bgm_running">正在番剧库搜索…</string>
+    <string name="source_search_bgm_count">番剧库找到 %1$d 部</string>
+    <string name="source_search_bgm_more">（只显示前 20 条）</string>
+
+    <!-- 顶栏刷新胶囊 -->
+    <string name="refresh">刷新</string>
 </resources>

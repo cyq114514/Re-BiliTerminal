@@ -29,8 +29,8 @@ android {
         minSdk 19
         //noinspection ExpiredTargetSdkVersion
         targetSdk 26
-        versionCode 20261106
-        versionName "1.3.0"
+        versionCode 20261107
+        versionName "1.3.1"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
@@ -44,6 +44,18 @@ android {
         }
 
         resConfigs 'zh'
+
+        //第三方弹幕（弹弹play）凭据：只从 local.properties 读，不入库。
+        //缺失时功能自动关闭（第 3 方播放照常，只是没有弹幕）。
+        def danmakuProps = new Properties()
+        def danmakuPropsFile = project.rootProject.file("local.properties")
+        if (danmakuPropsFile.exists()) {
+            danmakuProps.load(danmakuPropsFile.newDataInputStream())
+        }
+        def dandanAppId = danmakuProps.getProperty("DANDAN_APP_ID", "")
+        def dandanSecret = danmakuProps.getProperty("DANDAN_APP_SECRET", "")
+        buildConfigField "String", "DANDAN_APP_ID", "\"${dandanAppId}\""
+        buildConfigField "String", "DANDAN_APP_SECRET", "\"${dandanSecret}\""
     }
 
     signingConfigs {

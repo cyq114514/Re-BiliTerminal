@@ -24,7 +24,7 @@
             android:lines="1"
             android:text="番剧"
             android:textStyle="bold"
-            app:drawableStartCompat="@drawable/arrow_down" />
+            app:drawableStartCompat="@drawable/arrow_back" />
 
         <com.RobinNotBad.BiliClient.ui.widget.TextClock
             android:id="@+id/timeText"
@@ -57,7 +57,7 @@
                 android:orientation="vertical"
                 app:layout_scrollFlags="scroll">
 
-                <!-- 主 Tab（4个：推荐/追番/索引/新番；推荐页可在设置中关闭）
+                <!-- 主 Tab（4个：推荐/追番/索引/热门；推荐页可在设置中关闭）
                      胶囊式页签：复用筛选 chip 的选择器，选中粉色底白字并加粗 -->
                 <LinearLayout
                     android:id="@+id/tabBar"
@@ -95,10 +95,21 @@
                         android:layout_weight="1" android:gravity="center">
                         <TextView android:id="@+id/tab3" android:layout_width="wrap_content"
                             android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
-                            android:text="新番" android:textSize="13sp"
+                            android:text="热门" android:textSize="13sp"
                             android:textColor="@color/sel_bangumi_tab_text"
                             android:background="@drawable/sel_filter_chip" />
                     </LinearLayout>
+                    <!-- 第三方源入口：固定 40dp，不参与 4 个页签的等分。
+                         5 个等宽格在 213dp 的手表上每格只剩 42dp，中文标签会溢出 -->
+                    <TextView
+                        android:id="@+id/sourceEntry"
+                        android:layout_width="40dp"
+                        android:layout_height="30dp"
+                        android:background="@drawable/sel_filter_chip"
+                        android:gravity="center"
+                        android:text="@string/source_entry"
+                        android:textColor="@color/sel_bangumi_tab_text"
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- 索引筛选栏（动态条件：排序 + 9 组筛选项，默认折叠为 3 行） -->

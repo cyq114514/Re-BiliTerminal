@@ -61,6 +61,10 @@ public class SharedPreferencesUtil {
     public static final String AUDIO_FAST_LOAD = "audio_fast_load";
     //是否已经就"快速加载会占用本地存储"提示过用户，只提示一次
     public static final String AUDIO_FAST_LOAD_ASKED = "audio_fast_load_asked";
+    //Bangumi 接口源：auto（镜像优先自动降级）/direct（官方）/bgmapi/kazumi（镜像）
+    public static final String BGM_BASE_MODE = "bgm_base_mode";
+    //Bangumi 封面是否走 wsrv.nl 图片代理：国内直连 lain.bgm.tv 常失败，默认开启
+    public static final String BGM_IMAGE_PROXY = "bgm_image_proxy";
 
     public static String cookies = "cookies";
     public static String mid = "mid";

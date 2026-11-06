@@ -64,6 +64,19 @@ public class DownloadService extends Service {
     public static volatile DownloadSection section;
     private static long firstDown;
 
+    /**
+     * 下载库常驻单例。原来每个静态方法都新建一次 DownloadSqlHelper 并在结束时 close，
+     * 下载 worker 每取一条任务就要重新 open 一次库（读表结构、恢复 journal）。
+     * SQLiteDatabase 自身线程安全，这里复用同一 helper 与连接，关闭交给进程退出。
+     */
+    private static DownloadSqlHelper downloadDbHelper;
+
+    private static synchronized DownloadSqlHelper getDownloadDbHelper() {
+        if (downloadDbHelper == null)
+            downloadDbHelper = new DownloadSqlHelper(BiliTerminal.context);
+        return downloadDbHelper;
+    }
+
     final String NOTIFICATION_CHANNEL_ID = "biliterminal_download";
     final int FOREGROUND_ID = 1027;
     NotificationCompat.Builder statusBuilder, completionBuilder;
@@ -847,10 +860,8 @@ public class DownloadService extends Service {
 
     public static DownloadSection getFirst() {
         Cursor cursor = null;
-        SQLiteDatabase database = null;
         try {
-            DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-            database = helper.getReadableDatabase();
+            SQLiteDatabase database = getDownloadDbHelper().getReadableDatabase();
 
             if (firstDown >= 0) {
                 cursor = database.rawQuery("select * from download where id=? limit 1",
@@ -878,17 +889,13 @@ public class DownloadService extends Service {
         } finally {
             if (cursor != null)
                 cursor.close();
-            if (database != null)
-                database.close();
         }
     }
 
     public static ArrayList<DownloadSection> getAll() {
         Cursor cursor = null;
-        SQLiteDatabase database = null;
         try {
-            DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-            database = helper.getReadableDatabase();
+            SQLiteDatabase database = getDownloadDbHelper().getReadableDatabase();
             cursor = database.rawQuery("select * from download", null);
             if (cursor == null || cursor.getCount() == 0)
                 return null;
@@ -904,63 +911,41 @@ public class DownloadService extends Service {
         } finally {
             if (cursor != null)
                 cursor.close();
-            if (database != null)
-                database.close();
         }
     }
 
     public static void deleteSection(long id) {
-        SQLiteDatabase database = null;
         try {
-            DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-            database = helper.getWritableDatabase();
-            database.execSQL("delete from download where id=?", new Object[]{id});
+            getDownloadDbHelper().getWritableDatabase()
+                    .execSQL("delete from download where id=?", new Object[]{id});
         } catch (Exception e) {
             MsgUtil.err(e);
-        } finally {
-            if (database != null)
-                database.close();
         }
     }
 
     public static void clear() {
-        SQLiteDatabase database = null;
         try {
-            DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-            database = helper.getWritableDatabase();
-            database.execSQL("delete from download", new Object[]{});
-            database.close();
+            getDownloadDbHelper().getWritableDatabase().execSQL("delete from download", new Object[]{});
         } catch (Exception e) {
             MsgUtil.err(e);
-        } finally {
-            if (database != null)
-                database.close();
         }
     }
 
     public static void setState(long id, String state) {
-        SQLiteDatabase database = null;
         try {
-            DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-            database = helper.getWritableDatabase();
-            database.execSQL("update download set state=? where id=?", new Object[]{state, id});
-            database.close();
+            getDownloadDbHelper().getWritableDatabase()
+                    .execSQL("update download set state=? where id=?", new Object[]{state, id});
         } catch (Exception e) {
             MsgUtil.err(e);
-        } finally {
-            if (database != null)
-                database.close();
         }
     }
 
     public static void startDownload(String title, long aid, long cid, String cover, int qn, String downloadType,
                                      String audioUrl) {
         CenterThreadPool.run(() -> {
-            SQLiteDatabase database = null;
             Cursor cursor = null;
             try {
-                DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-                database = helper.getWritableDatabase();
+                SQLiteDatabase database = getDownloadDbHelper().getWritableDatabase();
 
                 cursor = database.rawQuery("select * from download where aid=? and cid=?",
                         new String[]{String.valueOf(aid), String.valueOf(cid)});
@@ -992,8 +977,6 @@ public class DownloadService extends Service {
             } finally {
                 if (cursor != null)
                     cursor.close();
-                if (database != null)
-                    database.close();
             }
         });
     }
@@ -1001,11 +984,9 @@ public class DownloadService extends Service {
     public static void startDownload(String parent, String child, long aid, long cid, String cover, int qn,
                                      String downloadType, String audioUrl) {
         CenterThreadPool.run(() -> {
-            SQLiteDatabase database = null;
             Cursor cursor = null;
             try {
-                DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-                database = helper.getWritableDatabase();
+                SQLiteDatabase database = getDownloadDbHelper().getWritableDatabase();
 
                 cursor = database.rawQuery("select * from download where aid=? and cid=?",
                         new String[]{String.valueOf(aid), String.valueOf(cid)});
@@ -1037,8 +1018,6 @@ public class DownloadService extends Service {
             } finally {
                 if (cursor != null)
                     cursor.close();
-                if (database != null)
-                    database.close();
             }
         });
     }
@@ -1055,11 +1034,9 @@ public class DownloadService extends Service {
     public static void startDownloadBatch(List<VideoCard> items, int qn) {
         if (items == null || items.isEmpty()) return;
         CenterThreadPool.run(() -> {
-            SQLiteDatabase database = null;
             Cursor cursor = null;
             try {
-                DownloadSqlHelper helper = new DownloadSqlHelper(BiliTerminal.context);
-                database = helper.getWritableDatabase();
+                SQLiteDatabase database = getDownloadDbHelper().getWritableDatabase();
                 int added = 0;
                 for (VideoCard item : items) {
                     if (item == null || item.aid <= 0 || item.cid <= 0 || item.invalid) continue;
@@ -1091,7 +1068,6 @@ public class DownloadService extends Service {
                 Logu.e("批量加入下载失败: " + e);
             } finally {
                 if (cursor != null) cursor.close();
-                if (database != null) database.close();
             }
         });
     }

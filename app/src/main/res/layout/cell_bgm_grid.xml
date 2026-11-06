@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 热门番组卡片：移植 Kazumi BangumiCardV 的形态
+     · 封面 AspectRatio 0.65（宽/高），用 RatioImageView 按列宽推导高度
+     · 圆角 12dp（Kazumi imgRadius），Card elevation=0 + clip antiAlias
+     · 标题区 padding 5/3/5/1、最多 2 行、行距紧凑（Kazumi 用 w500 + letterSpacing 0.3）
+     · 卡片外边距 3dp：配合 GridLayoutManager 得到约 6dp 行距 / 6dp 列距 -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="3dp"
+    android:clickable="true"
+    android:focusable="true"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <com.RobinNotBad.BiliClient.ui.widget.RatioImageView
+            android:id="@+id/img_cover"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/bgm_cover"
+            android:scaleType="centerCrop"
+            android:src="@mipmap/placeholder"
+            app:coverRatio="0.65" />
+
+        <TextView
+            android:id="@+id/text_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:minLines="2"
+            android:paddingLeft="5dp"
+            android:paddingTop="3dp"
+            android:paddingRight="5dp"
+            android:paddingBottom="1dp"
+            android:textSize="12sp" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

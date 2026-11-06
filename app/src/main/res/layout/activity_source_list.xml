@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  数据源管理：一行两个 chip（导入订阅 / 网页解析开关）+ 单列源列表。
+  网页解析开关放在这里而不是设置页：它只影响第三方源，跟 B 站播放无关，放一起才不会被误关。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <RelativeLayout
+        android:id="@+id/top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
+
+        <TextView
+            android:id="@+id/pageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginStart="8dp"
+            android:layout_toStartOf="@id/timeText"
+            android:layout_toLeftOf="@id/timeText"
+            android:lines="1"
+            android:text="@string/source_list_title"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/arrow_back" />
+
+        <com.RobinNotBad.BiliClient.ui.widget.TextClock
+            android:id="@+id/timeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginVertical="3dp"
+            android:layout_marginEnd="8dp"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentEnd="true" />
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top"
+        android:orientation="vertical">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="10dp"
+            android:paddingTop="2dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnImport"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:background="@drawable/sel_filter_chip"
+                    android:gravity="center"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/source_import_short"
+                    android:textColor="@color/sel_bangumi_tab_text"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/btnSniff"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/sel_filter_chip"
+                    android:gravity="center"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/source_sniff_off"
+                    android:textColor="@color/sel_bangumi_tab_text"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/btnRestore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/sel_filter_chip"
+                    android:gravity="center"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/source_restore_short"
+                    android:textColor="@color/sel_bangumi_tab_text"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <TextView
+            android:id="@+id/countText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:textColor="@color/text_gray"
+            android:textSize="11sp" />
+
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+            android:id="@+id/recycler"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/emptyTip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
+        android:drawablePadding="8dp"
+        android:gravity="center"
+        android:text="@string/source_list_empty"
+        android:textAlignment="center"
+        android:textColor="@color/text_gray"
+        android:textSize="13sp"
+        android:visibility="gone"
+        app:drawableTint="@color/text_dim"
+        app:drawableTintMode="src_in"
+        app:drawableTopCompat="@drawable/icon_empty" />
+</RelativeLayout>

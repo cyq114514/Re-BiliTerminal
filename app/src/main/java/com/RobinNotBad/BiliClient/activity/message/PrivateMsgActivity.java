@@ -315,9 +315,10 @@ public class PrivateMsgActivity extends BaseActivity {
                 JSONObject msgResult = PrivateMsgApi.getPrivateMsg(uid, 50, lastSeqno, 0);
                 ArrayList<PrivateMessage> newList = PrivateMsgApi.getPrivateMsgList(msgResult);
                 if (!newList.isEmpty()) {
-                    for (int i = 0; i < PrivateMsgApi.getEmoteJsonArray(msgResult).length(); ++i) {
-                        JSONObject emote = PrivateMsgApi.getEmoteJsonArray(msgResult).getJSONObject(i);
-                        emoteArray.put(emote);
+                    //原先循环条件与循环体各解析一次表情数组：N 条新消息就要重复解析 2N 次
+                    JSONArray newEmotes = PrivateMsgApi.getEmoteJsonArray(msgResult);
+                    for (int i = 0; i < newEmotes.length(); ++i) {
+                        emoteArray.put(newEmotes.getJSONObject(i));
                     }
                     Collections.reverse(newList);
                     runOnUiThread(() -> {
@@ -348,9 +349,10 @@ public class PrivateMsgActivity extends BaseActivity {
                     ArrayList<PrivateMessage> newList = PrivateMsgApi.getPrivateMsgList(allMsg);
                     Collections.reverse(newList);
 
-                    for (int i = 0; i < PrivateMsgApi.getEmoteJsonArray(allMsg).length(); ++i) {
-                        JSONObject emote = PrivateMsgApi.getEmoteJsonArray(allMsg).getJSONObject(i);
-                        emoteArray.put(emote);
+                    //同上：表情数组只解析一次，避免循环内重复解析
+                    JSONArray moreEmotes = PrivateMsgApi.getEmoteJsonArray(allMsg);
+                    for (int i = 0; i < moreEmotes.length(); ++i) {
+                        emoteArray.put(moreEmotes.getJSONObject(i));
                     }
 
                     runOnUiThread(() -> {

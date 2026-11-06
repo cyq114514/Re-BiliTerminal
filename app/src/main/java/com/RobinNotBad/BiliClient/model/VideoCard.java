@@ -29,6 +29,13 @@ public class VideoCard implements Parcelable, Serializable {
     public boolean isFollowed = false; //是否已关注该 UP（app 端靠推荐理由推断，web 端靠 is_followed）
     public boolean invalid = false; //稿件已失效（收藏夹 attr!=0），音频队列等场景应跳过
 
+    // ↓↓↓ 第三方番剧源条目（type = "third_source"）专用。
+    // 不复用 aid/bvid：那些是 B 站 ID，填进第三方条目会让后续任何按 aid 的逻辑串到别的稿件上。
+    public String sourceId = "";        // 数据源 id
+    public String sourceDetailUrl = ""; // 站点条目页
+    public String sourceSubjectId = ""; // 站点内部 id（仅展示/排查）
+    public String sourceOriginal = "";  // 原名 / 别名，用于「用原名再搜一次」
+
     public VideoCard(String title, String upName, String view, String cover, long aid, String bvid, String type) {
         this.title = title;
         this.upName = upName;
@@ -80,6 +87,10 @@ public class VideoCard implements Parcelable, Serializable {
         rcmdReason = in.readString();
         isFollowed = in.readInt() != 0;
         invalid = in.readInt() != 0;
+        sourceId = in.readString();
+        sourceDetailUrl = in.readString();
+        sourceSubjectId = in.readString();
+        sourceOriginal = in.readString();
     }
 
     public static final Creator<VideoCard> CREATOR = new Creator<>() {
@@ -118,5 +129,9 @@ public class VideoCard implements Parcelable, Serializable {
         parcel.writeString(rcmdReason);
         parcel.writeInt(isFollowed ? 1 : 0);
         parcel.writeInt(invalid ? 1 : 0);
+        parcel.writeString(sourceId);
+        parcel.writeString(sourceDetailUrl);
+        parcel.writeString(sourceSubjectId);
+        parcel.writeString(sourceOriginal);
     }
 }

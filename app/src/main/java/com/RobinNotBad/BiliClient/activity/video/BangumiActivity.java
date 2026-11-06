@@ -15,12 +15,13 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
-import com.RobinNotBad.BiliClient.adapter.TimelineAdapter;
+import com.RobinNotBad.BiliClient.adapter.BgmGridAdapter;
 import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter;
 import com.RobinNotBad.BiliClient.api.BangumiApi;
 import com.RobinNotBad.BiliClient.api.BangumiIndexApi;
-import com.RobinNotBad.BiliClient.api.TimelineApi;
-import com.RobinNotBad.BiliClient.model.Timeline;
+import com.RobinNotBad.BiliClient.api.BgmApi;
+import com.RobinNotBad.BiliClient.api.BgmCache;
+import com.RobinNotBad.BiliClient.model.bgm.BgmSubject;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
@@ -87,11 +88,20 @@ public class BangumiActivity extends InstanceActivity {
     private List<VideoCard> indexList;
     private VideoCardAdapter indexAdapter;
 
+    //热门番组（Bangumi）：网格分页，首屏缓存 6 小时
+    private List<BgmSubject> popularList = new ArrayList<>();
+    private BgmGridAdapter popularAdapter;
+    private int popularOffset;
+    private boolean popularLoading, popularEnd;
+    private int popularGeneration;
+
     @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_bangumi);
+        //番剧分区是从导航菜单进入的顶级页，菜单在跳转时已把自己 finish 掉，
+        //所以这里不能用 setTopbarExit()（finish 会直接退出应用）：点返回箭头要回到导航菜单。
         setMenuClick();
 
         tabs = new TextView[]{findViewById(R.id.tab0), findViewById(R.id.tab1),
@@ -106,6 +116,7 @@ public class BangumiActivity extends InstanceActivity {
         filterRows = findViewById(R.id.filterRows);
         filterToggle = findViewById(R.id.filterToggle);
         headerBar = findViewById(R.id.headerBar);
+
         recommendEnabled = SharedPreferencesUtil.getBoolean(
                 SharedPreferencesUtil.BANGUMI_SHOW_RECOMMEND, true);
 
@@ -117,10 +128,36 @@ public class BangumiActivity extends InstanceActivity {
         }
         if (!recommendEnabled) tabs[TAB_RECOMMEND].setVisibility(View.GONE);
 
+        //第三方源入口：只加一个固定宽图标位，不动 4 个页签的等分（手表宽度下第 5 格会溢出）
+        View sourceEntry = findViewById(R.id.sourceEntry);
+        if (sourceEntry != null) {
+            sourceEntry.setOnClickListener(view -> startActivity(
+                    new android.content.Intent(this,
+                            com.RobinNotBad.BiliClient.activity.source.SourceSearchActivity.class)));
+        }
+
         refreshes[TAB_RECOMMEND].setOnRefreshListener(() -> loadRecommend(true));
         refreshes[TAB_FOLLOWING].setOnRefreshListener(() -> loadFollowing(true));
         refreshes[TAB_INDEX].setOnRefreshListener(() -> loadIndex(true));
-        refreshes[TAB_TIMELINE].setOnRefreshListener(this::loadTimeline);
+        //热门番组：网格布局 + 触底续拉（原「新番」页签的 B 站时间线已按需求替换）
+        recyclers[TAB_TIMELINE].setLayoutManager(
+                new androidx.recyclerview.widget.GridLayoutManager(this, popularSpanCount()));
+        recyclers[TAB_TIMELINE].addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView rv, int dx, int dy) {
+                if (dy <= 0 || popularEnd || popularLoading || currentTab != TAB_TIMELINE) return;
+                RecyclerView.LayoutManager manager = rv.getLayoutManager();
+                if (manager == null || manager.getItemCount() == 0) return;
+                int last;
+                if (manager instanceof androidx.recyclerview.widget.GridLayoutManager)
+                    last = ((androidx.recyclerview.widget.GridLayoutManager) manager).findLastVisibleItemPosition();
+                else if (manager instanceof CustomLinearManager)
+                    last = ((CustomLinearManager) manager).findLastVisibleItemPosition();
+                else return;
+                if (last >= manager.getItemCount() - 6) loadPopular(false, false);
+            }
+        });
+        refreshes[TAB_TIMELINE].setOnRefreshListener(() -> loadPopular(true, true));
 
         filterToggle.setOnClickListener(v -> {
             filterExpanded = !filterExpanded;
@@ -210,7 +247,7 @@ public class BangumiActivity extends InstanceActivity {
             if (tab == TAB_RECOMMEND) loadRecommend(true);
             else if (tab == TAB_FOLLOWING) loadFollowing(true);
             else if (tab == TAB_INDEX) loadIndex(true);
-            else loadTimeline();
+            else loadPopular(true, false);
         }
     }
 
@@ -270,31 +307,142 @@ public class BangumiActivity extends InstanceActivity {
         });
     }
 
-    // ============== Tab 3: 新番 ==============
-    private void loadTimeline() {
+    // ============== Tab 3: 热门番组（Bangumi）==============
+
+    //v2：上一版缓存的封面是"百像素方图 + 已套代理"的地址，继续复用会一直糊，
+    //换前缀让旧缓存自然失效（网络正常时首屏就会重取一次）
+    private static final String POPULAR_CACHE_PREFIX = "popular_v2_o";
+
+    /**
+     * 网格列数自适应：按「单格目标宽度 120dp」由屏宽反算，不写死档位。
+     * 320dp 手表→2 列、360/411dp 手机→3 列、600dp 平板→5 列，最宽 6 列。
+     * 封面高度由 RatioImageView 按 2:3 自动推导，所以换列数不会破坏比例。
+     */
+    private int popularSpanCount() {
+        int widthDp = getResources().getConfiguration().screenWidthDp;
+        int span = (int) Math.floor(widthDp / 120f);
+        return Math.max(2, Math.min(6, span));
+    }
+
+    /**
+     * 单格像素宽：RecyclerView 实际宽 / 列数。
+     *
+     * <p>这是图片解码的目标尺寸——等价于 Kazumi 的
+     * {@code memCacheWidth = 显示宽 × devicePixelRatio}。按它取图，
+     * 2 列大格子也能拿到足够像素，不会再出现"小图放大"的马赛克。
+     */
+    private int popularCellWidthPx(int spanCount) {
+        int width = recyclers[TAB_TIMELINE].getWidth();
+        if (width <= 0) width = getResources().getDisplayMetrics().widthPixels;
+        return Math.max(120, width / Math.max(1, spanCount) - dp(6));
+    }
+
+    /**
+     * @param reset        回到第一页（首次进入 / 下拉刷新）
+     * @param forceRefresh 跳过缓存直接请求（仅下拉刷新）
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private void loadPopular(boolean reset, boolean forceRefresh) {
         if (isFinishing()) return;
+        if (popularLoading) {
+            refreshes[TAB_TIMELINE].setRefreshing(false);
+            return;
+        }
+        if (!reset && popularEnd) {
+            refreshes[TAB_TIMELINE].setRefreshing(false);
+            return;
+        }
+        if (reset) {
+            popularOffset = 0;
+            popularEnd = false;
+        }
+
+        final int generation = ++popularGeneration;
+        final int offset = reset ? 0 : popularOffset;
+        final String cacheKey = POPULAR_CACHE_PREFIX + offset;
+
+        if (!forceRefresh) {
+            //缓存先上屏：接口挂了也要能看到上次的榜单，绝不清空
+            java.util.List<BgmSubject> cached = BgmApi.parseCachedList(BgmCache.get(cacheKey));
+            if (!cached.isEmpty()) {
+                applyPopular(cached, reset);
+                loaded[TAB_TIMELINE] = true;
+                if (BgmCache.isFresh(cacheKey, BgmApi.TTL_POPULAR)) {
+                    popularOffset = offset + cached.size();
+                    popularEnd = cached.size() < BgmApi.POPULAR_PAGE_SIZE;
+                    refreshes[TAB_TIMELINE].setRefreshing(false);
+                    return;
+                }
+            }
+        }
+
+        popularLoading = true;
         refreshes[TAB_TIMELINE].setRefreshing(true);
         CenterThreadPool.run(() -> {
+            java.util.List<BgmSubject> result = null;
+            Exception error = null;
             try {
-                List<Timeline.DayInfo> result = TimelineApi.getTimeline("1", 7, 7);
-                if (isFinishing()) return;
-                runOnUiThread(() -> {
-                    if (isFinishing()) return;
-                    TimelineAdapter adapter = new TimelineAdapter(this, new ArrayList<>(result));
-                    recyclers[TAB_TIMELINE].setAdapter(adapter);
-                    loaded[TAB_TIMELINE] = true;
-                    refreshes[TAB_TIMELINE].setRefreshing(false);
-                    if (result.isEmpty()) showTabEmpty(TAB_TIMELINE, "近期没有新番时间线~");
-                    else hideTabEmpty(TAB_TIMELINE);
-                });
+                result = BgmApi.getPopular(BgmApi.POPULAR_PAGE_SIZE, offset);
             } catch (Exception e) {
-                if (!isFinishing()) runOnUiThread(() -> {
-                    refreshes[TAB_TIMELINE].setRefreshing(false);
-                    showTabEmpty(TAB_TIMELINE, "新番时间线加载失败\n下拉重试");
-                    MsgUtil.showMsgLong("新番加载失败，请下拉重试");
-                });
+                error = e;
             }
+            final java.util.List<BgmSubject> list = result;
+            final Exception err = error;
+            runOnUiThread(() -> {
+                popularLoading = false;
+                if (isFinishing() || generation != popularGeneration) return;
+                refreshes[TAB_TIMELINE].setRefreshing(false);
+                if (err != null || list == null) {
+                    if (popularList.isEmpty()) showTabEmpty(TAB_TIMELINE, "热门番组加载失败\n下拉重试");
+                    else MsgUtil.showMsgLong("刷新失败，仍显示上次的数据");
+                    return;
+                }
+                if (list.isEmpty()) {
+                    popularEnd = true;
+                    if (popularList.isEmpty()) showTabEmpty(TAB_TIMELINE, "热门榜单暂时为空~");
+                    return;
+                }
+                applyPopular(list, reset);
+                //缓存的是"这一页原始数据"，跨页去重后的结果不写进单页键
+                BgmCache.put(cacheKey, BgmApi.listToJson(list));
+                popularOffset = offset + list.size();
+                popularEnd = list.size() < BgmApi.POPULAR_PAGE_SIZE;
+                loaded[TAB_TIMELINE] = true;
+            });
         });
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    private void applyPopular(java.util.List<BgmSubject> list, boolean reset) {
+        if (reset) popularList.clear();
+        //分页边界上镜像可能重复给出同一条，按 id 去重再入表（否则网格里出现重影）
+        java.util.HashSet<Long> ids = new java.util.HashSet<>();
+        for (BgmSubject subject : popularList) ids.add(subject.id);
+        for (BgmSubject subject : list) {
+            if (ids.add(subject.id)) popularList.add(subject);
+        }
+
+        if (popularList.isEmpty()) {
+            showTabEmpty(TAB_TIMELINE, "热门榜单暂时为空~");
+            return;
+        }
+        hideTabEmpty(TAB_TIMELINE);
+        if (popularAdapter == null) {
+            int span = popularSpanCount();
+            popularAdapter = new BgmGridAdapter(this, new ArrayList<>(popularList), span,
+                    popularCellWidthPx(span));
+            popularAdapter.setOnItemClickListener(this::openBgmSubject);
+            recyclers[TAB_TIMELINE].setAdapter(popularAdapter);
+        } else {
+            popularAdapter.update(popularList);
+        }
+    }
+
+    private void openBgmSubject(BgmSubject subject) {
+        if (subject == null || subject.id <= 0) return;
+        android.content.Intent intent = new android.content.Intent(this, BgmSubjectActivity.class);
+        intent.putExtra("bgmId", subject.id);
+        startActivity(intent);
     }
 
     // ============== Tab 1: 追番 ==============

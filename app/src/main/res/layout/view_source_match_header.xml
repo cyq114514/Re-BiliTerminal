@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  源匹配页的头部（封面 + 规范标题 + 搜索状态 + 三个操作按钮）。
+
+  它是列表的**第一个 item**，不是 RecyclerView 的兄弟节点：以前钉在屏幕上半部分，
+  手表这种小屏上直接吃掉一半可视区，用户列表往下翻时它也不动。做成 item 之后
+  跟着列表一起滚走，滚回顶部就又能看到。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="10dp"
+        android:paddingTop="2dp">
+
+        <ImageView
+            android:id="@+id/img_cover"
+            android:layout_width="48dp"
+            android:layout_height="64dp"
+            android:contentDescription="@string/source_cover_desc"
+            android:scaleType="centerCrop"
+            android:src="@mipmap/placeholder" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/text_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/text_original"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/text_gray"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:textColor="@color/text_gray"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="10dp"
+        android:paddingBottom="2dp">
+
+        <TextView
+            android:id="@+id/btnOriginal"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:background="@drawable/sel_filter_chip"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="@string/source_match_use_original"
+            android:textColor="@color/sel_bangumi_tab_text"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/btnAll"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/sel_filter_chip"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="@string/source_match_search_all"
+            android:textColor="@color/sel_bangumi_tab_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btnManage"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/sel_filter_chip"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="@string/source_manage_short"
+            android:textColor="@color/sel_bangumi_tab_text"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- 空结果提示跟着头部走：留在页面里居中会和头部（约 140dp）在手表小屏上重叠 -->
+    <TextView
+        android:id="@+id/emptyTip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:drawablePadding="8dp"
+        android:gravity="center"
+        android:paddingHorizontal="10dp"
+        android:text="@string/source_match_empty"
+        android:textAlignment="center"
+        android:textColor="@color/text_gray"
+        android:textSize="13sp"
+        android:visibility="gone"
+        app:drawableTint="@color/text_dim"
+        app:drawableTintMode="src_in"
+        app:drawableTopCompat="@drawable/icon_empty" />
+</LinearLayout>
