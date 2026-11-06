@@ -57,6 +57,12 @@ public class SettingLaboratoryActivity extends RefreshListActivity {
                 add(new SettingSection("switch", "互动视频调试", "player_interaction_debug",
                         "在互动视频播放时，在左侧倍速按钮上方显示调试按钮，可以查看和修改互动视频的变量", "false"));
 
+                add(new SettingSection("title", "短视频", "", "", ""));
+                add(new SettingSection("switch", "预缓冲下一条（实验）", "short_video_prebuffer",
+                        "在后台提前把下一条短视频 prepare 好，翻页即起播（正常情况下也会预取播放地址，"
+                                + "此开关只是额外加一层缓冲）。注意：手表等低配设备同时跑两个硬解实例可能吃力，"
+                                + "出现卡顿/加载失败请关闭本开关。", "false"));
+
                 add(new SettingSection("title", "网络请求", "", "", ""));
                 add(new SettingSection("input_float", "接口重试间隔（秒）", SharedPreferencesUtil.API_RETRY_INTERVAL_SECONDS,
                         getString(R.string.setting_lab_api_retry_interval), "0.1"));

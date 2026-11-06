@@ -83,6 +83,8 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
     private static final float BOOST_SPEED = 2f;
     /** 剩余几条时预取下一批 */
     private static final int LOAD_MORE_THRESHOLD = 3;
+    /** 提前预取播放地址的条数（结果缓存在 item 上，翻页时省一轮取流） */
+    private static final int PREFETCH_AHEAD = 2;
     /** 起播超时：冷连接（DNS+TLS+moov+解码器）慢一点也要给足，v1 的 8 秒对弱网太紧 */
     private static final long PREPARE_TIMEOUT_MS = 15000;
     /** prepare 完成到首帧的超时：解码器就绪了却一直不出画，多半是硬解/渲染问题 */
@@ -129,6 +131,14 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
     private boolean forceSoftDecode = false;
     /** 首帧是否已经真的画出来了（MEDIA_INFO_VIDEO_RENDERING_START） */
     private boolean firstFrameShown = false;
+
+    /** 实验性预缓冲（实验室开关 short_video_prebuffer）：下一条的第二播放器实例，
+     * 不挂 Surface 只 prepare；翻页命中则直接换实例，任何异常回落常规起播路径 */
+    private IjkMediaPlayer preloadPlayer;
+    private int preloadPosition = -1;
+    private boolean preloadPrepared = false;
+    /** 预缓冲代次：释放/换绑后，迟到的回调与后台任务一律作废 */
+    private int preloadToken = 0;
 
     private GestureDetector gestureDetector;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -460,33 +470,7 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
     private void bindPlayerListeners(final IjkMediaPlayer mp, final int token) {
         mp.setOnPreparedListener(x -> {
             if (x != mp || token != playToken || destroyed) return;
-            prepared = true;
-            setStatus("已准备 dur=" + getDurationSafe() + "ms");
-            showPlayHint("解码中…");
-            //按视频自身宽高比把画面放进容器（contain，留黑边），
-            //此前 TextureView 恒为 match_parent，任何非容器比例的稿件都会被拉伸
-            applyVideoAspect(x);
-            //无极调音：与播放页共用 player_volume_gain（0~100 → 0~1 软件增益）。
-            //ijk 的 setVolume 是实例级采样乘算，短视频换条会 dropPlayer 重建实例，
-            //所以每次 prepared 都要重套，否则增益永远只对上一次设置的实例生效
-            try {
-                float gain = Math.max(0f, Math.min(1f,
-                        SharedPreferencesUtil.getFloat("player_volume_gain", 100f) / 100f));
-                if (gain < 0.999f) x.setVolume(gain, gain);
-            } catch (Throwable ignored) {
-            }
-            if (!userPaused && shellActive) {
-                try {
-                    x.start();
-                } catch (Throwable ignored) {
-                }
-            }
-            ShortVideoPagerAdapter.Holder holder = holderAt(currentIndex);
-            if (holder != null) holder.setBuffering(false);
-            handler.removeCallbacks(progressRunnable);
-            handler.post(progressRunnable);
-            //prepare 完成只代表解码器就绪，画面还没出来：换一段更短的看门狗盯首帧
-            armWatchdog(token, FIRST_FRAME_TIMEOUT_MS);
+            handlePlayerPrepared(x, token);
         });
         mp.setOnCompletionListener(x -> {
             if (x != mp || token != playToken || destroyed) return;
@@ -638,6 +622,8 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         //每换一条：操作栏先亮一下，3.5 秒后自动收起（双击仍可随时叫出来）
         setControlsVisible(true);
         playCurrent(position);
+        prefetchUpcoming(position);
+        armPrebuffer(position + 1);
         maybeLoadMore();
         if (getActivity() instanceof ShortVideoPlayerActivity) {
             ((ShortVideoPlayerActivity) getActivity()).onFeedAnchorChanged();
@@ -675,7 +661,183 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
             });
             return;
         }
+        if (trySwapPrebuffer(position)) return;
         startPlayback(item, position);
+    }
+
+    // ---------------------------------------------------------------- 预取与预缓冲
+
+    /**
+     * 预取后面几条的播放地址：{@link ShortVideoFeedApi#fetchVideoUrl} 的结果缓存在
+     * item 上，翻页时 {@link #playCurrent} 直接命中，省掉「补 cid + 取流」一轮网络。
+     * 只补还没有地址的条目，取流失败静默（真翻到那条时走原有失败处理）。
+     */
+    private void prefetchUpcoming(int fromPosition) {
+        for (int i = fromPosition + 1; i <= fromPosition + PREFETCH_AHEAD && i < items.size(); i++) {
+            final ShortVideoItem item = items.get(i);
+            if (item == null) continue;
+            if (!item.videoUrlList.isEmpty() || !TextUtils.isEmpty(item.videoUrl)) continue;
+            CenterThreadPool.run(() -> {
+                try {
+                    ShortVideoFeedApi.fetchVideoUrl(item);
+                } catch (Throwable ignored) {
+                }
+            });
+        }
+    }
+
+    private boolean prebufferEnabled() {
+        return SharedPreferencesUtil.getBoolean("short_video_prebuffer", false);
+    }
+
+    /**
+     * 实验性预缓冲：为 position 起第二播放器实例，不挂 Surface 只 prepareAsync
+     * （start-on-prepared 已关，prepare 完不会出声）。手表扛不住多个硬解实例
+     * （见类注释），所以放在实验室开关后面、默认关闭；任何一步失败都静默回落
+     * 「纯预取地址」模式，不影响正常播放。
+     */
+    private void armPrebuffer(int position) {
+        releasePrebuffer();
+        if (position < 0 || position >= items.size()) return;
+        if (!prebufferEnabled() || destroyed) return;
+        final ShortVideoItem item = items.get(position);
+        if (item == null) return;
+        final int token = ++preloadToken;
+        CenterThreadPool.run(() -> {
+            try {
+                if (destroyed || token != preloadToken) return;
+                if (item.videoUrlList.isEmpty() && TextUtils.isEmpty(item.videoUrl)) {
+                    String err = ShortVideoFeedApi.fetchVideoUrl(item);
+                    if (err != null) return;
+                }
+                if (destroyed || token != preloadToken) return;
+                final String raw = !item.videoUrlList.isEmpty() ? item.videoUrlList.get(0) : item.videoUrl;
+                if (TextUtils.isEmpty(raw)) return;
+                final String url = ShortVideoFeedApi.upgradeMediaUrl(raw);
+                handler.post(() -> {
+                    if (destroyed || token != preloadToken || preloadPlayer != null) return;
+                    try {
+                        IjkMediaPlayer mp = new IjkMediaPlayer();
+                        applyPlayerOptions(mp);
+                        mp.setDataSource(url, PlayerApi.mediaHeadersFor(url));
+                        mp.setOnPreparedListener(x -> {
+                            if (x == mp && token == preloadToken && !destroyed) {
+                                preloadPrepared = true;
+                                Logu.d(TAG, "预缓冲就绪 pos=" + preloadPosition);
+                            }
+                        });
+                        mp.setOnErrorListener((x, what, extra) -> {
+                            Logu.d(TAG, "预缓冲失败 what=" + what);
+                            releasePrebuffer();
+                            return true;
+                        });
+                        preloadPlayer = mp;
+                        preloadPosition = position;
+                        preloadPrepared = false;
+                        mp.prepareAsync();
+                        Logu.d(TAG, "预缓冲启动 pos=" + position);
+                    } catch (Throwable e) {
+                        Logu.d(TAG, "预缓冲启动失败：" + e);
+                        releasePrebuffer();
+                    }
+                });
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    /** 丢弃预缓冲实例（同 dropPlayer：release 可能阻塞，扔后台做）。代次先作废，迟到回调全灭。 */
+    private void releasePrebuffer() {
+        preloadPosition = -1;
+        preloadPrepared = false;
+        preloadToken++;
+        final IjkMediaPlayer old = preloadPlayer;
+        preloadPlayer = null;
+        if (old == null) return;
+        try {
+            old.setSurface(null);
+        } catch (Throwable ignored) {
+        }
+        CenterThreadPool.run(() -> {
+            try {
+                old.release();
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    /**
+     * 预缓冲命中：下一条已经在第二实例上 prepare 完成，直接把实例换过来，
+     * 省掉一次完整的 reset+prepare（弱网下这是数秒级的差距）。状态必须完全
+     * 对得上才走这条路；换实例出任何异常都清场回落常规 startPlayback。
+     */
+    private boolean trySwapPrebuffer(int position) {
+        if (preloadPlayer == null || !preloadPrepared || preloadPosition != position) return false;
+        final IjkMediaPlayer mp = preloadPlayer;
+        final int token = ++playToken;
+        try {
+            preloadToken++;   // outstanding 的后台取流/迟到回调全部作废
+            preloadPlayer = null;
+            preloadPosition = -1;
+            preloadPrepared = false;
+            dropPlayer();     //旧实例后台 release，不做 reset（避免被卡死的 native 读线程拖住）
+            player = mp;
+            prepared = false;
+            firstFrameShown = false;
+            userPaused = false;
+            cancelWatchdog();
+            player.setSurface(videoSurface);
+            bindPlayerListeners(player, token);
+            Logu.d(TAG, "预缓冲命中 pos=" + position);
+        } catch (Throwable e) {
+            Logu.d(TAG, "预缓冲换实例失败，回落常规起播：" + e);
+            dropPlayer();
+            return false;
+        }
+        ShortVideoPagerAdapter.Holder holder = holderAt(position);
+        if (holder != null) {
+            holder.setBuffering(true);
+            holder.setPlaying(true);
+        }
+        showPlayHint("解码中…");
+        setStatus("预缓冲命中 aid=" + items.get(position).aid);
+        //补齐 onPrepared 的全部副作用（比例适配/增益/起播/首帧看门狗）
+        handlePlayerPrepared(player, token);
+        return true;
+    }
+
+    /**
+     * onPrepared 的全部副作用，独立成方法：常规起播与预缓冲换实例（trySwapPrebuffer，
+     * 那条路 prepare 早已完成、监听器不会再次回调）共用同一份逻辑。
+     */
+    private void handlePlayerPrepared(IjkMediaPlayer x, int token) {
+        prepared = true;
+        setStatus("已准备 dur=" + getDurationSafe() + "ms");
+        showPlayHint("解码中…");
+        //按视频自身宽高比把画面放进容器（contain，留黑边），
+        //此前 TextureView 恒为 match_parent，任何非容器比例的稿件都会被拉伸
+        applyVideoAspect(x);
+        //无极调音：与播放页共用 player_volume_gain（0~100 → 0~1 软件增益）。
+        //ijk 的 setVolume 是实例级采样乘算，短视频换条会 dropPlayer 重建实例，
+        //所以每次 prepared 都要重套，否则增益永远只对上一次设置的实例生效
+        try {
+            float gain = Math.max(0f, Math.min(1f,
+                    SharedPreferencesUtil.getFloat("player_volume_gain", 100f) / 100f));
+            if (gain < 0.999f) x.setVolume(gain, gain);
+        } catch (Throwable ignored) {
+        }
+        if (!userPaused && shellActive) {
+            try {
+                x.start();
+            } catch (Throwable ignored) {
+            }
+        }
+        ShortVideoPagerAdapter.Holder holder = holderAt(currentIndex);
+        if (holder != null) holder.setBuffering(false);
+        handler.removeCallbacks(progressRunnable);
+        handler.post(progressRunnable);
+        //prepare 完成只代表解码器就绪，画面还没出来：换一段更短的看门狗盯首帧
+        armWatchdog(token, FIRST_FRAME_TIMEOUT_MS);
     }
 
     /**
@@ -1332,6 +1494,7 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         //先摘 Surface 再异步 release：release 可能被卡住的 native 读线程拖住，不能占着 UI 线程；
         //摘掉 Surface 之后 native 也不会再去碰这块已经被我们释放的 Surface
         dropPlayer();
+        releasePrebuffer();
         if (videoSurface != null) {
             videoSurface.release();
             videoSurface = null;
