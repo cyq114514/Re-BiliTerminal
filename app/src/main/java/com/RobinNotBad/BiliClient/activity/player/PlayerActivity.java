@@ -3988,6 +3988,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 });
         }
 
+        //电量/时间区域恢复点击退出（1.3.2 反馈：旧版本点击此区域也可以返回）。
+        //仅非圆屏开放：X-41 记录的误触（弹幕编辑框打开时一点就丢）只存在于圆屏——
+        //圆屏的电量区在顶部正中，保持不可点
+        if (!screen_round) {
+            View clockBack = findViewById(R.id.clock_layout);
+            if (clockBack != null) clockBack.setOnClickListener(view -> finish());
+        }
+
         //左侧纵列的小屏保护：进度文字每次重新布局（首次布局/旋转/字号或按钮显隐变化）都重算一次
         if (text_progress != null)
             text_progress.addOnLayoutChangeListener((v, left, top, right, bottom,
