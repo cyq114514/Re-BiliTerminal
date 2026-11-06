@@ -31,6 +31,9 @@ public class FollowLiveActivity extends RefreshListActivity {
         CenterThreadPool.run(() -> {
             try {
                 roomList = LiveApi.getFollowed(page);
+                //同 RecommendLiveActivity：getFollowed 失败返回 null 而不抛异常，
+                //放行下去 roomList 为 null，下面 roomList.size() 和加载更多都会 NPE
+                if (roomList == null) throw new Exception("关注列表为空");
                 adapter = new LiveCardAdapter(this, roomList);
                 setOnLoadMoreListener(this::continueLoading);
                 setRefreshing(false);
@@ -49,7 +52,8 @@ public class FollowLiveActivity extends RefreshListActivity {
                 list = LiveApi.getFollowed(page);
                 Log.e("debug", "下一页");
                 runOnUiThread(() -> {
-                    if (list != null) {
+                    //接收者同样要判空：参数判空挡不住 roomList/adapter 本身为 null 的 NPE
+                    if (list != null && roomList != null && adapter != null) {
                         roomList.addAll(list);
                         adapter.notifyItemRangeInserted(roomList.size() - list.size(), list.size());
                     }
@@ -58,6 +62,7 @@ public class FollowLiveActivity extends RefreshListActivity {
                     Log.e("debug", "到底了");
                     setBottom(true);
                 }
+                if (list == null) loadFail(new Exception("下一页加载失败"));
                 setRefreshing(false);
             } catch (Exception e) {
                 loadFail(e);
