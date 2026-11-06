@@ -25,6 +25,22 @@
             android:textStyle="bold"
             app:drawableStartCompat="@drawable/arrow_back" />
 
+        <!-- 一键回首页（1.3.2 反馈）：默认 gone——本布局被 5 个页面共用，
+             只有视频详情页把它打开，其余页面顶栏保持原样 -->
+        <ImageView
+            android:id="@+id/home_btn"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginVertical="3dp"
+            android:layout_marginEnd="2dp"
+            android:layout_toStartOf="@id/timeText"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="回首页"
+            android:padding="4dp"
+            android:src="@drawable/icon_home"
+            android:visibility="gone" />
+
         <com.RobinNotBad.BiliClient.ui.widget.TextClock
             android:id="@+id/timeText"
             android:layout_width="wrap_content"

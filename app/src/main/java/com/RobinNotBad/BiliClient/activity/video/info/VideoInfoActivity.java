@@ -10,6 +10,7 @@ import androidx.fragment.app.Fragment;
 import androidx.viewpager.widget.ViewPager;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.activity.MenuActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.activity.reply.ReplyFragment;
 import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerFragmentAdapter;
@@ -66,6 +67,15 @@ public class VideoInfoActivity extends BaseActivity {
         this.aid = intent.getLongExtra("aid", 114514);
         this.bvid = intent.getStringExtra("bvid");
         this.seek_reply = intent.getLongExtra("seekReply", -1);
+
+        //一键回首页（1.3.2 反馈）：详情→播放→详情层层嵌套，回首页要连按多次返回。
+        //顶栏放一个房子图标（默认 gone，此布局被多个页面共用），点击跳菜单页；
+        //不清理返回栈，从菜单按返回还能回到这个详情页
+        View homeBtn = findViewById(R.id.home_btn);
+        if (homeBtn != null) {
+            homeBtn.setVisibility(View.VISIBLE);
+            homeBtn.setOnClickListener(v -> startActivity(new Intent(this, MenuActivity.class)));
+        }
 
         viewPager = findViewById(R.id.viewPager);
         loading = findViewById(R.id.loading);
