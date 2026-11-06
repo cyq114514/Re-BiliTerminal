@@ -11,11 +11,11 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
 /**
- * 计算器的「设置」页：伪装的一部分，同时是忘记密码时的隐藏后门入口。
+ * 计算器的「设置」页：伪装的一部分，同时是忘记密码时的兜底入口。
  *
- * <p>入口：长按计算器显示屏。页面对外只展示一个普通计算器都该有的设置项
- * （按键震动，真实生效）与「用户协议」；进入真身的暗门藏在协议页里
- * （长按标题 5 秒，见 {@link AgreementActivity}），本页不留任何提示。
+ * <p>入口：长按计算器显示屏。页面展示一个普通计算器都该有的设置项
+ * （按键震动，真实生效）与「用户协议」；协议页里点「进入应用」直接进真身
+ * （见 {@link AgreementActivity}）。本页写明这条兜底路径，忘掉密码也忘得掉别的东西。
  */
 public class CalcSettingsActivity extends Activity {
 

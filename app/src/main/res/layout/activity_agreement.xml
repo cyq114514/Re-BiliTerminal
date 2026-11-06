@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 用户协议页：伪装模式忘记密码的恢复通道。暗门是长按标题 5 秒进入真身，
-     按住期间无任何视觉反馈、松手即取消——页面上不留任何提示性元素。 -->
+<!-- 用户协议页：伪装模式忘记密码时的兜底通道。点底部「进入应用」直接进入真身，
+     不需要密码、也不需要任何隐藏手势（伪装的隐蔽性靠的是没人会来翻计算器设置）。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -32,5 +32,18 @@
             android:textColor="#E6FFFFFF"
             android:textSize="14sp" />
     </ScrollView>
+
+    <TextView
+        android:id="@+id/enter_app_btn"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/background_calc_key_function"
+        android:contentDescription="进入应用"
+        android:gravity="center"
+        android:text="进入应用"
+        android:textColor="#FFFFFFFF"
+        android:textSize="15sp" />
 
 </LinearLayout>

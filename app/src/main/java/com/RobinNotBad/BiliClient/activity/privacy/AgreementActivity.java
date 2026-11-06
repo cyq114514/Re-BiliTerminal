@@ -4,9 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.HapticFeedbackConstants;
-import android.view.MotionEvent;
-import android.view.View;
 import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
@@ -19,24 +16,13 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 /**
- * 用户协议页：伪装模式忘记密码时的唯一恢复通道。
+ * 用户协议页：伪装模式忘记密码时的兜底通道。
  *
- * <p>为什么藏在这里——协议页在任何一台设备上都平平无奇，捡到手机的人不会点开，
- * 点开了也不会对着标题按住 5 秒；而机主只需要记住
- * 「长按显示屏 → 设置 → 用户协议 → 按住标题别松手」。
- * 按住期间无任何视觉反馈，松手即取消，旁人几乎无从发现（伪装底线）。
+ * <p>点「进入应用」直接进入真身，不要密码、没有任何隐藏手势——兜底要的就是
+ * 忘掉一切细节也能进得去。隐蔽性不靠交互技巧，靠的是没人会去翻一个
+ * 计算器的设置和协议（计算器设置页里有说明指路）。
  */
 public class AgreementActivity extends Activity {
-
-    /** 长按标题进入真身的时长 */
-    private static final long UNLOCK_HOLD_MS = 5000;
-
-    private final Runnable unlockRunnable = new Runnable() {
-        @Override
-        public void run() {
-            enterRealApp();
-        }
-    };
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -50,27 +36,10 @@ public class AgreementActivity extends Activity {
         setTheme(R.style.Theme_BiliClient);
         setContentView(R.layout.activity_agreement);
 
-        TextView title = findViewById(R.id.agreement_title);
         TextView body = findViewById(R.id.agreement_text);
         body.setText(readAgreement());
 
-        title.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View view, MotionEvent event) {
-                switch (event.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                        view.postDelayed(unlockRunnable, UNLOCK_HOLD_MS);
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
-                        //松手即取消：比"点一下就进"多一道防误触，比"连点 N 次"更好记
-                        view.removeCallbacks(unlockRunnable);
-                        return true;
-                }
-                return false;
-            }
-        });
+        findViewById(R.id.enter_app_btn).setOnClickListener(v -> enterRealApp());
     }
 
     /** 进入真身。按进入路径分流，与 {@code CalculatorActivity.unlock()} 同一套约定。 */
