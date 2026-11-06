@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 /**
@@ -810,7 +811,7 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
      * onPrepared 的全部副作用，独立成方法：常规起播与预缓冲换实例（trySwapPrebuffer，
      * 那条路 prepare 早已完成、监听器不会再次回调）共用同一份逻辑。
      */
-    private void handlePlayerPrepared(IjkMediaPlayer x, int token) {
+    private void handlePlayerPrepared(IMediaPlayer x, int token) {
         prepared = true;
         setStatus("已准备 dur=" + getDurationSafe() + "ms");
         showPlayHint("解码中…");
