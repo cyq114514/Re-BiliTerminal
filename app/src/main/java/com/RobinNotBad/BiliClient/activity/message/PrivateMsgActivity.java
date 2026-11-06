@@ -49,7 +49,7 @@ public class PrivateMsgActivity extends BaseActivity {
     RecyclerView msgView;
     EditText contentEt;
     ImageButton sendBtn;
-    ImageButton picBtn;
+    View picBtn;
     View layout_input;
     PrivateMsgAdapter adapter;
     long uid;
@@ -87,7 +87,8 @@ public class PrivateMsgActivity extends BaseActivity {
         contentEt = findViewById(R.id.msg_input_et);
         sendBtn = findViewById(R.id.send_btn);
         picBtn = findViewById(R.id.pic_btn);
-        layout_input = findViewById(R.id.layout_input);
+        //动画目标用外层 box：2×2 功能面板展开时滚动，面板跟输入行一起藏、一起回
+        layout_input = findViewById(R.id.layout_input_box);
 
         //手动换行：在光标处插入 \n 并后移光标；不改 Enter 键的默认行为（仍是换行，不是发送）
         TextView newlineBtn = findViewById(R.id.newline_btn);
@@ -96,6 +97,12 @@ public class PrivateMsgActivity extends BaseActivity {
             if (start < 0) start = contentEt.getText().length();
             contentEt.getText().insert(start, "\n");
         });
+
+        //2×2 功能面板（1.3.2 反馈）：默认收起只留 ➕，用时展开、不用点「收起」
+        View layoutExtra = findViewById(R.id.layout_extra);
+        findViewById(R.id.more_btn).setOnClickListener(v ->
+                layoutExtra.setVisibility(layoutExtra.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        findViewById(R.id.collapse_btn).setOnClickListener(v -> layoutExtra.setVisibility(View.GONE));
 
         //表情面板入口：business=im 拉不到时 EmoteActivity 内部会回落到 reply 面板
         findViewById(R.id.emote_btn).setOnClickListener(view -> {
