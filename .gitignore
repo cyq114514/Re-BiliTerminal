@@ -12,4 +12,6 @@ local.properties
 *.keystore
 *.p12
 .vscode/
-.androidide
+.androidide/*.apk
+
+/*-release.apk
