@@ -63,6 +63,14 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
     @Override
     public EpisodeCardHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_episode_card, parent, false);
+        //选集卡固定 128dp（适配审计 20261107 P3）：手表 ~213dp 宽下一屏只剩 1.5 张、两端出圈。
+        //钳到屏宽 45%——手机上 128dp 一般小于该值，不受影响
+        int maxCardW = (int) (parent.getResources().getDisplayMetrics().widthPixels * 0.45f);
+        ViewGroup.LayoutParams cardLp = view.getLayoutParams();
+        if (cardLp.width > maxCardW) {
+            cardLp.width = maxCardW;
+            view.setLayoutParams(cardLp);
+        }
         return new EpisodeCardHolder(view);
     }
 

@@ -50,6 +50,7 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
     private final Context context;
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
+        final TextView timeTv;
         final TextView nameTv;
         final TextView textContentTv;
         final TextView tipTv;
@@ -65,6 +66,7 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
         public ViewHolder(View view) {
             super(view);
             root = view.findViewById(R.id.msg_layout);
+            timeTv = view.findViewById(R.id.msg_time);
             nameTv = view.findViewById(R.id.msg_name);
             textContentTv = view.findViewById(R.id.msg_text_content);
             tipTv = view.findViewById(R.id.msg_type_tip_text);
@@ -101,6 +103,7 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
             return;
 
         try {
+            bindTime(holder, position, msg);
             holder.nameTv.setText(msg.name);
             if (selfUid == -1) {
                 selfUid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, -1);
@@ -263,8 +266,71 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
     public void addItem(ArrayList<PrivateMessage> list) {
         if (list == null || list.isEmpty())
             return;
-        mPrivateMsgList.addAll(0, list);
-        this.notifyItemRangeInserted(0, list.size());
+        //头部插入去重（用户反馈 2026-11-07：发消息偶发连弹多条重复）：
+        //翻页游标与服务端返回窗口在边界可能重叠，按 msgSeqno 过滤已存在的消息
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (PrivateMessage m : mPrivateMsgList) seen.add(keyOf(m));
+        ArrayList<PrivateMessage> fresh = new ArrayList<>(list.size());
+        for (PrivateMessage m : list) {
+            if (m != null && seen.add(keyOf(m))) fresh.add(m);
+        }
+        if (fresh.isEmpty()) return;
+        mPrivateMsgList.addAll(0, fresh);
+        this.notifyItemRangeInserted(0, fresh.size());
+    }
+
+    /**
+     * 消息时间（用户反馈 2026-11-07：私信看不到发送时间）。
+     *
+     * <p>只在与上一条间隔超过 5 分钟时显示，连续对话不会每行都顶一行时间；
+     * 第一行总是显示。
+     */
+    private void bindTime(ViewHolder holder, int position, PrivateMessage msg) {
+        if (holder.timeTv == null) return;
+        long ts = msg.timestamp;
+        if (ts <= 0) {
+            holder.timeTv.setVisibility(View.GONE);
+            return;
+        }
+        long prev = 0;
+        if (position > 0 && mPrivateMsgList.get(position - 1) != null) {
+            prev = mPrivateMsgList.get(position - 1).timestamp;
+        }
+        boolean show = position == 0 || prev <= 0 || ts - prev >= 300;
+        if (!show) {
+            holder.timeTv.setVisibility(View.GONE);
+            return;
+        }
+        holder.timeTv.setText(formatTime(ts));
+        holder.timeTv.setVisibility(View.VISIBLE);
+    }
+
+    /** 今天 HH:mm / 昨天 HH:mm / 今年 MM-dd HH:mm / 更早 yyyy-MM-dd HH:mm */
+    private static String formatTime(long seconds) {
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        java.util.Calendar t = java.util.Calendar.getInstance();
+        t.setTimeInMillis(seconds * 1000L);
+        boolean sameYear = now.get(java.util.Calendar.YEAR) == t.get(java.util.Calendar.YEAR);
+        String hm = String.format(java.util.Locale.CHINA, "%02d:%02d",
+                t.get(java.util.Calendar.HOUR_OF_DAY), t.get(java.util.Calendar.MINUTE));
+        if (sameYear && now.get(java.util.Calendar.DAY_OF_YEAR) == t.get(java.util.Calendar.DAY_OF_YEAR))
+            return hm;
+        if (sameYear) {
+            java.util.Calendar yesterday = java.util.Calendar.getInstance();
+            yesterday.add(java.util.Calendar.DAY_OF_YEAR, -1);
+            if (yesterday.get(java.util.Calendar.DAY_OF_YEAR) == t.get(java.util.Calendar.DAY_OF_YEAR))
+                return "昨天 " + hm;
+            return String.format(java.util.Locale.CHINA, "%02d-%02d %s",
+                    t.get(java.util.Calendar.MONTH) + 1, t.get(java.util.Calendar.DAY_OF_MONTH), hm);
+        }
+        return String.format(java.util.Locale.CHINA, "%04d-%02d-%02d %s",
+                t.get(java.util.Calendar.YEAR), t.get(java.util.Calendar.MONTH) + 1,
+                t.get(java.util.Calendar.DAY_OF_MONTH), hm);
+    }
+
+    /** 去重键：msgSeqno（每会话内唯一）；解析缺失为 0 时退回 msgId */
+    public static long keyOf(PrivateMessage m) {
+        return m.msgSeqno != 0 ? m.msgSeqno : m.msgId;
     }
 
     @Override

@@ -145,7 +145,19 @@ public class ShareToMsgDialog extends BottomSheetDialogFragment {
             getDialog().getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
 
+        //圆屏适配（适配审计 20261107 P2-21）：BottomSheet 三边贴屏幕边缘，圆表上左右下
+        //三条弧线直接裁内容。不开居中重构（改动大、回归面广），改为圆屏时给内容四边
+        //内缩安全边距——sheet 仍在底部，但实际内容全部退进可视圆
+        if (SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            int insetH = (int) (dm.widthPixels * 0.08);
+            int insetV = (int) (dm.heightPixels * 0.06);
+            view.setPadding(insetH, insetV, insetH, insetV);
+        }
+
         RecyclerView userList = view.findViewById(R.id.share_user_list);
+        //表冠滚动需要焦点路由到列表（适配审计 P2-8）；attach 后生效
+        userList.requestFocus();
         userList.setLayoutManager(new LinearLayoutManager(requireContext(),
                 LinearLayoutManager.HORIZONTAL, false));
         adapter = new ShareUserAdapter(targets, this::updateSendState);

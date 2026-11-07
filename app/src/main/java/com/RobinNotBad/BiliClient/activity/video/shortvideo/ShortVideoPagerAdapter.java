@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.model.ShortVideoItem;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 
 import java.util.List;
@@ -37,6 +38,9 @@ public class ShortVideoPagerAdapter extends RecyclerView.Adapter<ShortVideoPager
         void onComment(ShortVideoItem item, int position);
 
         void onMore(ShortVideoItem item, int position);
+
+        /** 音量面板拖动时实时回调（0~1 软件增益） */
+        void onVolumeGain(float gain);
 
         /** 用户开始拖进度条：暂停自动进度刷新，避免和手指抢 */
         void onSeekStart();
@@ -78,7 +82,32 @@ public class ShortVideoPagerAdapter extends RecyclerView.Adapter<ShortVideoPager
                 .inflate(R.layout.cell_short_video_page, parent, false);
         //播放进度条 tint 跟随主题色
         ThemeApplier.apply(view);
+        applyRoundInset(view, parent);
         return new Holder(view);
+    }
+
+    /**
+     * 圆屏适配（适配审计 20261107 P1-3）：短视频页此前没有任何圆屏分支——
+     * 右侧操作栏贴右缘 4dp、底部信息贴底 6dp，圆表上操作按钮/进度条/时间戳落在可视圆之外。
+     * 按播放页同款比例内缩：操作栏右移 8% 屏宽；底部信息左右 8% 屏宽、底部 6% 屏高（下巴）。
+     * 只在圆屏开关开启时生效，竖屏手机行为不变。
+     */
+    private void applyRoundInset(View page, ViewGroup parent) {
+        if (!SharedPreferencesUtil.getBoolean("player_ui_round", false)) return;
+        int scrW = parent.getResources().getDisplayMetrics().widthPixels;
+        int scrH = parent.getResources().getDisplayMetrics().heightPixels;
+        int side = (int) (scrW * 0.08);
+        int bottom = (int) (scrH * 0.06);
+        View actionColumn = page.findViewById(R.id.actionColumn);
+        if (actionColumn != null) {
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) actionColumn.getLayoutParams();
+            lp.rightMargin = side;
+            actionColumn.setLayoutParams(lp);
+        }
+        View bottomInfo = page.findViewById(R.id.bottomInfo);
+        if (bottomInfo != null) {
+            bottomInfo.setPadding(side, bottomInfo.getPaddingTop(), side, bottom);
+        }
     }
 
     @Override
@@ -154,6 +183,24 @@ public class ShortVideoPagerAdapter extends RecyclerView.Adapter<ShortVideoPager
                 callback.onMore(items.get(pos), pos);
             });
 
+            //单独的音量键（用户反馈 2026-11-07）：单击减/加一档系统音量，长按弹无极调音面板
+            View volDown = itemView.findViewById(R.id.volDown);
+            View volUp = itemView.findViewById(R.id.volUp);
+            if (volDown != null) {
+                volDown.setOnClickListener(v -> stepVolume(-1));
+                volDown.setOnLongClickListener(v -> {
+                    showVolumePanel();
+                    return true;
+                });
+            }
+            if (volUp != null) {
+                volUp.setOnClickListener(v -> stepVolume(1));
+                volUp.setOnLongClickListener(v -> {
+                    showVolumePanel();
+                    return true;
+                });
+            }
+
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
@@ -177,6 +224,25 @@ public class ShortVideoPagerAdapter extends RecyclerView.Adapter<ShortVideoPager
                     callback.onControlsTouched();
                 }
             });
+        }
+
+        /** 单击音量键：调一档系统音量并提示百分比 */
+        private void stepVolume(int dir) {
+            callback.onControlsTouched();
+            int percent = com.RobinNotBad.BiliClient.util.VolumeKeyHelper
+                    .stepSystemVolume(itemView.getContext(), dir);
+            if (percent >= 0)
+                com.RobinNotBad.BiliClient.util.MsgUtil.showMsg("音量：" + percent + "%");
+        }
+
+        /** 长按音量键：无极调音面板（拖动时实时套到 Fragment 持有的播放器上） */
+        private void showVolumePanel() {
+            callback.onControlsTouched();
+            android.content.Context ctx = itemView.getContext();
+            android.app.Activity act = ctx instanceof android.app.Activity
+                    ? (android.app.Activity) ctx : null;
+            if (act == null) return;
+            com.RobinNotBad.BiliClient.util.VolumeGainPanel.show(act, callback::onVolumeGain);
         }
 
         public void bind(ShortVideoItem item) {

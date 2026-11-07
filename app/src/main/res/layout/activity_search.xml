@@ -118,7 +118,7 @@
 
         <View
             android:id="@+id/search"
-            android:layout_width="35dp"
+            android:layout_width="44dp"
             android:layout_height="0dp"
             app:layout_constraintBottom_toBottomOf="@+id/keywordInput"
             app:layout_constraintEnd_toEndOf="@+id/keywordInput"
@@ -171,5 +171,32 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/top" />
+
+    <!--
+      类别页签（适配审计 20261107 P2-11）：此前 5 个结果分类只能盲横滑，手表换类要连滑 4 次。
+      复用番剧页签的胶囊语言（选中=主题强调色、未选=暗底，代码级重建保证跟随主题）。
+      搜索执行后显示、回历史/建议面板隐藏；搜索栏下滑隐藏时页签自动顶到原搜索栏位置
+      （约束锚在 gone 的 searchbar 下会塌缩），成为结果页的常驻顶栏。
+      作为 ConstraintLayout 的最后一个孩子悬浮在结果列表之上。
+    -->
+    <HorizontalScrollView
+        android:id="@+id/search_tabs_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+        android:layout_marginTop="4dp"
+        android:scrollbars="none"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/searchbar">
+
+        <LinearLayout
+            android:id="@+id/search_tabs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="2dp" />
+    </HorizontalScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -25,6 +25,7 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.NetworkPlaybackQuality;
 import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.StringUtil;
 
 import org.json.JSONException;
 
@@ -107,6 +108,8 @@ public class JumpToPlayerActivity extends BaseActivity {
         PlayerSentinel.stage("跳转页布局完成");
 
         textView = findViewById(R.id.text_title);
+        //错误原因长按复制（适配审计 P2-7）：不可滚动的整屏文案至少要能取出来，与全站 copy_enable 口径一致
+        StringUtil.setCopy(textView);
 
         Intent intent = getIntent();
         Log.e("debug-哔哩终端-跳转页", "已接收数据");

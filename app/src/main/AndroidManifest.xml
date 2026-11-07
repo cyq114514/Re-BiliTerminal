@@ -170,27 +170,32 @@
             android:name=".activity.settings.RecommendSearchSettingsActivity"
             android:exported="false"
             android:label="推荐与搜索"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.DownloadStorageSettingsActivity"
             android:exported="false"
             android:label="下载与存储"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.PrivacySecuritySettingsActivity"
             android:exported="false"
             android:label="隐私与安全"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.NotificationBackgroundSettingsActivity"
             android:exported="false"
             android:label="通知与后台"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.SettingPrefActivity"
             android:exported="false"
             android:label="偏好设置"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.SettingSearchActivity"
             android:exported="false"
@@ -201,12 +206,14 @@
             android:name=".activity.settings.SettingRepliesActivity"
             android:exported="false"
             android:label="评论区设置"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.SettingInfoActivity"
             android:exported="false"
             android:label="详情页设置"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.SettingMenuActivity"
             android:exported="false"
@@ -251,12 +258,14 @@
             android:name=".activity.settings.SettingLaboratoryActivity"
             android:exported="false"
             android:label="实验性功能"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.SettingTerminalPlayerActivity"
             android:exported="false"
             android:label="内置播放器设置"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.settings.SortSettingActivity"
             android:exported="false"

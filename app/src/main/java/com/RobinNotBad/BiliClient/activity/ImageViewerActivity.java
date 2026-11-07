@@ -31,6 +31,35 @@ public class ImageViewerActivity extends BaseActivity {
     //2023-07-21
 
     private long longClickTimestamp;
+    /** 表冠缩放（用户反馈 2026-11-07）：需要拿到当前页的 PhotoView */
+    private PhotoViewpager viewPager;
+    private final java.util.HashMap<Integer, PhotoView> photoViews = new java.util.HashMap<>();
+
+    /**
+     * 旋转表冠缩放当前图片。开关见 设置 → 实验室 →「表冠缩放图片」。
+     *
+     * <p>表冠事件是 {@code SOURCE_ROTARY_ENCODER} 上的 {@code ACTION_SCROLL}，
+     * 直接调 {@code PhotoView.setScale} 而不是模拟双指手势——后者要拼 MotionEvent，
+     * 在手势识别器里很容易和"单指拖动"互相打架。
+     */
+    @Override
+    public boolean onGenericMotionEvent(android.view.MotionEvent event) {
+        if (event.getAction() == android.view.MotionEvent.ACTION_SCROLL
+                && event.getSource() == android.view.InputDevice.SOURCE_ROTARY_ENCODER
+                && com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.getBoolean("ui_rotatory_image_zoom", false)) {
+            PhotoView pv = viewPager != null ? photoViews.get(viewPager.getCurrentItem()) : null;
+            if (pv != null) {
+                float axis = event.getAxisValue(android.view.MotionEvent.AXIS_SCROLL);
+                if (axis != 0f) {
+                    float next = pv.getScale() * (axis > 0 ? 1.15f : 1f / 1.15f);
+                    next = Math.max(1f, Math.min(6.25f, next));
+                    pv.setScale(next);
+                    return true;
+                }
+            }
+        }
+        return super.onGenericMotionEvent(event);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,10 +74,26 @@ public class ImageViewerActivity extends BaseActivity {
         Intent intent = getIntent();
         ArrayList<String> imageList = intent.getStringArrayListExtra("imageList");
 
-        PhotoViewpager viewPager = findViewById(R.id.viewPager);
+        viewPager = findViewById(R.id.viewPager);
         TextView textView = findViewById(R.id.text_page);
 
         ImageButton download = findViewById(R.id.btn_download);
+        //圆屏适配（适配审计 P2-24）：下载按钮/页码贴屏幕底角 8dp，圆表上正落四角裁切区。
+        //圆屏开关开启时按比例内缩（本页 NoSwipe 不吃 BaseActivity 内容边距，需自己处理）
+        if (com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            int cornerInset = (int) (dm.widthPixels * 0.08);
+            int bottomInset = (int) (dm.heightPixels * 0.06);
+            android.widget.RelativeLayout.LayoutParams dl = (android.widget.RelativeLayout.LayoutParams) download.getLayoutParams();
+            dl.setMargins(cornerInset, 0, 0, bottomInset);
+            download.setLayoutParams(dl);
+            View pageText = findViewById(R.id.text_page);
+            if (pageText != null) {
+                android.widget.RelativeLayout.LayoutParams pl = (android.widget.RelativeLayout.LayoutParams) pageText.getLayoutParams();
+                pl.setMargins(0, 0, cornerInset, bottomInset);
+                pageText.setLayoutParams(pl);
+            }
+        }
         download.setOnClickListener(v -> {
             long time_now = System.currentTimeMillis();
             if (time_now - longClickTimestamp < 3000) {
@@ -95,11 +140,13 @@ public class ImageViewerActivity extends BaseActivity {
                     MsgUtil.err("图片查看", e);
                 }
                 container.addView(photoView);
+                photoViews.put(position, photoView);
                 return photoView;
             }
 
             @Override
             public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
+                photoViews.remove(position);
                 //先清请求（此刻视图还 attach 着）再移除，释放离屏页位图。
                 //必须用 application 的 RequestManager：ViewPager 的 populate→destroyItem 可能被主线程
                 //排到 Activity onDestroy 之后才执行，Glide.with(Activity/View) 会直接抛
@@ -115,7 +162,8 @@ public class ImageViewerActivity extends BaseActivity {
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
                 if (positionOffset % 1 == 0)
-                    textView.setText("第" + (position + 1) + "/" + imageList.size() + "张");
+                    //文案进 strings（适配审计 P3；DESIGN.md 硬编码文案约定）
+                    textView.setText(getString(R.string.image_page_fmt, position + 1, imageList.size()));
             }
 
             @Override

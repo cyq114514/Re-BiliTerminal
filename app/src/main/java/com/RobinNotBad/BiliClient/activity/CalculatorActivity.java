@@ -68,6 +68,7 @@ public class CalculatorActivity extends Activity {
         display = findViewById(R.id.calc_display);
         preview = findViewById(R.id.calc_preview);
         buildKeypad();
+        applyRoundLayout();
 
         //「设置」入口：长按显示屏。伪装页面上没有任何可见入口（伪装底线），
         //机主从 设置 → 用户协议 可以不输密码进真身（忘记密码的恢复通道）
@@ -77,14 +78,20 @@ public class CalculatorActivity extends Activity {
         });
     }
 
-    /**4×5 按钮网格：{标签, 动作标记}。全部同构，代码生成。 */
+    /**
+     * 键盘：数字区 3 列 × 4 行（7 8 9 / 4 5 6 / 1 2 3 / . 0 ⌫），
+     * 右侧一列运算符（÷ × − +），最上面一行功能键（C % ± =）。
+     *
+     * <p>用户反馈 2026-11-07：圆屏手表上按键太小、输入框太大。数字区严格 3×4 后
+     * 每行少一个键，按键宽度多出约 1/4；显示区字号同时压小（见 activity_calculator.xml）。
+     */
     private void buildKeypad() {
         String[][] rows = {
-                {"C", "⌫", "%", "÷"},
-                {"7", "8", "9", "×"},
-                {"4", "5", "6", "−"},
-                {"1", "2", "3", "+"},
-                {"±", "0", ".", "="}
+                {"C", "%", "±", "="},
+                {"7", "8", "9", "÷"},
+                {"4", "5", "6", "×"},
+                {"1", "2", "3", "−"},
+                {".", "0", "⌫", "+"}
         };
         LinearLayout keypad = findViewById(R.id.calc_keypad);
         int pad = (int) (getResources().getDisplayMetrics().density * 4);
@@ -161,6 +168,42 @@ public class CalculatorActivity extends Activity {
                 }
             }
         }
+    }
+
+    /**
+     * 圆屏适配（用户反馈 2026-11-07：手表上按键太小、输入框太大）。
+     *
+     * <p>只缩首末两行：圆的最宽处在中段，中间三行保持满宽（按键最大），
+     * 上下两行各向内收一点，避免四个角落的键落进圆外的裁切区。
+     * 显示区字号同时压到 26sp，把省下来的高度让给键盘。
+     */
+    private void applyRoundLayout() {
+        boolean round = false;
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
+                round = getResources().getConfiguration().isScreenRound();
+        } catch (Throwable ignored) {
+        }
+        if (!round) return;
+
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        ViewGroup keypad = findViewById(R.id.calc_keypad);
+        if (keypad == null) return;
+
+        display.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+        preview.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+
+        int rowInset = (int) (dm.widthPixels * 0.10f);
+        if (keypad.getChildCount() > 0)
+            keypad.getChildAt(0).setPadding(rowInset, 0, rowInset, 0);
+        int last = keypad.getChildCount() - 1;
+        if (last > 0)
+            keypad.getChildAt(last).setPadding(rowInset, 0, rowInset, 0);
+
+        View root = (View) keypad.getParent();
+        if (root != null)
+            root.setPadding(root.getPaddingLeft(), (int) (dm.heightPixels * 0.03f),
+                    root.getPaddingRight(), (int) (dm.heightPixels * 0.02f));
     }
 
     private static boolean isOperator(String label) {

@@ -273,6 +273,51 @@
                     android:contentDescription="播放音量" />
             </LinearLayout>
 
+            <!-- 单独的音量键（用户反馈 2026-11-07）：单击减/加一档系统音量，
+                 长按弹出无极调音（0~100% 软件增益）。
+                 必须独占一行——和滑条挤在同一行时，窄屏上滑条被权重压到极窄、
+                 拇指块还会和按钮叠在一起（用户反馈 2026-11-08：会互相遮挡） -->
+            <LinearLayout
+                android:id="@+id/volumeKeyRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/volDown"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:adjustViewBounds="true"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="音量减"
+                    android:scaleType="fitCenter"
+                    android:src="@mipmap/soundcut" />
+
+                <TextView
+                    android:id="@+id/volPercent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:alpha="0.75"
+                    android:gravity="center"
+                    android:minWidth="40dp"
+                    android:textColor="@color/text_gray"
+                    android:textSize="12sp" />
+
+                <ImageButton
+                    android:id="@+id/volUp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:adjustViewBounds="true"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="音量加"
+                    android:scaleType="fitCenter"
+                    android:src="@mipmap/soundadd" />
+            </LinearLayout>
+
             <!-- 播放模式（1.3.2 反馈：单曲循环/随机/列表循环）：点击在三档间轮换 -->
             <TextView
                 android:id="@+id/btnPlayMode"

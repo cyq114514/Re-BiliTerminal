@@ -229,6 +229,8 @@
     <string name="pagename_creative_center">创作中心</string>
     <string name="pagename_dialog">提示</string>
     <string name="pagename_emote">表情</string>
+    <string name="image_page_fmt">第%1$d/%2$d张</string>
+    <string name="image_page_default">第0/0张</string>
     <string name="pagename_image_viewer">图片查看</string>
     <string name="pagename_login_special">特殊登录</string>
     <string name="pagename_menu">菜单</string>

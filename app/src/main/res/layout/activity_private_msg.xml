@@ -162,8 +162,8 @@
             <!-- ➕：展开/收起上方 2×2 功能面板 -->
             <TextView
                 android:id="@+id/more_btn"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_marginEnd="4dp"
                 android:layout_toStartOf="@id/send_btn"
                 android:background="@drawable/background_privatemsg_send"
@@ -175,8 +175,8 @@
 
             <ImageButton
                 android:id="@+id/send_btn"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="@drawable/background_privatemsg_send"
                 android:src="@drawable/send"
                 android:layout_alignParentEnd="true" />

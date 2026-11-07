@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/capsuleRoot"
     android:layout_width="wrap_content"
-    android:layout_height="30dp"
+    android:layout_height="36dp"
     android:background="@drawable/bg_audio_capsule"
     android:gravity="center_vertical"
     android:orientation="horizontal"

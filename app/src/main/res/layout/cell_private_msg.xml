@@ -5,10 +5,22 @@
     android:orientation="vertical"
     android:id="@+id/msg_layout">
 
+    <!-- 消息时间（用户反馈 2026-11-07：私信看不到发送时间）。同一分钟内连续消息由
+         PrivateMsgAdapter 隐藏，保持聊天气泡的观感 -->
+    <TextView
+        android:id="@+id/msg_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:alpha="0.55"
+        android:gravity="center"
+        android:textSize="10sp"
+        android:visibility="gone" />
+
     <TextView
         android:layout_height="wrap_content"
         android:layout_width="wrap_content"
-        android:textSize="10sp"
+        android:textSize="11sp"
         android:layout_marginHorizontal="6dp"
         android:id="@+id/msg_name"
         android:textStyle="bold"
@@ -50,7 +62,7 @@
         android:id="@+id/msg_type_tip_text"
         android:layout_marginBottom="4dp"
         android:alpha="0.7"
-        android:textSize="10sp"
+        android:textSize="11sp"
         android:layout_gravity="center"
         android:visibility="gone" />
 </LinearLayout>

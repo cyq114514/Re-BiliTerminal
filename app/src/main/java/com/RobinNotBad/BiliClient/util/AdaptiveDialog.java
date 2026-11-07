@@ -306,7 +306,18 @@ public final class AdaptiveDialog {
 
             DisplayMetrics metrics = new DisplayMetrics();
             wm.getDefaultDisplay().getRealMetrics(metrics);
-            int maxWidth = (int) (metrics.widthPixels * WIDTH_RATIO);
+            //圆屏（适配审计 20261107 P2-19）：86% 高的矩形四角必然落出圆弧，
+            //重点是让标题/正文/按钮避开裁切区。开启圆屏适配时窗口收窄到 84%，
+            //同时卡片在窗口内四边再让出安全边距（水平 4% 屏宽、垂直 3% 屏高）；
+            //窗口背景是透明的，多让出的部分不产生视觉痕迹
+            boolean roundScreen = SharedPreferencesUtil.getBoolean("player_ui_round", false);
+            if (roundScreen) {
+                int padH = (int) (metrics.widthPixels * 0.04);
+                int padV = (int) (metrics.heightPixels * 0.03);
+                root.setPadding(padH, padV, padH, padV);
+            }
+            float widthRatio = roundScreen ? 0.84f : WIDTH_RATIO;
+            int maxWidth = (int) (metrics.widthPixels * widthRatio);
             int maxHeight = (int) (metrics.heightPixels * HEIGHT_RATIO);
             if (maxWidth <= 0 || maxHeight <= 0) return;
 

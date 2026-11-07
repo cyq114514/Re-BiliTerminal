@@ -62,7 +62,7 @@
             android:alpha="0.15"
             android:background="@color/textwhite" />
 
-        <ScrollView
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
             android:id="@+id/log_scroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -78,7 +78,7 @@
                 android:layout_height="wrap_content"
                 android:lineSpacingExtra="3dp"
                 android:textSize="13sp" />
-        </ScrollView>
+        </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
     </LinearLayout>
 
 </RelativeLayout>

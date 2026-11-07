@@ -108,6 +108,8 @@ public class BiliTerminal extends Application {
             //崩溃捕获始终由 ErrorCatch 承担；上报开关只决定"传不传"，不影响崩溃页
             ErrorCatch.getInstance().init(context);
             CrashReportUtil.registerPreferenceListener(this);
+            //低电量提醒（用户反馈 2026-11-07）：注册一次粘性电量广播，阈值与开关在偏好设置里
+            com.RobinNotBad.BiliClient.util.BatteryLowAlert.install(context);
             //上次没传出去的崩溃（弱网/WiFi 被拦）在这次启动补发；
             //同时补发"启动最早期的崩溃"，并把系统记录的 native 崩溃 / ANR / 被低内存杀掉也补报上来。
             //三个任务必须各自独立提交：原来串在同一个 lambda 里，ExitReasonCollector 排在两次网络补发之后，

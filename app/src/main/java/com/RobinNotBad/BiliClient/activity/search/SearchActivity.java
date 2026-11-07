@@ -93,6 +93,9 @@ public class SearchActivity extends InstanceActivity {
     boolean tutorial_show;
     String classname;
     ViewPagerFragmentAdapter vpfAdapter;
+    //类别页签（适配审计 P2-11）：结果分类胶囊条，随 ViewPager 翻页同步选中态
+    View searchTabsScroll;
+    final java.util.List<TextView> tabChips = new ArrayList<>();
     //构建 fragmentList 时所用的排序配置串；onResume 发现配置变了（用户在「搜索类别排序」页
     //拖完回来）就整页重建，见 onResume 注释
     private String appliedCategoryOrder = "";
@@ -175,15 +178,20 @@ public class SearchActivity extends InstanceActivity {
             suggestionsRecyclerview.setVisibility(View.GONE);
             List<Fragment> fragmentList = new ArrayList<>();
             //顺序来自「搜索类别排序」设置（视频钉死首位，解析口径见 SearchSortActivity.loadOrderedKeys）
+            java.util.List<String> tabKeys = new ArrayList<>();
             for (String key : SearchSortActivity.loadOrderedKeys()) {
                 Fragment fragment = createSearchFragment(key);
-                if (fragment != null) fragmentList.add(fragment);
+                if (fragment != null) {
+                    fragmentList.add(fragment);
+                    tabKeys.add(key);
+                }
             }
             appliedCategoryOrder = SearchSortActivity.getSortConf();
             vpfAdapter = new ViewPagerFragmentAdapter(getSupportFragmentManager(), fragmentList);
             viewPager.setAdapter(vpfAdapter);
             //fragment 实例化完成后才能读到排序能力，post 一次把按钮状态刷出来
             viewPager.post(this::updateSortButton);
+            buildSearchTabs(tabKeys);
 
             viewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
                 @Override
@@ -205,6 +213,7 @@ public class SearchActivity extends InstanceActivity {
                         fragment.refresh();
                     }
                     updateSortButton();
+                    selectTab(position);
                 }
 
                 @Override
@@ -444,15 +453,20 @@ public class SearchActivity extends InstanceActivity {
         transaction.commitNow();
 
         List<Fragment> fragmentList = new ArrayList<>();
+        java.util.List<String> tabKeys = new ArrayList<>();
         for (String key : SearchSortActivity.loadOrderedKeys()) {
             Fragment fragment = createSearchFragment(key);
-            if (fragment != null) fragmentList.add(fragment);
+            if (fragment != null) {
+                fragmentList.add(fragment);
+                tabKeys.add(key);
+            }
         }
         appliedCategoryOrder = SearchSortActivity.getSortConf();
         vpfAdapter = new ViewPagerFragmentAdapter(getSupportFragmentManager(), fragmentList);
         viewPager.setAdapter(vpfAdapter);
         viewPager.setOffscreenPageLimit(4);
         viewPager.post(this::updateSortButton);
+        buildSearchTabs(tabKeys);
 
         String keyword = keywordInput.getText().toString();
         if (!keyword.isEmpty()) searchKeyword(keyword);
@@ -592,11 +606,69 @@ public class SearchActivity extends InstanceActivity {
     }
 
     /**
+     * 类别页签（适配审计 20261107 P2-11，方案已拍板）：结果分类胶囊条。
+     * 与番剧页签同形：选中=主题强调色胶囊、未选=暗底，代码级重建保证跟随主题。
+     * 搜索执行后显示、回历史/建议面板时隐藏。
+     */
+    private void buildSearchTabs(java.util.List<String> keys) {
+        LinearLayout container = findViewById(R.id.search_tabs);
+        if (container == null) return;
+        searchTabsScroll = findViewById(R.id.search_tabs_scroll);
+        container.removeAllViews();
+        //给内容区腾出页签高度：页签悬浮在 ViewPager 上，不垫的话第一行结果卡被压住
+        viewPager.setPadding(0, ToolsUtil.dp2px(36f), 0, 0);
+        tabChips.clear();
+        int padH = ToolsUtil.dp2px(10f);
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.get(i);
+            String label = SearchSortActivity.CATEGORY_NAMES.get(key);
+            if (label == null) label = key;
+            TextView chip = new TextView(this);
+            chip.setText(label);
+            chip.setTextSize(13);
+            chip.setGravity(android.view.Gravity.CENTER);
+            chip.setPadding(padH, 0, padH, 0);
+            int idx = i;
+            chip.setOnClickListener(v -> viewPager.setCurrentItem(idx, true));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, ToolsUtil.dp2px(30f));
+            lp.setMargins(0, 0, ToolsUtil.dp2px(6f), 0);
+            chip.setLayoutParams(lp);
+            container.addView(chip);
+            tabChips.add(chip);
+        }
+        selectTab(viewPager.getCurrentItem());
+    }
+
+    private void selectTab(int position) {
+        for (int i = 0; i < tabChips.size(); i++) {
+            TextView chip = tabChips.get(i);
+            boolean selected = i == position;
+            chip.setSelected(selected);
+            chip.setBackground(searchChipBackground(selected));
+            chip.setTextColor(selected ? 0xFFFFFFFF : getResources().getColor(R.color.text_gray));
+        }
+    }
+
+    private android.graphics.drawable.GradientDrawable searchChipBackground(boolean selected) {
+        android.graphics.drawable.GradientDrawable drawable = new android.graphics.drawable.GradientDrawable();
+        drawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        drawable.setCornerRadius(ToolsUtil.dp2px(14f));
+        drawable.setColor(selected ? ThemeManager.getPrimary() : 0x15000000);
+        return drawable;
+    }
+
+    /**
      * 输入框为空时的浮层选择：有热搜词就用热搜卡，否则用历史记录卡。
      * 两张卡与结果区同位叠放，任何时刻都只能有一张可见（且只有关键词为空时才允许出现），
      * 否则不透明底板会把下面的搜索结果盖掉。
      */
     private void showKeywordPanel() {
+        //回到历史/建议面板时隐藏类别页签（适配审计 P2-11），同时收回给内容区垫的高度
+        if (searchTabsScroll != null) {
+            searchTabsScroll.setVisibility(View.GONE);
+            viewPager.setPadding(0, 0, 0, 0);
+        }
         //热搜开关关闭时一律显示历史卡：两张卡同位叠放互斥，给历史让位就等于关掉热搜面板
         if (hotSearchEnabled && !hotSearchList.isEmpty()) {
             showHotSearch();
@@ -666,6 +738,7 @@ public class SearchActivity extends InstanceActivity {
             }
         }
 
+        if (searchTabsScroll != null) searchTabsScroll.setVisibility(View.VISIBLE);
         if (!refreshing) {
             InputMethodManager manager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             View curFocus;

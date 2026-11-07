@@ -316,6 +316,7 @@ public class PlayerApi {
 
         if (data.dash != null) {
             playerData.dashData = data.dash;
+            playerData.durationMs = data.timelength;  //弹幕分段数按真实时长算（F4）
             DashVideoStream vs = playerData.dashData.getVideoStream(playerData.qn);
             if (vs != null) {
                 playerData.videoUrls = buildMediaCandidates(vs.baseUrl, vs.backupUrl);
@@ -359,6 +360,7 @@ public class PlayerApi {
         ApiResponse<PlayUrlData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<PlayUrlData>>(){}.getType());
         if (resp == null || !resp.isSuccess() || resp.data == null) throw new JSONException("获取播放地址失败");
         PlayUrlData data = resp.data;
+        playerData.durationMs = data.timelength;  //弹幕分段数按真实时长算（F4）
         if (data.durl == null || data.durl.isEmpty()) throw new JSONException("durl is empty");
         playerData.videoUrls = buildMediaCandidates(data.durl.get(0).url, data.durl.get(0).backup_url);
         playerData.videoUrl = playerData.videoUrls.isEmpty() ? data.durl.get(0).url : playerData.videoUrls.get(0);
@@ -485,6 +487,7 @@ public class PlayerApi {
         playerData.videoUrl = playerData.videoUrls.isEmpty() ? stream.durl.get(0).url : playerData.videoUrls.get(0);
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml";
         playerData.cidHistory = playerData.cid;
+        playerData.durationMs = stream.timelength;  //弹幕分段数按真实时长算（F4）
         //片头/片尾片段：随取流响应一起下发，直接交给播放器做跳过判定（派生的展示数据，取不到就是 null）
         playerData.clipInfoList = stream.clip_info_list;
         ProgressDiag.log("服务端进度", "epid=" + playerData.epid + "/服务端=" + confirmedEpid
@@ -765,7 +768,7 @@ public class PlayerApi {
         switch (playerChoice) {
             case "terminalPlayer":
                 intent.setClass(context, PlayerActivity.class);
-                intent.putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("aid", playerData.aid).putExtra("cid", playerData.cid).putExtra("mid", playerData.mid).putExtra("progress", playerData.progress).putExtra("live_mode", playerData.isLive());
+                intent.putExtra("url", playerData.videoUrl).putExtra("danmaku", playerData.danmakuUrl).putExtra("title", playerData.title).putExtra("aid", playerData.aid).putExtra("cid", playerData.cid).putExtra("mid", playerData.mid).putExtra("progress", playerData.progress).putExtra("live_mode", playerData.isLive()).putExtra("durationMs", playerData.durationMs);
                 //第三方源：把白名单请求头一起带进播放器；为空时播放器仍走 B 站默认头，行为不变
                 if (playerData.extraHeaders != null && !playerData.extraHeaders.isEmpty())
                     intent.putExtra("headers", playerData.extraHeaders);

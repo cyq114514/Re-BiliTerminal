@@ -37,6 +37,10 @@ import com.bumptech.glide.request.RequestOptions;
 import java.text.SimpleDateFormat;
 
 public class NoticeHolder extends RecyclerView.ViewHolder {
+
+    /** like 页只显示头像（原版口径）：昵称与「赞了xxx」内容重复，用户反馈显得奇怪 */
+    public boolean hideNick = false;
+
     public final LinearLayout avaterList;
     public final TextView action;
     public final TextView pubdate;
@@ -78,13 +82,17 @@ public class NoticeHolder extends RecyclerView.ViewHolder {
             });
             avaterList.addView(imageView);
 
-            TextView nickView = new TextView(context);
-            nickView.setText(message.user.get(i).name);
-            nickView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            nickView.setGravity(Gravity.CENTER_VERTICAL);
-            nickView.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ToolsUtil.dp2px(32)));
-            avaterList.addView(nickView);
+            //收到的赞页不渲染昵称（用户反馈 2026-11-07：原版只有头像就很好）；
+            //间隔 View 保留，头像间距与其它通知类型一致
+            if (!hideNick) {
+                TextView nickView = new TextView(context);
+                nickView.setText(message.user.get(i).name);
+                nickView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+                nickView.setGravity(Gravity.CENTER_VERTICAL);
+                nickView.setLayoutParams(new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ToolsUtil.dp2px(32)));
+                avaterList.addView(nickView);
+            }
 
             //这个View什么都没有，用来当间隔的
             View view = new View(context);

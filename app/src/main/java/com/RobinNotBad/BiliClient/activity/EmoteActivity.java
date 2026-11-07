@@ -195,7 +195,11 @@ public class EmoteActivity extends BaseActivity {
             super.onViewCreated(view, savedInstanceState);
 
             this.recyclerView = view.findViewById(R.id.recyclerView);
-            CustomGridManager layoutManager = new CustomGridManager(getContext(), 4, RecyclerView.VERTICAL, false);
+            //表情网格列数按屏宽自适应（适配审计 20261107 P3）：此前 4 列两处各写一份。
+            //目标格宽 ~60dp、钳 3..6 列；列间距装饰器同步用同一值
+            int span = Math.max(3, Math.min(6,
+                    getContext().getResources().getConfiguration().screenWidthDp / 60));
+            CustomGridManager layoutManager = new CustomGridManager(getContext(), span, RecyclerView.VERTICAL, false);
             layoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override
                 public int getSpanSize(int position) {
@@ -213,7 +217,7 @@ public class EmoteActivity extends BaseActivity {
                 requireActivity().setResult(RESULT_OK, new Intent().putExtra("text", emote.name));
                 requireActivity().finish();
             });
-            recyclerView.addItemDecoration(new GridSpacingItemDecoration(4, getResources().getDimensionPixelSize(R.dimen.grid_spacing), true));
+            recyclerView.addItemDecoration(new GridSpacingItemDecoration(span, getResources().getDimensionPixelSize(R.dimen.grid_spacing), true));
             recyclerView.setAdapter(adapter);
         }
 

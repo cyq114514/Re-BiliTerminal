@@ -36,6 +36,8 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
     private ViewPager pager;
     private ShortVideoShellAdapter adapter;
     private ShortVideoFeedFragment feedFragment;
+    /** 音量键：短按系统音量 ±1 档 + 提示，按住 600ms 弹无极调音（用户反馈 2026-11-07） */
+    private com.RobinNotBad.BiliClient.util.VolumeKeyHelper volumeKeyHelper;
 
     /** 第 0 页换视频时先暂存，等真的滑到右侧页再重建（避免翻视频时反复重建 Fragment） */
     private Anchor pendingAnchor;
@@ -67,6 +69,23 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
         setPageName("短视频");
 
         pager = findViewById(R.id.pager);
+        //音量键交给外套页统一处理：第 0 页的 Fragment 收不到按键事件
+        volumeKeyHelper = new com.RobinNotBad.BiliClient.util.VolumeKeyHelper(this,
+                new com.RobinNotBad.BiliClient.util.VolumeKeyHelper.Host() {
+                    @Override
+                    public void showVolumePercent(int percent) {
+                        com.RobinNotBad.BiliClient.util.MsgUtil.showMsg("音量：" + percent + "%");
+                    }
+
+                    @Override
+                    public void showVolumePanel() {
+                        com.RobinNotBad.BiliClient.util.VolumeGainPanel.show(
+                                ShortVideoPlayerActivity.this,
+                                gain -> {
+                                    if (feedFragment != null) feedFragment.applyVolumeGainFromPanel(gain);
+                                });
+                    }
+                });
         feedFragment = new ShortVideoFeedFragment();
         adapter = new ShortVideoShellAdapter(getSupportFragmentManager(), feedFragment);
         //四页全部常驻：第 0 页必须常驻（播放器在里面），右侧三页常驻让横滑不闪
@@ -85,6 +104,24 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
                 }
             }
         });
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if (volumeKeyHelper != null && volumeKeyHelper.onKeyDown(keyCode, event)) return true;
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        if (volumeKeyHelper != null && volumeKeyHelper.onKeyUp(keyCode, event)) return true;
+        return super.onKeyUp(keyCode, event);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (volumeKeyHelper != null) volumeKeyHelper.cancel();
+        super.onDestroy();
     }
 
     /** 第 0 页翻到新视频时回调：右侧三页的锚点跟着换 */

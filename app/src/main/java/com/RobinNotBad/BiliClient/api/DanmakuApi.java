@@ -176,25 +176,42 @@ public class DanmakuApi {
         public final List<DmSegMobileReply> parsed = new ArrayList<>();
     }
 
+    /** 时长未知时最多探查的分段数（40 段 = 4 小时）：只作兜底上限，正常靠空段提前退出 */
+    private static final int MAX_SEGMENTS_WHEN_DURATION_UNKNOWN = 40;
+    /** 时长未知时，连续多少个空段才判定"到片尾" */
+    private static final int EMPTY_STREAK_TO_STOP = 3;
+
     /**
      * 获取视频所有弹幕（新版 API），自动分段获取。
-     * 与旧版 getAllVideoDanmaku 行为一致（空段停止、单段失败继续），
      * 额外保留每段原始字节供磁盘缓存复用。
+     *
+     * <p><b>分段数只由真实时长决定</b>（用户反馈 2026-11-07：长视频 66 分钟后弹幕消失）。
+     * 66 分钟 = 11 段 × 6 分钟，正是"兜底 3600 秒"算出来的段数；此前还把"某段为空"当成
+     * "到达片尾"，而服务端对没有弹幕的分段会回 HTTP 304 + 空体（实测 seg 11/12 就是 304），
+     * 中间出现 6~12 分钟没人发弹幕的冷门长视频会被整段截断。
+     *
+     * <p>因此：<b>时长已知就按 ceil(时长/360) 一段不漏地拉满，中途空段跳过但不停</b>；
+     * 只有时长未知（调用方也没拿到）时才退化成"连续 {@link #EMPTY_STREAK_TO_STOP} 段为空即停"，
+     * 并封顶 {@link #MAX_SEGMENTS_WHEN_DURATION_UNKNOWN} 段。
      *
      * @param aid         稿件 avid
      * @param cid         视频 cid
-     * @param maxDuration 视频最大时长（秒），用于计算需要获取的分段数
+     * @param maxDuration 视频真实时长（秒）；&lt;=0 表示未知
      */
     public static DanmakuSegments getAllVideoDanmakuWithRaw(long aid, long cid, int maxDuration)
             throws IOException, JSONException {
         DanmakuSegments result = new DanmakuSegments();
 
-        // 计算需要获取的分段数（每段 6 分钟 = 360 秒）
-        int segmentCount = (maxDuration / 360) + 1;
+        final boolean durationKnown = maxDuration > 0;
+        // 每段 6 分钟 = 360 秒，向上取整：3900 秒的视频要 11 段（0~66 分钟），不能只取 10 段
+        int segmentCount = durationKnown
+                ? (maxDuration + 359) / 360
+                : MAX_SEGMENTS_WHEN_DURATION_UNKNOWN;
 
-        Logu.d("新版弹幕API", "视频时长: " + maxDuration + "秒, 需要获取 " + segmentCount + " 个分段");
+        Logu.d("新版弹幕API", "视频时长: " + maxDuration + "秒（" + (durationKnown ? "已知" : "未知")
+                + "）, 需要获取 " + segmentCount + " 个分段");
 
-        // 逐段获取弹幕
+        int consecutiveEmpty = 0;
         for (int i = 0; i < segmentCount; i++) {
             try {
                 byte[] raw = getVideoDanmakuSegmentBytes(aid, cid, i + 1);
@@ -202,14 +219,19 @@ public class DanmakuApi {
                 if (segment != null && !segment.elems.isEmpty()) {
                     result.rawSegments.add(raw);
                     result.parsed.add(segment);
+                    consecutiveEmpty = 0;
                 } else {
-                    // 如果某一段为空，可能已经到达最后
-                    Logu.d("新版弹幕API", "分段 " + (i + 1) + " 为空，停止获取");
-                    break;
+                    consecutiveEmpty++;
+                    Logu.d("新版弹幕API", "分段 " + (i + 1) + " 为空（连续 " + consecutiveEmpty + "）");
+                    // 时长已知：空段只说明这 6 分钟没人发弹幕，后面还有，继续拉
+                    if (!durationKnown && consecutiveEmpty >= EMPTY_STREAK_TO_STOP) {
+                        Logu.d("新版弹幕API", "时长未知且连续 " + EMPTY_STREAK_TO_STOP + " 段为空，判定到达末尾，停止获取");
+                        break;
+                    }
                 }
             } catch (Exception e) {
                 Logu.e("新版弹幕API", "获取分段 " + (i + 1) + " 失败: " + e.getMessage());
-                // 继续尝试下一段
+                // 单段失败继续下一段：弱网下整段丢失比整片没有好
             }
         }
 

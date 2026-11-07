@@ -245,8 +245,15 @@ public class UserInfoApi {
                 }
                 userSex = spaceJson.optString("sex", "");
                 userIpLocation = spaceJson.optString("ip_location", "");
+                //诊断用（用户反馈 2026-11-07：IP 属地不显示）：把接口实际返回的字段名打出来，
+                //一次真机日志就能判定"字段名不对 / 接口根本不给这个字段"，不必再猜。
+                //只打字段名不打值，避免把用户的属地信息写进日志
+                Logu.d("user-space", "acc/info mid=" + mid + " keys=" + spaceJson.names()
+                        + " sex=" + (userSex.isEmpty() ? "空" : "有")
+                        + " ip_location=" + (userIpLocation.isEmpty() ? "空" : "有"));
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Logu.e("user-space", "acc/info 失败 mid=" + mid + "：" + e.getMessage());
         }
 
         int is_senior_member = card.is_senior_member;

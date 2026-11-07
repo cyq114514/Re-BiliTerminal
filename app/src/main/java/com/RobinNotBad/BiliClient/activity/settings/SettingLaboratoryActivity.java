@@ -54,6 +54,11 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
                 context.getString(R.string.setting_lab_ui_rotatory), "false"));
         sectionList.add(new SettingSection("input_float", "表冠滚动灵敏度（列表）", "ui_rotatory_recycler", "", "0"));
         sectionList.add(new SettingSection("input_float", "表冠滚动灵敏度（页面）", "ui_rotatory_scroll", "", "0"));
+        //表冠缩放（用户反馈 2026-11-07）：图片页与播放页分别开关，默认关——不改变原有手感
+        sectionList.add(new SettingSection("switch", "表冠缩放图片", "ui_rotatory_image_zoom",
+                "在看图页旋转表冠放大/缩小当前图片（1x~6.25x，与双指缩放同一个范围）", "false"));
+        sectionList.add(new SettingSection("switch", "表冠缩放视频", "ui_rotatory_video_zoom",
+                "在播放页旋转表冠放大/缩小画面（1x~5x，双击可复位）", "false"));
 
         sectionList.add(new SettingSection("title", "播放器", "", "", ""));
         sectionList.add(new SettingSection("switch", "播放器旋屏兼容方案", "dev_player_rotate_software",

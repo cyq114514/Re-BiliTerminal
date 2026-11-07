@@ -70,12 +70,29 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
                     context.getString(R.string.desc_recent_up_display_enable), "true"));
             sectionList.add(new SettingSection("switch", "私信自动已读", SharedPreferencesUtil.PRIVATE_MSG_AUTO_READ_ENABLE,
                     context.getString(R.string.desc_private_msg_auto_read_enable), "true"));
+            sectionList.add(new SettingSection("switch", "私信拦截提示", SharedPreferencesUtil.PRIVATE_MSG_WARN_ENABLE,
+                    "进入私信页时提示「私信有可能被拦截」。关掉后不再弹出（弹窗里点「不再提醒」也会关闭这一项）", "true"));
+            //启动首页（用户反馈 2026-11-07）：选项与菜单入口同源，序号 0 = 跟随菜单排序
+            java.util.ArrayList<String> launchLabels = new java.util.ArrayList<>();
+            launchLabels.add("跟随菜单排序");
+            for (java.util.Map.Entry<String, android.util.Pair<String, Class<? extends com.RobinNotBad.BiliClient.activity.base.InstanceActivity>>> e
+                    : com.RobinNotBad.BiliClient.activity.MenuActivity.btnNames.entrySet()) {
+                launchLabels.add(e.getValue().first);
+            }
+            sectionList.add(new SettingSection("choose", "启动首页", SharedPreferencesUtil.LAUNCH_PAGE,
+                    "开屏后直接进入的页面；「跟随菜单排序」保持原行为（进菜单里排第一的入口）。选定后即使没网也会进这个页面",
+                    "0", launchLabels.toArray(new String[0])));
             sectionList.add(new SettingSection("switch", "我的关注列表分组", SharedPreferencesUtil.FOLLOW_GROUP_MODE,
                     context.getString(R.string.desc_follow_group_mode), "false"));
             sectionList.add(new SettingSection("switch", "深夜使用提醒", SharedPreferencesUtil.NIGHT_REMINDER_ENABLE,
                     context.getString(R.string.desc_night_reminder), "true"));
             sectionList.add(new SettingSection("switch", "禁用返回键", "back_disable", context.getString(R.string.desc_back_disable),
                     "false"));
+            //低电量提醒（用户反馈 2026-11-07）：开关 + 阈值档位，值走通知而非弹窗，锁屏也看得到
+            sectionList.add(new SettingSection("switch", "低电量提醒", "battery_low_alert_enable",
+                    "电量低于阈值时发一条通知提醒充电；插上电或回到阈值以上后才会再次提醒", "true"));
+            sectionList.add(new SettingSection("choose", "低电量阈值", "battery_low_threshold",
+                    "电量掉到这个值以下才提醒", "3", new String[]{"5%", "10%", "15%", "20%", "30%"}));
             sectionList.add(new SettingSection("switch", "启动时检查更新", SharedPreferencesUtil.UPDATE_CHECK_ON_START,
                     "每次冷启动在首屏之后从 GitHub（直连失败会依次尝试内置镜像）检查新版本，发现更新时弹窗提示；默认开启，不想让它联网可以关掉",
                     "true"));

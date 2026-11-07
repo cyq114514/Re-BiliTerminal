@@ -340,6 +340,16 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             input = itemView.findViewById(R.id.setting_input_edittext);
             desc = itemView.findViewById(R.id.setting_input_desc);
             name = itemView.findViewById(R.id.setting_input_name);
+            //输入框聚焦时把本行滚进视口（适配审计 20261107 P2-20）：输入条目在列表中下部时，
+            //即便列表页已补 adjustResize，光标行也可能停在 IME 后面；聚焦即定位一次
+            input.setOnFocusChangeListener((v, hasFocus) -> {
+                if (!hasFocus) return;
+                if (itemView.getParent() instanceof androidx.recyclerview.widget.RecyclerView) {
+                    int pos = getAdapterPosition();
+                    if (pos != androidx.recyclerview.widget.RecyclerView.NO_POSITION)
+                        ((androidx.recyclerview.widget.RecyclerView) itemView.getParent()).scrollToPosition(pos);
+                }
+            });
             input.addTextChangedListener(new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {

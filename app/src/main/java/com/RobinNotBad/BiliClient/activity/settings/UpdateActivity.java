@@ -43,6 +43,8 @@ public class UpdateActivity extends BaseActivity {
         setPageName("检查更新");
 
         statusView = findViewById(R.id.update_status);
+        //表冠滚动（适配审计 P2-8）：说明区换 Rotary 容器后在此聚焦
+        findViewById(R.id.update_notes_scroll).requestFocus();
         notesView = findViewById(R.id.update_notes);
         progressText = findViewById(R.id.update_progress_text);
         progressBar = findViewById(R.id.update_progress);

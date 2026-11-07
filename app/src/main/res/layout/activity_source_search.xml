@@ -71,7 +71,7 @@
 
             <TextView
                 android:id="@+id/btnManage"
-                android:layout_width="40dp"
+                android:layout_width="48dp"
                 android:layout_height="42dp"
                 android:layout_marginStart="4dp"
                 android:background="@drawable/sel_filter_chip"

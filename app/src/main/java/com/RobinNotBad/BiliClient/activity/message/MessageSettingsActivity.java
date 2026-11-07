@@ -43,7 +43,7 @@ public class MessageSettingsActivity extends BaseActivity {
         swipeRefreshLayout.setEnabled(false);
         swipeRefreshLayout.setRefreshing(true);
         recyclerView = findViewById(R.id.recyclerView);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(getLayoutManager());  //接 BaseActivity 统一 LayoutManager（适配审计 P2-10/23）：横屏开关下与推荐/时间线同享 3 列网格;
 
         settingsList = new ArrayList<>();
         loadSettings();

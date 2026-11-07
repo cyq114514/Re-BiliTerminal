@@ -54,7 +54,7 @@
             android:layout_marginBottom="2dp"
             android:singleLine="true"
             android:text="收藏夹名称"
-            android:textSize="11sp"
+            android:textSize="12sp"
             app:layout_constraintBottom_toTopOf="@+id/guide_vertical_0.4"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@+id/guide_horizontal_0.5" />
@@ -66,6 +66,7 @@
             android:layout_marginStart="4dp"
             android:layout_marginTop="2dp"
             android:alpha="0.7"
+            android:maxWidth="90dp"
             android:text="1000/1000"
             android:textSize="11sp"
             app:layout_constraintStart_toEndOf="@+id/icon_count"

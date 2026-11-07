@@ -81,7 +81,7 @@ public class DynamicActivity extends RefreshMainActivity {
                 } else {
                     this.type = type;
                     setRefreshing(true);
-                    refreshDynamic();
+                    refreshDynamic(true);
                 }
             }
         }
@@ -206,7 +206,8 @@ public class DynamicActivity extends RefreshMainActivity {
         setMenuClick();
         Log.e("debug", "进入动态页");
 
-        setOnRefreshListener(this::refreshDynamic);
+        //手动下拉刷新视为已读（用户反馈 2026-11-07）：刷新后清掉 UP 头像小红点
+        setOnRefreshListener(() -> refreshDynamic(true));
         setOnLoadMoreListener(page -> addDynamic(type));
 
         if (isTopicMode()) {
@@ -220,12 +221,21 @@ public class DynamicActivity extends RefreshMainActivity {
 
         TutorialHelper.showTutorialList(this, R.array.tutorial_dynamic, 6);
 
-        loadRecentUpList();
-        refreshDynamic();
+        loadRecentUpList(false);
+        refreshDynamic(false);
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     private void refreshDynamic() {
+        refreshDynamic(false);
+    }
+
+    /**
+     * @param manual 用户主动刷新（下拉/切类型）时为 true：视为已读，
+     *               本次拉到的最近更新 UP 列表小红点全部清掉（用户反馈 2026-11-07）。
+     *               首次进入的自动加载不算已读，保留服务端 has_update。
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private void refreshDynamic(boolean manual) {
         Log.e("debug", "刷新");
         if (firstRefresh) {
             dynamicList = new ArrayList<>();
@@ -240,7 +250,7 @@ public class DynamicActivity extends RefreshMainActivity {
             dynamicAdapter.notifyDataSetChanged();
         }
 
-        loadRecentUpList();
+        loadRecentUpList(manual);
         addDynamic(type, true);
     }
 
@@ -291,10 +301,16 @@ public class DynamicActivity extends RefreshMainActivity {
         });
     }
 
-    private void loadRecentUpList() {
+    private void loadRecentUpList(boolean markRead) {
         CenterThreadPool.run(() -> {
             try {
-                recentUpList = DynamicApi.getRecentUpList();
+                List<DynamicApi.UpInfo> loaded = DynamicApi.getRecentUpList();
+                //手动刷新=默认已读（用户反馈 2026-11-07）：清掉小红点标记。
+                //服务端 has_update 语义不动，只影响本页展示
+                if (markRead && loaded != null) {
+                    for (DynamicApi.UpInfo up : loaded) up.has_update = false;
+                }
+                recentUpList = loaded;
                 runOnUiThread(() -> {
                     if (dynamicAdapter != null) {
                         dynamicAdapter.recentUpList = recentUpList;

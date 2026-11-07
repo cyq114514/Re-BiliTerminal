@@ -129,8 +129,8 @@
     <TextView
         android:id="@+id/likes"
         android:layout_width="wrap_content"
-        android:layout_height="20dp"
-        android:layout_marginTop="4dp"
+        android:layout_height="40dp"
+        android:layout_marginTop="0dp"
         android:gravity="center_vertical"
         android:textColor="@color/text_gray"
         android:text="514"
@@ -144,8 +144,8 @@
     <TextView
         android:id="@+id/item_dynamic_comment"
         android:layout_width="wrap_content"
-        android:layout_height="20dp"
-        android:layout_marginStart="4dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
         android:textColor="@color/textwhite"
         android:gravity="center_vertical"
         android:text="0"
@@ -159,8 +159,8 @@
     <TextView
         android:id="@+id/item_dynamic_share"
         android:layout_width="wrap_content"
-        android:layout_height="20dp"
-        android:layout_marginStart="4dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
         android:textColor="@color/textwhite"
         android:gravity="center_vertical"
         android:text="转发"
@@ -174,8 +174,8 @@
     <TextView
         android:id="@+id/item_dynamic_delete"
         android:layout_width="wrap_content"
-        android:layout_height="20dp"
-        android:layout_marginStart="4dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
         android:gravity="center_vertical"
         android:textColor="@color/textwhite"
         android:text="删除"

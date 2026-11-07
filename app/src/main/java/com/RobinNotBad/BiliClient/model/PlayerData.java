@@ -25,6 +25,8 @@ public class PlayerData implements Parcelable {
     public long cid;
     public long mid;
     public int progress = 0;
+    /** 取流响应的 timelength（毫秒），视频真实总时长；0=未取得。弹幕分段数按它算（用户反馈：兜底 1 小时导致 66 分钟后弹幕消失） */
+    public long durationMs = 0;
     public long cidHistory = 0;
     public int type = 0;
     public long timeStamp;
@@ -117,6 +119,10 @@ public class PlayerData implements Parcelable {
         String rawDanmakuTitle = in.readString();
         danmakuTitle = rawDanmakuTitle != null ? rawDanmakuTitle : "";
         danmakuEpisode = in.readInt();
+        //真实时长必须跟着 Parcel 走（用户反馈 2026-11-07：长视频 66 分钟后弹幕消失）：
+        //详情页预取过 playurl 后 timeStamp 已有值，跳转页的 getVideo 会在 10 分钟内直接早退，
+        //不会重新取流；此时 durationMs 若没序列化就是 0，弹幕分段数退回 3600 秒兜底 → 11 段 = 66 分钟
+        durationMs = in.readLong();
         // dashData不序列化，下载时会重新获取
     }
 
@@ -169,6 +175,8 @@ public class PlayerData implements Parcelable {
         dest.writeString(extraHeaders != null ? extraHeaders : "");
         dest.writeString(danmakuTitle != null ? danmakuTitle : "");
         dest.writeInt(danmakuEpisode);
+        //真实时长：与读取侧末尾严格同序（见 PlayerData(Parcel) 的说明）
+        dest.writeLong(durationMs);
         // dashData不序列化，下载时会重新获取
     }
 

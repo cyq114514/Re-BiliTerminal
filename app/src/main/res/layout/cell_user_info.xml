@@ -6,6 +6,11 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
+    <!--
+        头像约束（适配审计 20261107 P1-4）：原先 0dp×0dp 只有 start+top 两个锚点，
+        宽高两轴都未闭合，尺寸随 ConstraintLayout 版本回退行为漂移（塌缩或不可预测）。
+        改为宽度百分比 25% + 1:1 比例推导高度——父容器宽是确定的（match_parent），尺寸稳定。
+    -->
     <ImageView
         android:id="@+id/userAvatar"
         android:layout_width="0dp"
@@ -14,6 +19,7 @@
         android:adjustViewBounds="true"
         android:src="@mipmap/akari"
         app:layout_constraintDimensionRatio="1:1"
+        app:layout_constraintWidth_percent="0.25"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

@@ -52,7 +52,7 @@
             android:paddingVertical="1dp"
             android:text="互关"
             android:textColor="#FFFFFF"
-            android:textSize="9sp"
+            android:textSize="10sp"
             android:visibility="gone"
             android:layout_marginStart="5dp"
             app:layout_constraintStart_toEndOf="@id/userName"

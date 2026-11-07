@@ -158,25 +158,25 @@
 
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/refresh0" android:layout_width="match_parent" android:layout_height="match_parent">
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler0"
+                <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView android:id="@+id/recycler0"
                     android:layout_width="match_parent" android:layout_height="match_parent" />
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/refresh1" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler1"
+                <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView android:id="@+id/recycler1"
                     android:layout_width="match_parent" android:layout_height="match_parent" />
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/refresh2" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler2"
+                <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView android:id="@+id/recycler2"
                     android:layout_width="match_parent" android:layout_height="match_parent" />
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/refresh3" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler3"
+                <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView android:id="@+id/recycler3"
                     android:layout_width="match_parent" android:layout_height="match_parent" />
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 

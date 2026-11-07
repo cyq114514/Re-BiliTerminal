@@ -10,9 +10,9 @@
     android:background="#FF1B1B1D"
     android:fitsSystemWindows="true"
     android:orientation="vertical"
-    android:paddingHorizontal="12dp"
-    android:paddingTop="24dp"
-    android:paddingBottom="12dp">
+    android:paddingHorizontal="10dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="10dp">
 
     <TextView
         android:id="@+id/calc_preview"
@@ -20,22 +20,24 @@
         android:layout_height="wrap_content"
         android:ellipsize="start"
         android:gravity="end"
-        android:minHeight="24dp"
+        android:minHeight="20dp"
         android:singleLine="true"
         android:textColor="#FF8E8E93"
-        android:textSize="14sp" />
+        android:textSize="12sp" />
 
+    <!-- 显示区缩小、键盘放大（用户反馈 2026-11-07：输入框太大、按键太小）。
+         圆屏下 CalculatorActivity 会再压到 26sp -->
     <TextView
         android:id="@+id/calc_display"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="6dp"
         android:ellipsize="start"
         android:gravity="end"
         android:maxLines="2"
         android:text="0"
         android:textColor="#FFFFFFFF"
-        android:textSize="40sp" />
+        android:textSize="34sp" />
 
     <Space
         android:layout_width="match_parent"

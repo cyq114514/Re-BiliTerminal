@@ -28,6 +28,8 @@ import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.LyricProvider;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.VolumeGainPanel;
+import com.RobinNotBad.BiliClient.util.VolumeKeyHelper;
 
 import java.util.List;
 import java.util.Locale;
@@ -40,9 +42,13 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
     private TextView title, upName, tvPosition, tvDuration, tvQueueInfo;
     private SeekBar seekBar;
     private SeekBar volumeBar;
+    /** 音量键之间的百分比数字（用户反馈 2026-11-08：键和滑条挤一行会互相遮挡，拆成两行后补个读数） */
+    private TextView volPercent;
     private TextView btnPlayMode;
     private ImageButton btnPlay;
     private AudioManager audioManager;
+    /** 音量键：短按系统音量 ±1 档 + 提示，按住 600ms 弹无极调音（用户反馈 2026-11-07） */
+    private VolumeKeyHelper volumeKeyHelper;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean dragging = false;
@@ -191,6 +197,43 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
             }
         }
 
+        //单独的音量键（用户反馈 2026-11-07）：单击减/加一档，长按弹无极调音
+        volPercent = findViewById(R.id.volPercent);
+        syncVolumeUi();
+        View volDown = findViewById(R.id.volDown);
+        View volUp = findViewById(R.id.volUp);
+        if (volDown != null) {
+            volDown.setOnClickListener(v -> stepSystemVolumeUi(-1));
+            volDown.setOnLongClickListener(v -> {
+                VolumeGainPanel.show(AudioPlayerActivity.this,
+                        gain -> AudioPlayerService.setGain(AudioPlayerActivity.this, gain));
+                return true;
+            });
+        }
+        if (volUp != null) {
+            volUp.setOnClickListener(v -> stepSystemVolumeUi(1));
+            volUp.setOnLongClickListener(v -> {
+                VolumeGainPanel.show(AudioPlayerActivity.this,
+                        gain -> AudioPlayerService.setGain(AudioPlayerActivity.this, gain));
+                return true;
+            });
+        }
+
+        //音量键（用户反馈 2026-11-07）：短按系统音量 ±1 档 + 提示，按住 600ms 弹无极调音，
+        //与播放页、短视频是同一套实现
+        volumeKeyHelper = new VolumeKeyHelper(this, new VolumeKeyHelper.Host() {
+            @Override
+            public void showVolumePercent(int percent) {
+                MsgUtil.showMsg("音量：" + percent + "%");
+            }
+
+            @Override
+            public void showVolumePanel() {
+                VolumeGainPanel.show(AudioPlayerActivity.this,
+                        gain -> AudioPlayerService.setGain(AudioPlayerActivity.this, gain));
+            }
+        });
+
         //播放模式（1.3.2 反馈）：点击在 列表循环→单曲循环→随机 间轮换，立即存档并生效
         btnPlayMode = findViewById(R.id.btnPlayMode);
         if (btnPlayMode != null) {
@@ -289,7 +332,7 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
         btnPlay.setImageResource(AudioPlayerService.isPlaying()
                 ? R.drawable.btn_player_pause : R.drawable.btn_player_play);
         if (audioManager != null && volumeBar != null && !volumeBar.isPressed())
-            volumeBar.setProgress(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
+            syncVolumeUi();
 
         String folder = AudioQueue.get().getFolderName();
         String info = AudioQueue.get().positionText()
@@ -431,11 +474,42 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
         return result;
     }
 
+    /** 界面上的音量键：调一档系统音量，滑条与百分比跟着同步 */
+    private void stepSystemVolumeUi(int dir) {
+        int percent = VolumeKeyHelper.stepSystemVolume(this, dir);
+        if (percent < 0) return;
+        syncVolumeUi();
+        MsgUtil.showMsg("音量：" + percent + "%");
+    }
+
+    /** 把系统音量同步到滑条与按钮之间的百分比文字（硬件音量键改动也会跟到） */
+    private void syncVolumeUi() {
+        if (audioManager == null) return;
+        int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int now = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        if (volumeBar != null) volumeBar.setProgress(now);
+        if (volPercent != null)
+            volPercent.setText((max > 0 ? Math.round(now * 100f / max) : 0) + "%");
+    }
+
     @Override
     protected void onDestroy() {
         handler.removeCallbacks(refreshRunnable);
+        if (volumeKeyHelper != null) volumeKeyHelper.cancel();
         AudioPlayerService.removeListener(this);
         super.onDestroy();
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if (volumeKeyHelper != null && volumeKeyHelper.onKeyDown(keyCode, event)) return true;
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        if (volumeKeyHelper != null && volumeKeyHelper.onKeyUp(keyCode, event)) return true;
+        return super.onKeyUp(keyCode, event);
     }
 
     private static String formatTime(int ms) {

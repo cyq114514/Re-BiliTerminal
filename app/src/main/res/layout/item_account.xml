@@ -46,6 +46,7 @@
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
             android:singleLine="true"
+            android:ellipsize="end"
             app:layout_constraintStart_toEndOf="@+id/account_avatar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/account_name"

@@ -58,6 +58,7 @@ public class UpdateLogActivity extends BaseActivity {
         }
         logText.setText(str.toString());
         //切回顶部：布局未完成时 scrollTo 不生效，用 post 保证切 tab 后总在顶部
+        findViewById(R.id.log_scroll).requestFocus();  //表冠滚动（适配审计 P2-8）
         findViewById(R.id.log_scroll).post(() -> findViewById(R.id.log_scroll).scrollTo(0, 0));
     }
 }

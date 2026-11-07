@@ -67,7 +67,7 @@ public class NoticeActivity extends RefreshListActivity {
                     } else if (systemList != null) {
                         messageList.addAll(systemList);
                     }
-                    noticeAdapter = new NoticeAdapter(this, messageList);
+                    noticeAdapter = new NoticeAdapter(this, messageList, pageType);
                     setAdapter(noticeAdapter);
                     setRefreshing(false);
                     setOnLoadMoreListener(this::continueLoading);

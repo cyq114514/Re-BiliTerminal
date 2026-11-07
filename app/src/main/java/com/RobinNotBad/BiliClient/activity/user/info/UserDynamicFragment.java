@@ -88,10 +88,12 @@ public class UserDynamicFragment extends RefreshListFragment {
 
                 if (isAdded()) {
                     adapter = new UserDynamicAdapter(requireContext(), dynamicList, userInfo);
+                    //空动态不再整页替换成空态（用户反馈 2026-11-07：那样连个人信息都看不见了），
+                    //改成在列表末尾追加一条占位，头像/昵称/签名/关注数始终留在屏幕上
+                    adapter.setEmptyTip(dynamicList.isEmpty());
                     setAdapter(adapter);
                     setRefreshing(false);
-                    if (dynamicList.isEmpty()) showEmptyView("TA 还没有发布过动态~");
-                    else hideEmptyView();
+                    hideEmptyView();
                 }
             } catch (Exception e) {
                 loadFail(e);

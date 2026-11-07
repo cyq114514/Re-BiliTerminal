@@ -34,6 +34,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:maxLines="1"
+            android:ellipsize="end"
             android:text="第1话"
             android:textSize="13sp" />
 
@@ -43,6 +44,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
             android:maxLines="1"
+            android:ellipsize="end"
             android:text="限免"
             android:textSize="10sp"
             android:visibility="gone" />

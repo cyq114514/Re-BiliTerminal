@@ -63,11 +63,27 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     final Context context;
     final ArrayList<Dynamic> dynamicList;
     final UserInfo userInfo;
+    /**
+     * 列表为空时是否追加一条「TA 还没有发布过动态」占位。
+     * 用户反馈 2026-11-07：空动态时整页只剩一句空态、个人信息（头像是列表第 0 项）也没了。
+     */
+    private boolean emptyTip = false;
 
     public UserDynamicAdapter(Context context, ArrayList<Dynamic> dynamicList, UserInfo userInfo) {
         this.context = context;
         this.dynamicList = dynamicList;
         this.userInfo = userInfo;
+    }
+
+    public void setEmptyTip(boolean emptyTip) {
+        this.emptyTip = emptyTip;
+    }
+
+    /** 只在列表真的为空时多出来的一条：纯文本占位，放在个人信息卡下面 */
+    private static class EmptyHolder extends RecyclerView.ViewHolder {
+        EmptyHolder(TextView view) {
+            super(view);
+        }
     }
 
     @NonNull
@@ -76,6 +92,15 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (viewType == 0) {
             View view = LayoutInflater.from(context).inflate(R.layout.cell_user_info, parent, false);
             return new UserInfoHolder(view);
+        } else if (viewType == 2) {
+            //空态占位：不隐藏列表，个人信息才有地方留在屏幕上
+            TextView empty = new TextView(context);
+            empty.setGravity(android.view.Gravity.CENTER);
+            empty.setTextSize(13f);
+            empty.setAlpha(0.7f);
+            int pad = (int) (context.getResources().getDisplayMetrics().density * 28);
+            empty.setPadding(pad, pad, pad, pad);
+            return new EmptyHolder(empty);
         } else {
             View view = LayoutInflater.from(context).inflate(R.layout.cell_dynamic, parent, false);
             return new DynamicHolder(view, (BaseActivity) context, false);
@@ -117,6 +142,9 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (holder instanceof UserInfoHolder) {
             ((UserInfoHolder) holder).bind(context, userInfo);
         }
+        if (holder instanceof EmptyHolder) {
+            ((TextView) holder.itemView).setText("TA 还没有发布过动态~");
+        }
     }
 
     @Override
@@ -130,12 +158,15 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     @Override
     public int getItemCount() {
-        return dynamicList != null ? dynamicList.size() + 1 : 1;
+        int count = dynamicList != null ? dynamicList.size() + 1 : 1;
+        return count + (emptyTip ? 1 : 0);
     }
 
     @Override
     public int getItemViewType(int position) {
-        return (position == 0 ? 0 : 1);
+        if (position == 0) return 0;
+        if (emptyTip && position == getItemCount() - 1) return 2;
+        return 1;
     }
 
     public static class UserInfoHolder extends RecyclerView.ViewHolder {
@@ -412,6 +443,10 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
                             // 设置RecyclerView
                             this.electricUserList.setLayoutManager(new LinearLayoutManager(context));
+                            //同向嵌套滚动（适配审计 P2-18）：公示列表嵌在竖向外层列表的头卡里，
+                            //手势落在公示区时内层先消费滚动、外层"卡住"。关掉内层嵌套滚动让它
+                            //彻底让位给外层（列表是 wrap_content 全量展开，本来也不自己滚）
+                            this.electricUserList.setNestedScrollingEnabled(false);
                             ElectricUserAdapter adapter = new ElectricUserAdapter(context, panel.list);
                             this.electricUserList.setAdapter(adapter);
 

@@ -119,6 +119,11 @@ public class AudioPlayerService extends Service {
     }
 
     private static AudioPlayerService sInstance;
+    /**
+     * 当前播放实例：无极调音面板要实时改音量，原实现里播放器只是 prepareAndPlay 的局部变量，
+     * 外部拿不到（用户反馈 2026-11-07：听歌页也要能长按调出无极调音）
+     */
+    private IjkMediaPlayer currentPlayer;
     //支持多个 UI 同时监听（全屏页 + 队列页）
     private static final List<Listener> sListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     /**
@@ -235,6 +240,23 @@ public class AudioPlayerService extends Service {
 
     public static void previous(Context context) {
         sendAction(context, ACTION_PREV);
+    }
+
+    /**
+     * 无极调音：把软件增益立刻套到当前播放实例（面板拖动时调用）。
+     * 下一次 onPrepared 仍会按偏好重新套一遍，所以换歌不会丢。
+     */
+    public static void setGain(Context context, float gain) {
+        AudioPlayerService s = sInstance;
+        if (s == null) return;
+        float g = Math.max(0f, Math.min(1f, gain));
+        IjkMediaPlayer p = s.currentPlayer;
+        if (p == null) return;
+        try {
+            p.setVolume(g, g);
+        } catch (Throwable t) {
+            Logu.e(TAG, "套用音量增益失败: " + t);
+        }
     }
 
     public static void seekTo(Context context, int positionMs) {
@@ -707,6 +729,7 @@ public class AudioPlayerService extends Service {
                 + " host=" + urlHost(source) + " src=" + urlTail(source));
         try {
             IjkMediaPlayer mp = new IjkMediaPlayer();
+            currentPlayer = mp;
             mp.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vn", 1);
             mp.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 48);
             mp.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);

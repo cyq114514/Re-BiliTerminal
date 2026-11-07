@@ -43,6 +43,8 @@ public class AudioQueueActivity extends BaseActivity implements AudioPlayerServi
         items.addAll(AudioQueue.get().getItems());
         adapter = new QueueAdapter();
         recycler.setAdapter(adapter);
+        //表冠滚动需要焦点路由到列表（适配审计 P2-8）：队列页换 Rotary 容器后在此聚焦
+        recycler.requestFocus();
         AudioPlayerService.addListener(this);
         scrollToCurrent();
     }

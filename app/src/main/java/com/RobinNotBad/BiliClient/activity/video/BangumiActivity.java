@@ -240,6 +240,8 @@ public class BangumiActivity extends InstanceActivity {
             refreshes[i].setVisibility(i == tab ? View.VISIBLE : View.GONE);
         }
         filterBar.setVisibility(tab == TAB_INDEX ? View.VISIBLE : View.GONE);
+        //表冠滚动（适配审计 P2-8）：四个页签列表换 Rotary 容器后，切页签时把焦点跟过去
+        recyclers[tab].requestFocus();
         //页签与筛选栏现在会随列表滚出屏幕：切页签时先收回来，
         //否则用户在列表底部切 tab 会只看到列表、找不到页签与筛选入口
         if (headerBar != null) headerBar.setExpanded(true, true);

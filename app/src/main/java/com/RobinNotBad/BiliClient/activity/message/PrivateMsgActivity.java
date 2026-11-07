@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.ClickGuard;
+import com.RobinNotBad.BiliClient.util.SendGuard;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.PickImageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -59,6 +60,16 @@ public class PrivateMsgActivity extends BaseActivity {
     volatile boolean destroyed;
     //图片上传+发送进行中禁止再次触发，防止连点重复发图
     volatile boolean sendingImage;
+    /**
+     * 同一时刻只允许一次 refresh 在飞（用户反馈 2026-11-07：发一条消息连弹好几条）。
+     *
+     * <p>refresh 有三个入口：15 秒定时器、发送成功回调、回到页面，可能并发。两个线程若在
+     * 去重之前都读到同一个 lastSeqno，就会拿到同一批"边界之后的消息"，各自追加一遍。
+     * 主线程按 msgSeqno 去重能挡住重复项，但多打一次请求、多一次 notify 更容易出重影，
+     * 所以入口处先做 CAS 互斥。
+     */
+    private final java.util.concurrent.atomic.AtomicBoolean refreshInFlight =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     //相册选图；回调在主线程，IO 与网络在 sendPic 里转后台线程
     private final ActivityResultLauncher<String> pickImageLauncher =
@@ -115,7 +126,18 @@ public class PrivateMsgActivity extends BaseActivity {
         uid = intent.getLongExtra("uid", 114514);
         Log.e("", String.valueOf(uid));
 
-        MsgUtil.showMsg("私信有可能被拦截\n尽量不要用终端发私信喵");
+        //拦截风险提示改成可关闭的弹窗（用户反馈 2026-11-07）：点「不再提醒」写偏好，
+        //也可以在 设置 → 偏好设置 → 功能 →「私信拦截提示」里重新打开
+        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PRIVATE_MSG_WARN_ENABLE, true)) {
+            new com.RobinNotBad.BiliClient.util.AdaptiveDialog.Builder(this)
+                    .setTitle("提示")
+                    .setMessage("私信有可能被拦截\n尽量不要用终端发私信喵")
+                    .setNegativeButton("不再提醒", (d, which) ->
+                            SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.PRIVATE_MSG_WARN_ENABLE, false))
+                    .setPositiveButton("我知道了", (d, which) -> {
+                    })
+                    .show();
+        }
 
         CenterThreadPool.run(() -> {
             try {
@@ -207,12 +229,14 @@ public class PrivateMsgActivity extends BaseActivity {
             else PickImageUtil.launchSafe(pickImageLauncher);
         });
 
-        //文本发送此前无防抖，连点重复发两条（图片路径有 sendingImage 守卫，文本没有）（E-02）
-        sendBtn.setOnClickListener(view -> ClickGuard.protect(view, () -> CenterThreadPool.run(() -> {
+        //文本发送此前无防抖，连点重复发两条（图片路径有 sendingImage 守卫，文本没有）（E-02）。
+        //现在统一走 SendGuard：3 秒内同一会话只放行一次，重复点击会明确提示「请勿频繁点击」
+        sendBtn.setOnClickListener(view -> CenterThreadPool.run(() -> {
             try {
                 //保留原始文本（含首尾/连续换行），只用 trim 判断是否为空
                 String content = contentEt.getText().toString();
                 if (!content.trim().isEmpty()) {
+                    if (!SendGuard.tryAcquire("private_msg_" + uid)) return;
                     // PiliPlus 格式：content 包裹为 JSON。
                     // 原来手工拼串只转义双引号，正文出现 \n、\t、\\ 时会生成非法 JSON，
                     // 服务端解析失败回"请求错误"——交给 JSONObject 按 JSON 规则转义
@@ -231,6 +255,8 @@ public class PrivateMsgActivity extends BaseActivity {
                             refresh();
                         } else {
                             String msg = result.optString("message", result.optString("msg", "发送失败"));
+                            //失败允许立刻重试，不让人干等 3 秒
+                            SendGuard.reset("private_msg_" + uid);
                             MsgUtil.showMsg("发送失败：" + msg);
                         }
                     });
@@ -238,9 +264,10 @@ public class PrivateMsgActivity extends BaseActivity {
                     runOnUiThread(() -> MsgUtil.showMsg("你还木有输入喵~"));
                 }
             } catch (Exception e) {
+                SendGuard.reset("private_msg_" + uid);
                 runOnUiThread(() -> MsgUtil.showMsg("发送失败：" + e.getMessage()));
             }
-        })));
+        }));
     }
 
     private void sendPic(Uri uri) {
@@ -314,9 +341,11 @@ public class PrivateMsgActivity extends BaseActivity {
     }
 
     private void refresh() {
+        if (destroyed || list.isEmpty() || adapter == null) return;
+        //已有一次在飞：本次直接放弃，等它回来后的下一次定时器再拉
+        if (!refreshInFlight.compareAndSet(false, true)) return;
         CenterThreadPool.run(() -> {
             try {
-                if (list.isEmpty()) return;
                 int oldListSize = list.size();
                 long lastSeqno = list.get(list.size() - 1).msgSeqno;
                 JSONObject msgResult = PrivateMsgApi.getPrivateMsg(uid, 50, lastSeqno, 0);
@@ -329,16 +358,28 @@ public class PrivateMsgActivity extends BaseActivity {
                     }
                     Collections.reverse(newList);
                     runOnUiThread(() -> {
+                        if (destroyed || adapter == null) return;
+                        //追加去重（用户反馈 2026-11-07：同一条消息偶发重复弹出）：
+                        //服务端 seq 窗口偶发重叠/多端同步时基线不推进，按 msgSeqno 过滤
+                        java.util.Set<Long> seen = new java.util.HashSet<>();
+                        for (PrivateMessage m : list) seen.add(PrivateMsgAdapter.keyOf(m));
+                        int added = 0;
                         for (PrivateMessage msg : newList) {
+                            if (msg == null || !seen.add(PrivateMsgAdapter.keyOf(msg))) continue;
                             list.add(msg);
                             adapter.notifyItemInserted(list.size() - 1);
+                            added++;
                         }
-                        adapter.notifyItemRangeChanged(oldListSize - 1, list.size());
-                        msgView.smoothScrollToPosition(list.size() - 1);
+                        if (added > 0) {
+                            adapter.notifyItemRangeChanged(oldListSize - 1, list.size());
+                            msgView.smoothScrollToPosition(list.size() - 1);
+                        }
                     });
                 }
             } catch (Exception e) {
                 Log.e("PrivateMsgActivity", "refresh error", e);
+            } finally {
+                refreshInFlight.set(false);
             }
         });
     }

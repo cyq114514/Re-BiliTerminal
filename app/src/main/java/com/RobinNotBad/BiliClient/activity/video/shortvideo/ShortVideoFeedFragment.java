@@ -44,6 +44,7 @@ import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.VolumeGainPanel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -229,6 +230,16 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         errorText = view.findViewById(R.id.errorText);
         btnBack = view.findViewById(R.id.btnBack);
 
+        //圆屏适配（适配审计 20261107 P1-3）：短视频页此前没有任何圆屏分支，返回键贴在
+        //左上角 2dp 处——圆表上正好落进可视区外的死角。内缩 6% 屏宽、4% 屏高
+        if (SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            android.widget.FrameLayout.LayoutParams backParams =
+                    (android.widget.FrameLayout.LayoutParams) btnBack.getLayoutParams();
+            backParams.setMargins((int) (dm.widthPixels * 0.06), (int) (dm.heightPixels * 0.04), 0, 0);
+            btnBack.setLayoutParams(backParams);
+        }
+
         btnBack.setOnClickListener(v -> {
             if (getActivity() instanceof ShortVideoPlayerActivity) {
                 ((ShortVideoPlayerActivity) getActivity()).handleBack();
@@ -240,6 +251,8 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         recyclerView.setLayoutManager(manager);
         snapHelper = new PagerSnapHelper();
         snapHelper.attachToRecyclerView(recyclerView);
+        //表冠翻页（适配审计 P2-8）：信息流换 Rotary 容器后在此聚焦，表冠可一屏一屏翻短视频
+        recyclerView.requestFocus();
         adapter = new ShortVideoPagerAdapter(items, this);
         recyclerView.setAdapter(adapter);
         recyclerView.setItemAnimator(null);
@@ -841,6 +854,26 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         armWatchdog(token, FIRST_FRAME_TIMEOUT_MS);
     }
 
+    /** 外套页（长按音量键弹出无极调音）实时回调入口 */
+    public void applyVolumeGainFromPanel(float gain) {
+        applyVolumeGain(gain);
+    }
+
+    /** 每条视频的操作栏长按音量键 → 无极调音面板的实时回调 */
+    @Override
+    public void onVolumeGain(float gain) {
+        applyVolumeGain(gain);
+    }
+
+    /** 把指定的软件增益套到当前短视频实例（音量面板拖动时实时调用） */
+    private void applyVolumeGain(float gain) {
+        if (player == null) return;
+        try {
+            player.setVolume(VolumeGainPanel.clamp(gain), VolumeGainPanel.clamp(gain));
+        } catch (Throwable ignored) {
+        }
+    }
+
     /**
      * 按候选顺序取地址。
      *
@@ -1324,7 +1357,7 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
         Intent intent = new Intent(getContext(), ListChooseActivity.class);
         intent.putExtra("title", "更多操作");
         ArrayList<String> options = new ArrayList<>(Arrays.asList(
-                "稍后再看", "投币 1 枚", "分享", "发送到消息", "查看视频详情", "不感兴趣"));
+                "稍后再看", "投币 1 枚", "音量", "分享", "发送到消息", "查看视频详情", "不感兴趣"));
         intent.putExtra("items", options);
         startActivityForResult(intent, REQ_MORE);
     }
@@ -1360,6 +1393,11 @@ public class ShortVideoFeedFragment extends Fragment implements ShortVideoPagerA
                         handler.post(() -> MsgUtil.showMsg("投币失败"));
                     }
                 });
+                break;
+            case "音量":
+                //用户反馈 2026-11-07：短视频没有调音量的入口。走同一套软件增益
+                //（player_volume_gain），调完立刻套到当前实例，下一条重建实例时也会沿用
+                VolumeGainPanel.show(requireActivity(), gain -> applyVolumeGain(gain));
                 break;
             case "分享": {
                 Intent share = new Intent(Intent.ACTION_SEND);

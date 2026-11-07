@@ -111,16 +111,28 @@ public class BaseActivity extends AppCompatActivity {
 
         int scrW = metrics.widthPixels;
         int scrH = metrics.heightPixels;
+        //圆屏内容区安全边距（适配审计 20261107 P2-1/2/3）：player_ui_round 此前只补偿顶栏与播放器，
+        //内容区（列表卡片、菜单网格底部、设置开关）四角没有任何安全机制。这里给默认内缩——
+        //水平 8% 屏宽、底部 6% 屏高；用户手设了「界面边距」时以用户值为准（只叠加历史的底部 3%）。
+        boolean roundScreen = SharedPreferencesUtil.getBoolean("player_ui_round", false);
         if (paddingH_percent != 0 || paddingV_percent != 0) {
             Logu.d("debug", "调整边距");
             int paddingH = scrW * paddingH_percent / 100;
             int paddingT = scrH * paddingV_percent / 100;
             int paddingB = paddingT;
-            if (SharedPreferencesUtil.getBoolean("player_ui_round", false))
+            //圆屏底部 3% 补偿从 padding_percent 分支里挪出独立判断（此前不开「界面边距」就完全失效）
+            if (roundScreen)
                 paddingB += scrH * 0.03;
             window_width = scrW - paddingH * 2;
             window_height = scrH - paddingT - paddingB;
             applyContentPadding(paddingH, paddingT, paddingH, paddingB);
+        } else if (roundScreen && roundContentInset()) {
+            Logu.d("round", "内容区默认安全边距");
+            int paddingH = (int) (scrW * 0.08);
+            int paddingB = (int) (scrH * 0.06);
+            window_width = scrW - paddingH * 2;
+            window_height = scrH - paddingB;
+            applyContentPadding(paddingH, 0, paddingH, paddingB);
         } else {
             window_width = scrW;
             window_height = scrH;
@@ -220,7 +232,12 @@ public class BaseActivity extends AppCompatActivity {
      * 只作入口（点击拉起全屏播放页），不承载播放控制；播放器页/音频页/启动页不装。
      */
     private void installAudioCapsule() {
-        if (audioCapsule != null) return;
+        if (audioCapsule != null) {
+            //asyncInflate 场景：胶囊在加载占位布局时装上（无顶栏，停在原位），
+            //真内容 setContentView 后必须重新定位，否则仍盖在标题上
+            repositionAudioCapsule();
+            return;
+        }
         String cls = getClass().getSimpleName();
         //全屏视频/音频队列页也不装：胶囊会盖住短视频画面右上角与队列页顶栏（X-18）
         if ("AudioPlayerActivity".equals(cls) || "PlayerActivity".equals(cls)
@@ -238,17 +255,18 @@ public class BaseActivity extends AppCompatActivity {
             }
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            //水平居中：落在左侧标题与右侧时间之间；垂直与标题栏同高
+            //水平居中：落在左侧标题与右侧时间之间；初始垂直位置在顶栏上方（4dp），
+            //布局完成后由 repositionAudioCapsule 下移到顶栏底边之下
             lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            float density = getResources().getDisplayMetrics().density;
-            lp.setMargins(0, (int) (4 * density + 0.5f), 0, 0);
+            lp.setMargins(0, (int) (4 * getResources().getDisplayMetrics().density + 0.5f), 0, 0);
             decor.addView(capsule, lp);
             audioCapsule = capsule;
             audioCapsuleText = capsule.findViewById(R.id.capsuleText);
+            repositionAudioCapsule();
             //胶囊总宽上限 = 屏宽 38%：文字过长时省略，避免窄屏/大字号下被撑成一条横贯屏幕的横条，
             //把顶栏的标题和时钟挤掉（文本可用的宽度已扣掉 6dp×2 内边距 + 12dp 图标 + 4dp 间距）
             if (audioCapsuleText != null) {
-                int reserved = (int) (22 * density + 0.5f);
+                int reserved = (int) (22 * getResources().getDisplayMetrics().density + 0.5f);
                 int maxText = (int) (getResources().getDisplayMetrics().widthPixels * 0.38f) - reserved;
                 if (maxText > 0) audioCapsuleText.setMaxWidth(maxText);
             }
@@ -269,6 +287,31 @@ public class BaseActivity extends AppCompatActivity {
         } catch (Throwable t) {
             Logu.e("audio-capsule", "安装音频胶囊失败：" + t);
         }
+    }
+
+    /**
+     * 把已挂上的音频胶囊下移到顶栏底边之下 2dp（适配审计 20261107 P2-5）：
+     * 胶囊原来与顶栏同高，实色底会盖住跑马灯标题的滚动路径——音频播放期间
+     * 全站带顶栏页面的标题中段被遮。页面没有顶栏（R.id.top 不存在）时维持原位。
+     * 必须在 post 里做：调用时顶栏可能还没完成布局，拿不到真实高度。
+     */
+    private void repositionAudioCapsule() {
+        if (audioCapsule == null) return;
+        View capsule = audioCapsule;
+        ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        float density = getResources().getDisplayMetrics().density;
+        capsule.post(() -> {
+            if (audioCapsule != capsule || isDestroyed()) return;
+            View topBar = findViewById(R.id.top);
+            if (topBar == null || topBar.getHeight() <= 0) return;
+            int[] topLoc = new int[2];
+            topBar.getLocationOnScreen(topLoc);
+            int[] decorLoc = new int[2];
+            decor.getLocationOnScreen(decorLoc);
+            FrameLayout.LayoutParams capsuleLp = (FrameLayout.LayoutParams) capsule.getLayoutParams();
+            capsuleLp.topMargin = topLoc[1] - decorLoc[1] + topBar.getHeight() + (int) (2 * density + 0.5f);
+            capsule.setLayoutParams(capsuleLp);
+        });
     }
 
     private void refreshAudioCapsule() {
@@ -329,6 +372,18 @@ public class BaseActivity extends AppCompatActivity {
 
     protected void setAmbientBreathing(boolean breathing) {
         if (ambientBackground != null) ambientBackground.setBreathing(breathing);
+    }
+
+    /**
+     * 圆屏内容区默认安全边距的页面级豁免口（适配审计 20261107 §1.1）：
+     * NoSwipe 全屏页（播放器/短视频/看图，与氛围背景同一排除口径——它们各自管理圆屏布局，
+     * 再套一层内容边距会双重内缩）与伪装计算器页（刻意满屏，套边距反而露馅）不参与。
+     */
+    protected boolean roundContentInset() {
+        if (isNoSwipeThemedPage()) return false;
+        //伪装计算器页刻意满屏（套边距反而露馅）。它 extends Activity 不经过本类，正常到不了这里，
+        //防御性按类名挡一道（instanceof 会因类型不相干直接编译失败）
+        return !"CalculatorActivity".equals(getClass().getSimpleName());
     }
 
     /**
@@ -561,8 +616,12 @@ public class BaseActivity extends AppCompatActivity {
         if (resources.getConfiguration().densityDpi == targetDensityDpi) return;
 
         Configuration configuration = resources.getConfiguration();
+        //只在缩小密度时锁字体缩放（适配审计 P2-15）：缩小 UI 的意图是"更小的界面"，
+        //保留系统字体放大会让文字相对界面显得巨大溢出；放大/不变密度时尊重系统字体缩放，
+        //此前无条件锁 1.0 导致系统字体放大对整应用失效。注意比较必须在覆盖 densityDpi 之前
+        boolean downscale = targetDensityDpi < configuration.densityDpi;
         configuration.densityDpi = targetDensityDpi;
-        configuration.fontScale = 1f;
+        if (downscale) configuration.fontScale = 1f;
         resources.updateConfiguration(configuration, resources.getDisplayMetrics());
     }
 

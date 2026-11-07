@@ -17,10 +17,17 @@ import java.util.List;
 public class NoticeAdapter extends RecyclerView.Adapter<NoticeHolder> {
     Context context;
     List<MessageCard> messageList;
+    /** 通知页类型（reply/like/at/system）。like 页按原版口径只显示头像不显示昵称（用户反馈 2026-11-07） */
+    final String pageType;
 
     public NoticeAdapter(Context context, List<MessageCard> messageList) {
+        this(context, messageList, null);
+    }
+
+    public NoticeAdapter(Context context, List<MessageCard> messageList, String pageType) {
         this.context = context;
         this.messageList = messageList;
+        this.pageType = pageType;
     }
 
     @NonNull
@@ -38,6 +45,7 @@ public class NoticeAdapter extends RecyclerView.Adapter<NoticeHolder> {
         MessageCard message = messageList.get(position);
         if (message == null)
             return;
+        holder.hideNick = "like".equals(pageType);
         holder.showMessage(message, context);
     }
 

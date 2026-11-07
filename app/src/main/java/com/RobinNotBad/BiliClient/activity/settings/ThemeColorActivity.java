@@ -104,7 +104,14 @@ public class ThemeColorActivity extends BaseActivity {
     private void buildPresets() {
         if (presetContainer == null) return;
         presetContainer.removeAllViews();
-        final int circleSize = dp(40);
+        //色块尺寸按容器实测宽推导（适配审计 20261107 P2-22）：固定 40dp 在窄表/应用内
+        //density 放大后会超出均分格宽互相叠压、两边缘列被表圈裁。首帧还没有宽度，post 一次再建
+        int containerWidth = presetContainer.getWidth();
+        if (containerWidth <= 0) {
+            presetContainer.post(this::buildPresets);
+            return;
+        }
+        final int circleSize = Math.min(dp(40), Math.max(dp(20), containerWidth / 5 - dp(8)));
         final int cellHeight = dp(52);
 
         for (int i = 0; i < PRESET_COLORS.length; i++) {

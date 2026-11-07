@@ -74,7 +74,6 @@ import com.RobinNotBad.BiliClient.model.Subtitle;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
 import com.RobinNotBad.BiliClient.model.ViewPoint;
 import com.RobinNotBad.BiliClient.service.PlaybackService;
-import com.RobinNotBad.BiliClient.ui.widget.BatteryView;
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
@@ -89,6 +88,7 @@ import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
+import com.RobinNotBad.BiliClient.util.VolumeKeyHelper;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.greenrobot.eventbus.EventBus;
@@ -205,6 +205,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     //无极调音：0~1 的软件增益，和系统音量是乘算关系（系统音量 100% 时，50% 增益就是半音量）
     //只在 ijk 侧出手，不碰系统音量——手表上系统音量往往只有 3~15 档，靠它调不出"35%"这种值
     private float volumeGain = 1f;
+    /** 音量键：短按系统音量 ±1 档 + 居中提示，按住 600ms 弹无极调音 */
+    private VolumeKeyHelper volumeKeyHelper;
     //切后台回来黑屏：surface 在后台被销毁后播放器停在暂停态，读线程不会自己吐帧，
     //必须在 surface 重建后重新挂载并强解一帧（见 repaintPausedFrame）
     private volatile boolean surfaceLostWhileBackground;
@@ -381,6 +383,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private volatile float currentSpeed = 1.0f;
 
     private int screen_width, screen_height;
+    /** 取流响应的真实时长（毫秒）：换P/换清晰度取流成功后回填（F4），0=未取得 */
+    private long videoDurationMs = 0;
+    /** 本次弹幕拉取采用的视频时长（秒）：缓存键按它分桶（F4），downdanmuNew 里赋值 */
+    private int danmakuDurationSec = 0;
     private int video_width, video_height;
 
     private AudioManager audioManager;
@@ -431,7 +437,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private boolean loop_enabled;
     private boolean auto_next_enabled = false;
 
-    private BatteryView batteryView;
     private TextView batteryText;
     //电量广播只在 onStart~onStop 之间注册/注销：不常驻、不轮询，也不改系统状态栏
     private boolean batteryReceiverRegistered = false;
@@ -532,6 +537,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         epid = intent.getLongExtra("epid", 0);
         seasonId = intent.getLongExtra("seasonId", 0);
         seasonType = intent.getIntExtra("seasonType", 0);
+        //取流响应的真实时长（jumpToPlayer 补传，F4）：首播路径没有 playerData 可回查，
+        //缺了它 downdanmuNew 会退回 1 小时兜底 → 66 分钟后弹幕消失
+        videoDurationMs = intent.getLongExtra("durationMs", 0);
         bvid = intent.getStringExtra("bvid");
         if (bvid == null) bvid = "";
 
@@ -692,7 +700,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         layout_control.postDelayed(() -> CenterThreadPool.run(() -> { // 等界面加载完成
             if (isLiveMode) {
                 runOnUiThread(() -> {
-                    btn_menu.setVisibility(View.GONE);
+                    //「更多」在直播下必须留着：直播发弹幕的入口（danmaku_send_btn）就在它展开的
+                    //右侧菜单里。此前这里把 btn_menu 一起隐藏，等于把直播发弹幕功能藏死
+                    //（用户反馈 2026-11-07：能不能加直播发弹幕——其实早就写了，只是点不到）
+                    btn_menu.setVisibility(View.VISIBLE);
+                    //直播没有进度/字幕，这两个入口一并收起来，右侧菜单只剩发弹幕
+                    View jumpBtn = findViewById(R.id.jump_time_btn);
+                    if (jumpBtn != null) jumpBtn.setVisibility(View.GONE);
+                    View subBtn = findViewById(R.id.subtitle_btn);
+                    if (subBtn != null) subBtn.setVisibility(View.GONE);
                     // 直播模式隐藏清晰度按钮
                     btn_quality.setVisibility(View.GONE);
                     // 直播模式隐藏循环按钮
@@ -703,6 +719,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     btn_auto_next.setVisibility(View.GONE);
                     // 直播模式隐藏分P选择器按钮
                     btn_page_selector.setVisibility(View.GONE);
+                    //隐藏完再按剩下的按钮重算一次宽度：否则行宽还按 7 个按钮算，
+                    //只剩一个发弹幕按钮时会被拉成横贯屏幕的长条
+                    clampQuickMenuWidth();
                 });
                 setDisplay();
                 return;
@@ -813,7 +832,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         text_volume = findViewById(R.id.showsound);
         layout_video = findViewById(R.id.videoArea);
         mDanmakuView = findViewById(R.id.sv_danmaku);
-        batteryView = findViewById(R.id.battery);
         batteryText = findViewById(R.id.battery_text);
 
         text_speed = findViewById(R.id.text_speed);
@@ -1366,13 +1384,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         autohideReset();
     }
 
-    /** 电量 UI：图形 + 百分比（充电时追加 +；不引入新权限，也不做后台轮询） */
+    /** 电量 UI：只显示百分比（充电时追加 +；不引入新权限，也不做后台轮询）。
+     *  电池图形已删（用户反馈 2026-11-07：时间/图形/数字叠在一起） */
     @SuppressLint("SetTextI18n")
     private void updateBatteryUi(int percent, boolean charging) {
-        if (batteryView != null) {
-            batteryView.setPower(percent);
-            batteryView.setCharging(charging);
-        }
         if (batteryText != null) {
             batteryText.setText(percent + "%" + (charging ? "+" : ""));
         }
@@ -2601,14 +2616,21 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private void downdanmuNew() {
         try {
-            int estimatedDuration = 3600;
+            //时长取值链（用户反馈 2026-11-07：长视频 66 分钟后弹幕消失）：此前兜底 3600 秒，
+            //prepared 未就绪时 getDuration()=0 直接走兜底 → 只拉 11 段 = 66 分钟截断。
+            //改为优先用取流响应的真实时长（PlayerData.durationMs），播放器时长次之，兜底最后
+            int estimatedDuration = 0;
 
-            if (ijkPlayer != null) {
+            if (videoDurationMs > 0) {
+                estimatedDuration = (int) (videoDurationMs / 1000);
+            } else if (ijkPlayer != null) {
                 long duration = ijkPlayer.getDuration();
                 if (duration > 0) {
                     estimatedDuration = (int) (duration / 1000);
                 }
             }
+            if (estimatedDuration <= 0) estimatedDuration = 3600;
+            danmakuDurationSec = estimatedDuration;
 
             //磁盘缓存命中：直接读本地，省掉逐段网络请求
             File cacheFile = getDanmakuCacheFile();
@@ -2686,7 +2708,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (!isOnlineVideo || aid <= 0 || cid <= 0) return null;
         File dir = getCacheDir();
         cleanExpiredDanmakuCache(dir);
-        return new File(dir, "danmaku_pb_" + cid);
+        //缓存键纳入时长（按分钟取整防抖）：修复前被 66 分钟截断的旧缓存文件
+        //键与新时长对不上，自然失效重拉；旧文件由 TTL 清理回收
+        int durationBucket = ((danmakuDurationSec + 59) / 60) * 60;
+        return new File(dir, "danmaku_pb_" + cid + "_" + durationBucket);
     }
 
     /**
@@ -3617,6 +3642,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     protected void onDestroy() {
         //走到这里说明是正常销毁（原生崩溃根本执行不到 onDestroy），哨兵可以收工了
         PlayerSentinel.finish();
+        //音量键的长按计时器挂在主线程 Handler 上，页面销毁必须撤掉
+        if (volumeKeyHelper != null) volumeKeyHelper.cancel();
         //部分设备/ROM 会在页面启动阶段先回调一次 onDestroy（isFinishing=false）：
         //此时播放器与定时器尚未建立，早退是安全的；
         //但若已经初始化过（系统回收内存、"不保留活动"等非 finish 销毁路径），
@@ -3897,6 +3924,37 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
+     * 「更多」展开出来的快速菜单行按可用宽度钳制（所有屏幕，不只圆屏）。
+     *
+     * <p>{@code right_second} 是 wrap_content 的 HorizontalScrollView，里面 7 个 34dp 按钮约 250dp；
+     * 它和右侧主列在同一个居右的横向 LinearLayout 里，展开时会把整行顶出屏幕左缘——
+     * 用户反馈 2026-11-07：视频内功能一多，按钮就溢出窗口点不到。
+     * 钳死宽度后超出部分改成横向滚动。
+     */
+    private void clampQuickMenuWidth() {
+        if (right_second == null || screen_width <= 0) return;
+        int columnWidth = ToolsUtil.dp2px(28f) + ToolsUtil.dp2px(8f);
+        int maxRowWidth = Math.max(screen_width - columnWidth - ToolsUtil.dp2px(8f), ToolsUtil.dp2px(56f));
+
+        //只钳"上限"：内容比屏宽窄时保持 wrap_content（直播下只剩一个发弹幕按钮，
+        //写死 maxRowWidth 会把它拉成一条横贯屏幕、顶到对侧边缘的长条——用户反馈 2026-11-07）
+        int target = maxRowWidth;
+        View container = findViewById(R.id.right_second_container);
+        if (container != null) {
+            container.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int measured = container.getMeasuredWidth();
+            if (measured > 0) target = Math.min(measured, maxRowWidth);
+        }
+
+        ViewGroup.LayoutParams lp = right_second.getLayoutParams();
+        if (lp.width == target) return;
+        lp.width = target;
+        right_second.setLayoutParams(lp);
+        Logu.d("player", "快速菜单行宽度=" + target + "px（上限 " + maxRowWidth + "，屏宽 " + screen_width + "）");
+    }
+
+    /**
      * 把底部按钮行收缩进可用宽度（只在放不下时生效，见 initUI 调用处注释）。
      * 该行 XML 是固定 38dp×N 的 RelativeLayout 链，这里只改每个子项的
      * 宽高与间距参数，锚定关系不动；下限 24dp 防止极端配置下缩没。
@@ -3930,6 +3988,18 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         screen_width = displayMetrics.widthPixels;// 获取屏宽
         screen_height = displayMetrics.heightPixels;// 获取屏高
 
+        volumeKeyHelper = new VolumeKeyHelper(this, new VolumeKeyHelper.Host() {
+            @Override
+            public void showVolumePercent(int percent) {
+                flashCenterText("音量：" + percent + "%");
+            }
+
+            @Override
+            public void showVolumePanel() {
+                showVolumePanel();
+            }
+        });
+
         if (SharedPreferencesUtil.getBoolean("player_ui_showRotateBtn", true))
             btn_rotate.setVisibility(View.VISIBLE);
         else
@@ -3948,6 +4018,30 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 ? View.VISIBLE : View.GONE);
 
         screen_round = SharedPreferencesUtil.getBoolean("player_ui_round", false);
+
+        //弹层卡片底边距矮屏钳制（适配审计 20261107 P1 附属）：画质/选P等浮层 XML 贴底 56dp，
+        //在 ~220dp 高的手表上起点就吃掉 1/4 屏。钳到屏高 10% 上限——手机屏高下 56dp 远小于该值，不受影响。
+        //放在圆屏分支之前：圆屏内缩循环会沿用这里钳过的 bottomMargin
+        int maxOverlayBottom = (int) (screen_height * 0.10);
+        int[] overlayBottomIds = {R.id.subtitle_card, R.id.danmaku_send_card,
+                R.id.page_selector_card, R.id.quality_selector_card,
+                R.id.viewpoint_selector_card, R.id.layout_speed};
+        for (int overlayId : overlayBottomIds) {
+            View overlay = findViewById(overlayId);
+            if (overlay == null) continue;
+            ViewGroup.LayoutParams lp = overlay.getLayoutParams();
+            if (lp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+                if (mlp.bottomMargin > maxOverlayBottom) {
+                    mlp.bottomMargin = maxOverlayBottom;
+                    overlay.setLayoutParams(mlp);
+                }
+            }
+        }
+
+        //「更多」展开的快速菜单行按可用宽度钳制（所有屏幕，不只圆屏）：功能一多就会把整行顶出屏幕
+        clampQuickMenuWidth();
+
         if (screen_round) {
             int padding = (int) (screen_width * 0.03);
 
@@ -4326,6 +4420,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        //音量键（含 D-pad 上下）：短按系统音量 ±1 档 + 居中提示，按住 600ms 弹无极调音
+        if (isPrepared && volumeKeyHelper != null && volumeKeyHelper.onKeyDown(keyCode, event))
+            return true;
         if (isPrepared)
             switch (keyCode) {
                 case KeyEvent.KEYCODE_ENTER:
@@ -4338,14 +4435,40 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
                     seekToPosition(video_now + 10000L);
                     break;
-                case KeyEvent.KEYCODE_DPAD_UP:
-                    changeVolume(true);
-                    break;
-                case KeyEvent.KEYCODE_DPAD_DOWN:
-                    changeVolume(false);
-                    break;
             }
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (volumeKeyHelper != null && volumeKeyHelper.onKeyUp(keyCode, event)) return true;
+        return super.onKeyUp(keyCode, event);
+    }
+
+    /**
+     * 旋转表冠缩放画面（用户反馈 2026-11-07）。开关见 设置 → 实验室 →「表冠缩放视频」。
+     *
+     * <p>走的是与双指捏合同一个 scale 值（{@link ViewScaleGestureListener} 缩放的
+     * {@code layout_video}），所以双击复位、1x~5x 的边界与现有手势完全一致。
+     */
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_SCROLL
+                && event.getSource() == android.view.InputDevice.SOURCE_ROTARY_ENCODER
+                && SharedPreferencesUtil.getBoolean("ui_rotatory_video_zoom", false)
+                && layout_video != null) {
+            float axis = event.getAxisValue(MotionEvent.AXIS_SCROLL);
+            if (axis != 0f) {
+                float next = layout_video.getScaleX() * (axis > 0 ? 1.08f : 1f / 1.08f);
+                next = Math.max(1f, Math.min(5f, next));
+                layout_video.setScaleX(next);
+                layout_video.setScaleY(next);
+                if (scaleGestureListener != null) scaleGestureListener.can_reset = next != 1.0f;
+                autohideReset();
+                return true;
+            }
+        }
+        return super.onGenericMotionEvent(event);
     }
 
     private void seekToPosition(long position) {
@@ -4957,7 +5080,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 clearHighEnergyOnUi("弹幕时间全为 0，清掉波形");
                 return;
             }
-            int buckets = (int) (maxTime / (stepSec * 1000L)) + 1;
+            //桶数按"视频总时长"和"最后一条弹幕时间"的较大者算：只按弹幕时间算时，
+            //片尾几分钟没人发弹幕，波形会在那里戛然而止（用户反馈：高能条要跟弹幕一起改）
+            long spanMs = videoDurationMs > maxTime ? videoDurationMs : maxTime;
+            int buckets = (int) (spanMs / (stepSec * 1000L)) + 1;
             events = new float[buckets];
             //第二遍：按时间落桶。iterator() 内部会 reset，可以安全地重新取一次
             it = danmakus.iterator();
@@ -5076,6 +5202,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     lastReportedProgressSec = -1;
                     lastReportedProgressMs = -1;
                     video_url = playerData.videoUrl;
+                    videoDurationMs = playerData.durationMs;
                     danmaku_url = playerData.danmakuUrl;
                     text_title.setText(newTitle);
                     videoTitle = newTitle;
@@ -5233,6 +5360,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     retirePlayer();
 
                     video_url = playerData.videoUrl;
+                    videoDurationMs = playerData.durationMs;
                     currentQuality = newQuality;
 
                     if (playerData.qnStrList != null && playerData.qnValueList != null) {
@@ -5699,6 +5827,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
                     cid = targetCid;
                     video_url = playerData.videoUrl;
+                    videoDurationMs = playerData.durationMs;
                     danmaku_url = playerData.danmakuUrl;
                     text_title.setText(newData.title);
                     videoTitle = newData.title;

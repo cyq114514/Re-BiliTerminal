@@ -272,8 +272,30 @@ public class SplashActivity extends Activity {
         });
     }
 
-    /** 按「菜单排序」进入默认首页（原来这一步要等两个网络检查做完才执行）。 */
+    /** 按「启动首页」设置或「菜单排序」进入默认首页（原来这一步要等两个网络检查做完才执行）。 */
     private void startMainPage() {
+        //「启动首页」显式指定优先（用户反馈 2026-11-07）：设置里选了页面就直接进那一页
+        String firstActivity = launchPageKey();
+        if (firstActivity == null) {
+            firstActivity = firstActivityFromMenuSort();
+        }
+
+        Class<? extends InstanceActivity> activityClass = Objects.requireNonNull(MenuActivity.btnNames.get(firstActivity)).second;
+        final Intent intent = new Intent();
+        intent.setClass(SplashActivity.this, (activityClass != null ? activityClass : RecommendActivity.class));
+        intent.putExtra("from", firstActivity);
+
+        interruptSplash();
+        runOnUiThread(() -> {
+            scheduleStartupDialogs();
+            startActivity(intent);
+            applyNoTransition();
+            finish();
+        });
+    }
+
+    /** 菜单排序里的第一个入口（原逻辑原样搬出来，行为不变） */
+    private String firstActivityFromMenuSort() {
         String firstActivity = null;
         String sortConf = SharedPreferencesUtil.getString(SharedPreferencesUtil.MENU_SORT, "");
         if (!TextUtils.isEmpty(sortConf)) {
@@ -295,19 +317,27 @@ public class SplashActivity extends Activity {
                 break;
             }
         }
+        if (firstActivity == null) firstActivity = "recommend";
+        return firstActivity;
+    }
 
-        Class<? extends InstanceActivity> activityClass = Objects.requireNonNull(MenuActivity.btnNames.get(firstActivity)).second;
-        final Intent intent = new Intent();
-        intent.setClass(SplashActivity.this, (activityClass != null ? activityClass : RecommendActivity.class));
-        intent.putExtra("from", firstActivity);
-
-        interruptSplash();
-        runOnUiThread(() -> {
-            scheduleStartupDialogs();
-            startActivity(intent);
-            applyNoTransition();
-            finish();
-        });
+    /**
+     * 「启动首页」设置解析成菜单 key。
+     *
+     * <p>设置里存的是菜单项序号（0 = 跟随菜单排序），与 {@link MenuActivity#btnNames} 的插入顺序一一对应。
+     *
+     * @return null 表示没有指定，仍按菜单排序走
+     */
+    static String launchPageKey() {
+        //多选项设置按 int 下标存（见 SettingsAdapter.bindMulti），读侧同口径
+        int index = SharedPreferencesUtil.getInt(SharedPreferencesUtil.LAUNCH_PAGE, 0);
+        if (index <= 0) return null;
+        int i = 1;
+        for (String key : MenuActivity.btnNames.keySet()) {
+            if (i == index) return key;
+            i++;
+        }
+        return null;
     }
 
     /** 网络异常时保持旧行为：提示 + 整链恢复（恢复点已在联网检查前被消费清空）。 */
@@ -317,7 +347,13 @@ public class SplashActivity extends Activity {
             interruptSplash();
             splashTextView.setText("网络错误");
         });
-        startRestoreChain(resumeIntents);
+        //指定了「启动首页」时，断网也照样进那一页（用户反馈 2026-11-07）；
+        //没指定才走原来的恢复栈/本地缓存兜底
+        if (launchPageKey() != null) {
+            startMainPage();
+        } else {
+            startRestoreChain(resumeIntents);
+        }
         CenterThreadPool.run(() -> AppInfoApi.checkVersion(SplashActivity.this));
     }
 

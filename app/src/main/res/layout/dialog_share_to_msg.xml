@@ -50,8 +50,8 @@
 
         <TextView
             android:id="@+id/btn_close"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?attr/selectableItemBackground"
             android:gravity="center"
             android:text="✕"
@@ -66,7 +66,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <androidx.recyclerview.widget.RecyclerView
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
             android:id="@+id/share_user_list"
             android:layout_width="0dp"
             android:layout_height="wrap_content"

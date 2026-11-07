@@ -1,10 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    取流过渡页。错误原因（网络/会员限制/接口失效 + 异常 message）可能很长，
+    此前是单个全屏 TextView 不可滚动，小屏底部内容直接裁掉也复制不了（适配审计 P2-7）：
+    套 RotaryScrollView（表冠可滚）+ fillViewport（短文案仍垂直居中）。
+-->
+<com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
-    android:text="@string/text_getting_video"
-    android:id="@+id/text_title"
-    android:textSize="16sp"
-    tools:context=".activity.video.JumpToPlayerActivity"></TextView>
+    android:fillViewport="true"
+    android:overScrollMode="ifContentScrolls"
+    tools:context=".activity.video.JumpToPlayerActivity">
+
+    <TextView
+        android:id="@+id/text_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:lineSpacingExtra="2dp"
+        android:padding="24dp"
+        android:text="@string/text_getting_video"
+        android:textSize="16sp" />
+
+</com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>

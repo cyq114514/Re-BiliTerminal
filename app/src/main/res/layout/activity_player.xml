@@ -149,36 +149,30 @@
                 android:layout_alignParentStart="true"
                 android:layout_alignParentLeft="true" />
 
+            <!-- 顶栏右侧：时间 + 电量百分比，同一行（用户反馈 2026-11-07：时间/电池图形/数字
+                 三行叠在一起）。电池图形已删，只留数字百分比，右侧块不再被撑成三行 -->
             <LinearLayout
                 android:id="@+id/clock_layout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
-                android:gravity="center"
-                android:orientation="vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <!-- 顶栏时间（1.3.3 反馈：右上角只有电量想看时间不行，加开关 player_show_clock）。
-                     放电量左侧单行，不复刻 X-41 的三行堆叠；默认 gone，initUI 按开关显隐 -->
+                     默认 gone，initUI 按开关显隐 -->
                 <com.RobinNotBad.BiliClient.ui.widget.TextClock
                     android:id="@+id/player_clock"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="4dp"
+                    android:layout_marginEnd="6dp"
                     android:textColor="@color/textwhite"
                     android:textSize="10sp"
                     android:visibility="gone"
                     tools:ignore="SmallSp" />
 
-                <com.RobinNotBad.BiliClient.ui.widget.BatteryView
-                    android:id="@+id/battery"
-                    android:layout_width="16dp"
-                    android:layout_height="8dp"
-                    android:layout_marginTop="2dp" />
-
-                <!-- 具体电量百分比：原来只有电池图形，看不出剩多少。
-                     这里只留电池+百分比：顶栏原本还挂了一个 TextClock 的时钟，
-                     它把右侧块撑成三行、挤掉标题可点宽度（X-41），播放中想看时间也不是刚需，已删除 -->
+                <!-- 具体电量百分比：只留数字 -->
                 <TextView
                     android:id="@+id/battery_text"
                     android:layout_width="wrap_content"

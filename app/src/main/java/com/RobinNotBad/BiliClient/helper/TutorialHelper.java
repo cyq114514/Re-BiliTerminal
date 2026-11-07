@@ -191,7 +191,7 @@ public class TutorialHelper {
     public static void show(int xml_res_id, Context context, String tutorial_tag, int tutorial_version) {
         if (SharedPreferencesUtil.getInt("tutorial_ver_" + tutorial_tag, -1) < tutorial_version) {
             if (SharedPreferencesUtil.getInt("tutorial_ver_" + tutorial_tag, 0) != 0)
-                Toast.makeText(context.getApplicationContext(), "教程已更新", Toast.LENGTH_SHORT).show();
+                MsgUtil.showMsg("教程已更新");  //收口统一 Toast 通道（适配审计 P3）
             Intent intent = new Intent(context, TutorialActivity.class);
             intent.putExtra("xml_id", xml_res_id);
             intent.putExtra("tag", tutorial_tag);

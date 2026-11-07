@@ -41,7 +41,7 @@
                 android:ellipsize="end"
                 android:maxLines="3"
                 android:text="标题标题标题标题标题标题标题标题标题标题标题标题标题标题标题标题"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 app:layout_constraintStart_toEndOf="@id/img_cover"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
@@ -63,7 +63,7 @@
                 android:drawableStart="@drawable/icon_play_12"
                 android:singleLine="true"
                 android:text="11.4万"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
 
 
             <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
@@ -75,7 +75,7 @@
                 android:drawableStart="@drawable/icon_person"
                 android:singleLine="true"
                 android:text="蔡徐坤"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
 
         </LinearLayout>
 

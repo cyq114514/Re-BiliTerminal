@@ -58,7 +58,7 @@
             android:paddingVertical="6dp"
             android:textSize="13sp" />
 
-        <androidx.recyclerview.widget.RecyclerView
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
             android:id="@+id/recyclerView"
             android:layout_width="match_parent"
             android:layout_height="0dp"

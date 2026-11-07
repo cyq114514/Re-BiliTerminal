@@ -51,7 +51,7 @@
             android:textSize="15sp"
             android:text="正在检查更新……" />
 
-        <ScrollView
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
             android:id="@+id/update_notes_scroll"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -65,7 +65,7 @@
                 android:textSize="14sp"
                 android:lineSpacingExtra="3dp"
                 android:textIsSelectable="true" />
-        </ScrollView>
+        </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
 
         <ProgressBar
             android:id="@+id/update_progress"
@@ -120,6 +120,7 @@
             android:id="@+id/update_release_link"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="40dp"
             android:gravity="center"
             android:padding="6dp"
             android:textSize="12sp"
@@ -131,6 +132,7 @@
             android:id="@+id/update_mirror"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="40dp"
             android:gravity="center"
             android:padding="6dp"
             android:textSize="12sp"

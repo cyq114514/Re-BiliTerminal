@@ -27,6 +27,10 @@ public class SharedPreferencesUtil {
     public static final String MESSAGE_UPDATE_NUM = "message_update_num";
     public static final String PRIVATE_MSG_UNREAD_BADGE_ENABLE = "private_msg_unread_badge_enable";
     public static final String PRIVATE_MSG_AUTO_READ_ENABLE = "private_msg_auto_read_enable";
+    //进入私信页时提示「私信有可能被拦截」（用户反馈 2026-11-07：能不能别每次弹）；关闭后不再出现
+    public static final String PRIVATE_MSG_WARN_ENABLE = "private_msg_warn_enable";
+    //启动首页（用户反馈 2026-11-07）：存菜单项的序号，0 = 跟随菜单排序（旧行为）
+    public static final String LAUNCH_PAGE = "launch_page";
     public static final String FOLLOW_GROUP_MODE = "follow_group_mode";
     public static final String NIGHT_REMINDER_ENABLE = "night_reminder_enable";
     public static final String SEARCH_DEFAULT_CONTENT_ENABLE = "search_default_content_enable";

@@ -64,7 +64,7 @@ public class HotSearchActivity extends InstanceActivity {
                         hotList.clear();
                         hotList.addAll(list);
                         if (recyclerView.getLayoutManager() == null) {
-                            recyclerView.setLayoutManager(new CustomLinearManager(this));
+                            recyclerView.setLayoutManager(getLayoutManager());  //接 BaseActivity 统一 LayoutManager（适配审计 P2-10/23）：横屏开关下与推荐/时间线同享 3 列网格;
                         }
                         if (adapter == null) {
                             adapter = new HotSearchAdapter(this, hotList);

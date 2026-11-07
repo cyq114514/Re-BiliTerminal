@@ -86,6 +86,14 @@ public class SettingSearchActivity extends BaseActivity {
             }
         });
 
+        //表冠滚动（适配审计 P2-8）：结果列表换 Rotary 容器后，IME 的「搜索」键作为
+        //确认动作——收起键盘、把焦点交给结果列表，表冠才能滚结果（输入中焦点必须留给输入框）
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            input.clearFocus();
+            recyclerView.requestFocus();
+            return true;
+        });
+
         applyFilter("");
     }
 

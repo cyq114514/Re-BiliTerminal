@@ -74,7 +74,8 @@
                 </LinearLayout>
             </ScrollView>
 
-            <androidx.recyclerview.widget.RecyclerView
+            <!-- 表冠机型的单选列表（如上百集选P）也要能转圈滚：换 Rotary 容器，开关关时行为同普通 RecyclerView -->
+            <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
                 android:id="@+id/dialog_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

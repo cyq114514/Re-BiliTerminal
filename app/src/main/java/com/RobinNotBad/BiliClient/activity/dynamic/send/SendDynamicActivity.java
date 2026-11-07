@@ -11,6 +11,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.DatePicker;
 import android.widget.EditText;
+import android.widget.NumberPicker;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -31,9 +32,11 @@ import com.RobinNotBad.BiliClient.api.EmoteApi;
 import com.RobinNotBad.BiliClient.api.ImageApi;
 import com.RobinNotBad.BiliClient.model.Dynamic;
 import com.RobinNotBad.BiliClient.model.VideoInfo;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.PickImageUtil;
+import com.RobinNotBad.BiliClient.util.SendGuard;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
@@ -180,28 +183,9 @@ public class SendDynamicActivity extends BaseActivity {
                     optTimerText.setText("定时发布：关");
                     return;
                 }
-                Calendar now = Calendar.getInstance();
-                new DatePickerDialog(this, (DatePicker dp, int year, int month, int day) -> {
-                    Calendar picked = Calendar.getInstance();
-                    picked.set(year, month, day, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE));
-                    new TimePickerDialog(this, (TimePicker tp, int hour, int minute) -> {
-                        picked.set(Calendar.HOUR_OF_DAY, hour);
-                        picked.set(Calendar.MINUTE, minute);
-                        //B站限制：6分钟后～7天内
-                        long diff = picked.getTimeInMillis() - System.currentTimeMillis();
-                        if (diff < 5 * 60 * 1000L) {
-                            MsgUtil.showMsg("定时时间至少要在6分钟后喵~");
-                            return;
-                        }
-                        if (diff > 7 * 24 * 3600 * 1000L) {
-                            MsgUtil.showMsg("定时时间不能超过7天喵~");
-                            return;
-                        }
-                        timerPubTime = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(picked.getTime());
-                        optTimerText.setText("定时发布：" + timerPubTime);
-                    }, picked.get(Calendar.HOUR_OF_DAY), picked.get(Calendar.MINUTE), true).show();
-                }, now.get(Calendar.YEAR), now.get(Calendar.MONTH), now.get(Calendar.DAY_OF_MONTH)).show();
+                showTimerDatePicker();
             });
+
 
             send.setOnClickListener(view -> {
                 // 不了解遂直接保留cookie刷新判断了
@@ -217,6 +201,8 @@ public class SendDynamicActivity extends BaseActivity {
                             MsgUtil.showMsg("还没输入内容呢~");
                             return;
                         }
+                        //发送缓冲（用户反馈 2026-11-07）：3 秒内同一目标只放行一次
+                        if (!SendGuard.tryAcquire("dynamic_edit_" + editId)) return;
                         sending = true;
                         MsgUtil.showMsg("正在保存修改...");
                         CenterThreadPool.run(() -> {
@@ -248,6 +234,8 @@ public class SendDynamicActivity extends BaseActivity {
                         setResult(RESULT_OK, result);
                         finish();
                     } else {
+                        //发送缓冲（用户反馈 2026-11-07）：3 秒内同一目标只放行一次
+                        if (!SendGuard.tryAcquire("dynamic_send")) return;
                         sending = true;
                         MsgUtil.showMsg("正在上传图片...");
                         CenterThreadPool.run(() -> {
@@ -338,5 +326,95 @@ public class SendDynamicActivity extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
         TerminalContext.getInstance().setForwardContent(null);
+    }
+
+    /**
+     * 定时发布选择器（适配审计 20261107 P1-5）：原生 DatePickerDialog/TimePickerDialog
+     * 不跟应用内 density 覆盖缩放（「界面大小」放大后按钮被顶出屏），圆表四角还会被表圈裁，
+     * 且是全站系统弹窗清零后的漏网之鱼。改为 AdaptiveDialog + NumberPicker 自绘。
+     * 日期档位按「今天+0..7 天」给出（贴合 B 站 7 天上限）；
+     * 「6分钟后～7天内」校验与原实现逐字一致，无效时重开时间选择。
+     */
+    private void showTimerDatePicker() {
+        Calendar now = Calendar.getInstance();
+        SimpleDateFormat labelFormat = new SimpleDateFormat("M月d日", Locale.CHINA);
+        String[] labels = new String[8];
+        for (int i = 0; i < 8; i++) {
+            Calendar day = (Calendar) now.clone();
+            day.add(Calendar.DAY_OF_MONTH, i);
+            labels[i] = labelFormat.format(day.getTime()) + (i == 0 ? "（今天）" : "");
+        }
+        NumberPicker dayPicker = new NumberPicker(this);
+        dayPicker.setMinValue(0);
+        dayPicker.setMaxValue(7);
+        dayPicker.setDisplayedValues(labels);
+        dayPicker.setValue(0);
+        dayPicker.setWrapSelectorWheel(false);
+
+        FrameLayout box = new FrameLayout(this);
+        FrameLayout.LayoutParams pickerParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.CENTER_HORIZONTAL);
+        box.addView(dayPicker, pickerParams);
+
+        new AdaptiveDialog.Builder(this)
+                .setTitle("定时发布日期")
+                .setView(box)
+                .setPositiveButton("下一步", (dialog, which) -> showTimerTimePicker(now, dayPicker.getValue()))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void showTimerTimePicker(Calendar now, int dayOffset) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(android.view.Gravity.CENTER);
+        NumberPicker hourPicker = new NumberPicker(this);
+        hourPicker.setMinValue(0);
+        hourPicker.setMaxValue(23);
+        hourPicker.setValue(now.get(Calendar.HOUR_OF_DAY));
+        NumberPicker minutePicker = new NumberPicker(this);
+        minutePicker.setMinValue(0);
+        minutePicker.setMaxValue(59);
+        minutePicker.setValue(now.get(Calendar.MINUTE));
+        LinearLayout.LayoutParams pickerParams = new LinearLayout.LayoutParams(
+                ToolsUtil.dp2px(64f), LinearLayout.LayoutParams.WRAP_CONTENT);
+        box.addView(hourPicker, pickerParams);
+        box.addView(makePickerLabel("时"));
+        box.addView(minutePicker, pickerParams);
+        box.addView(makePickerLabel("分"));
+
+        new AdaptiveDialog.Builder(this)
+                .setTitle("定时发布时间")
+                .setView(box)
+                .setPositiveButton("确定", (dialog, which) -> {
+                    Calendar picked = (Calendar) now.clone();
+                    picked.add(Calendar.DAY_OF_MONTH, dayOffset);
+                    picked.set(Calendar.HOUR_OF_DAY, hourPicker.getValue());
+                    picked.set(Calendar.MINUTE, minutePicker.getValue());
+                    //B站限制：6分钟后～7天内（与原校验一致）；无效则重开时间选择
+                    long diff = picked.getTimeInMillis() - System.currentTimeMillis();
+                    if (diff < 5 * 60 * 1000L) {
+                        MsgUtil.showMsg("定时时间至少要在6分钟后喵~");
+                        showTimerTimePicker(now, dayOffset);
+                        return;
+                    }
+                    if (diff > 7 * 24 * 3600 * 1000L) {
+                        MsgUtil.showMsg("定时时间不能超过7天喵~");
+                        showTimerTimePicker(now, dayOffset);
+                        return;
+                    }
+                    timerPubTime = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(picked.getTime());
+                    optTimerText.setText("定时发布：" + timerPubTime);
+                })
+                .setNegativeButton("上一步", (dialog, which) -> showTimerDatePicker())
+                .show();
+    }
+
+    private TextView makePickerLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextSize(14);
+        return label;
     }
 }

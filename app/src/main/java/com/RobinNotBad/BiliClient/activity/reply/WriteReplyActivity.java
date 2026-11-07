@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.model.Reply;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.PickImageUtil;
+import com.RobinNotBad.BiliClient.util.SendGuard;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
@@ -133,6 +134,8 @@ public class WriteReplyActivity extends BaseActivity {
                         dontKyPlease = false;
                         return;
                     }
+                    //发送缓冲（用户反馈 2026-11-07）：3 秒内同一页只放行一次，连点直接拒绝
+                    if (!SendGuard.tryAcquire("reply")) return;
                     sent = true;
                     boolean finalHasPics = !imageUris.isEmpty();
                     CenterThreadPool.run(() -> {
