@@ -14,4 +14,4 @@ local.properties
 .vscode/
 .androidide/*.apk
 
-/*-release.apk
+/*.apk
