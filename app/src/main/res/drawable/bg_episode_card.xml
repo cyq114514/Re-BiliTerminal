@@ -1,7 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 番剧选集卡片圆角底：默认深灰，选中态靠文字/图标变色区分 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#cc262626" />
-    <corners android:radius="6dp" />
-</shape>
+<!-- 番剧选集卡片圆角底：与视频卡片同一套 token（card_bg_new 半透明灰 / card_round_new
+     10dp 圆角 / card_border_new 0.5dp 描边），替代旧的 #cc262626 实底（1.3.3 反馈：
+     选集卡片改成和视频卡片类似的半透明风格）。选中态仍靠文字/图标变色区分；
+     按压时底略实一点（card_bg_nested）作为即时反馈，与顶栏刷新胶囊同款。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_bg_nested" />
+            <stroke
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
+            <corners android:radius="@dimen/card_round_new" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_bg_new" />
+            <stroke
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
+            <corners android:radius="@dimen/card_round_new" />
+        </shape>
+    </item>
+</selector>
