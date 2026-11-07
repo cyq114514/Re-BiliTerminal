@@ -123,7 +123,7 @@
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
                     android:textColor="@color/textwhite"
-                    android:textColorHint="#80ffffff"
+                    android:textColorHint="@color/text_hint"
                     android:textCursorDrawable="@drawable/cursor_drawable"
                     android:textSize="13sp" />
 
@@ -175,7 +175,7 @@
                         android:ems="10"
                         android:inputType="number"
                         android:textColor="@color/textwhite"
-                        android:textColorHint="#80ffffff"
+                        android:textColorHint="@color/text_hint"
                         android:textCursorDrawable="@drawable/cursor_drawable"
                         android:textSize="13sp"
                         app:layout_constraintBottom_toBottomOf="parent"
@@ -220,7 +220,7 @@
                         android:ems="10"
                         android:inputType="number"
                         android:textColor="@color/textwhite"
-                        android:textColorHint="#80ffffff"
+                        android:textColorHint="@color/text_hint"
                         android:textCursorDrawable="@drawable/cursor_drawable"
                         android:textSize="13sp"
                         app:layout_constraintBottom_toBottomOf="parent"

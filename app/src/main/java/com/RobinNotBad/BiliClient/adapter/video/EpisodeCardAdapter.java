@@ -8,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
@@ -24,7 +25,10 @@ import java.util.List;
  */
 public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.EpisodeCardHolder> {
 
-        private static final int COLOR_NORMAL = 0xffebe0e2;        //默认浅字
+        //默认浅字：引用资源而不是写死 0xffebe0e2（UI 一致性排查：与全局 textwhite 收口）
+        private static int normalColor(View v) {
+            return ContextCompat.getColor(v.getContext(), R.color.textwhite);
+        }
     private static final int COLOR_BADGE_FREE = 0xff6eb26e;    //限免
     private static final int COLOR_BADGE_OTHER = 0x99ebe0e2;   //预告/其它
 
@@ -69,7 +73,7 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
         boolean selected = position == selectedItemIndex;
 
         holder.title.setText(episode.title);
-        holder.title.setTextColor(selected ? ThemeManager.getPrimary() : COLOR_NORMAL);
+        holder.title.setTextColor(selected ? ThemeManager.getPrimary() : normalColor(holder.itemView));
 
         //播放中图标：仅当前集显示（官方选集卡同款声波标）
         holder.playing.setVisibility(selected ? View.VISIBLE : View.GONE);
@@ -85,7 +89,7 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
         if (episode.title_long != null && !episode.title_long.isEmpty()) {
             holder.titleLong.setVisibility(View.VISIBLE);
             holder.titleLong.setText(episode.title_long);
-            holder.titleLong.setTextColor(selected ? ThemeManager.getPrimary() : COLOR_NORMAL);
+            holder.titleLong.setTextColor(selected ? ThemeManager.getPrimary() : normalColor(holder.itemView));
         } else {
             holder.titleLong.setVisibility(View.GONE);
         }

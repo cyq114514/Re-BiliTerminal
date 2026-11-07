@@ -21,6 +21,8 @@
         暗底上就是卡片四周的一圈脏黑边）。
     -->
     <color name="card_bg_new">#4D262626</color>
+    <!--输入框 hint 统一色：此前 #80ffffff 在 4 个布局里各写各的，无 token-->
+    <color name="text_hint">#80ffffff</color>
     <color name="card_border_new">#363636</color>
     <!-- 嵌套卡片（评论的子卡/浮层面板）底：比主卡片略实一点，保证在卡片之上仍可辨层次 -->
     <color name="card_bg_nested">#66262626</color>

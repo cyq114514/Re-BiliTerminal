@@ -80,7 +80,7 @@
                     android:drawablePadding="6dp"
                     android:gravity="center"
                     android:text="表情"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/textwhite"
                     android:textSize="13sp"
                     app:drawableStartCompat="@drawable/icon_emote" />
 
@@ -95,7 +95,7 @@
                     android:drawablePadding="6dp"
                     android:gravity="center"
                     android:text="图片"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/textwhite"
                     android:textSize="13sp"
                     app:drawableStartCompat="@drawable/icon_image" />
             </LinearLayout>
@@ -117,7 +117,7 @@
                     android:contentDescription="换行"
                     android:gravity="center"
                     android:text="↵ 换行"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/textwhite"
                     android:textSize="13sp" />
 
                 <TextView
@@ -130,7 +130,7 @@
                     android:contentDescription="收起"
                     android:gravity="center"
                     android:text="收起"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/textwhite"
                     android:textSize="13sp" />
             </LinearLayout>
         </LinearLayout>
@@ -154,7 +154,7 @@
                 android:minHeight="38dp"
                 android:paddingHorizontal="6dp"
                 android:paddingVertical="6dp"
-                android:textColorHint="#80ffffff"
+                android:textColorHint="@color/text_hint"
                 android:textCursorDrawable="@drawable/cursor_drawable"
                 android:textSize="13sp"
                 android:inputType="textMultiLine" />
@@ -170,7 +170,7 @@
                 android:contentDescription="更多功能"
                 android:gravity="center"
                 android:text="+"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/textwhite"
                 android:textSize="20sp" />
 
             <ImageButton

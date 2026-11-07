@@ -161,17 +161,13 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
+            <LinearLayout
                 android:layout_height="wrap_content"
                 android:layout_width="match_parent"
-                android:layout_marginTop="4dp">
-
-                <LinearLayout
-                    android:layout_height="wrap_content"
-                    android:layout_width="match_parent"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="6dp"
-                    android:orientation="vertical">
+                android:layout_marginTop="4dp"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="6dp"
+                android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -246,7 +242,6 @@
                         android:textSize="11sp" />
 
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/anim_scale_card"
@@ -341,15 +336,12 @@
 
 
 
-            <com.google.android.material.card.MaterialCardView
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="6dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="6dp"
                     android:orientation="vertical">
 
                     <TextView
@@ -763,7 +755,6 @@
 
                 </LinearLayout>
 
-            </com.google.android.material.card.MaterialCardView>
 
             <include layout="@layout/cell_divider" />
 

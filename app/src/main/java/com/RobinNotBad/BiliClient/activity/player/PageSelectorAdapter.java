@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
@@ -78,7 +79,7 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
                 pageName.setTextColor(ThemeManager.getPrimary());
                 itemView.setBackgroundResource(R.drawable.background_card);
             } else {
-                pageName.setTextColor(0xffebe0e2);
+                pageName.setTextColor(ContextCompat.getColor(pageName.getContext(), R.color.textwhite));
                 itemView.setBackgroundResource(R.drawable.background_card_borderless);
             }
 

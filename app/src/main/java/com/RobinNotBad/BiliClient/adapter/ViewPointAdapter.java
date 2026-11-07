@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
@@ -115,7 +116,7 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
                 ViewCompat.setBackgroundTintList(button,
                         AppCompatResources.getColorStateList(itemView.getContext(), R.color.background_button_selected));
             } else {
-                button.setTextColor(0xffebe0e2);
+                button.setTextColor(ContextCompat.getColor(button.getContext(), R.color.textwhite));
                 ViewCompat.setBackgroundTintList(button,
                         AppCompatResources.getColorStateList(itemView.getContext(), R.color.background_button));
             }
