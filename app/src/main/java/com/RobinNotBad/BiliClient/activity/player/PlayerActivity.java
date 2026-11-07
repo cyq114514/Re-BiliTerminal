@@ -2864,6 +2864,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             @Override
             public void prepared() {
                 Logu.v("danmaku", "prepared");
+                //屏蔽词过滤必须在 seek/start 之前：prepared 回调里引擎还没开始渲染，
+                //此时从 mParser 的集合里摘掉命中关键词的条目，高能条统计也随之排除
+                filterBlockedDanmaku(mParser);
                 //本回调跑在 DFM 线程，而主线程在换 P / 换清晰度 / 退出时已经把 mDanmakuView
                 //release 并置空；必须先取一次局部引用判空，否则直接 NPE（线上 2 例 setSpeed on null）。
                 //后续一律用这个局部引用，避免中途被主线程改掉。
@@ -2993,6 +2996,41 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         seekToPosition(target);
         MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((int) (target / 1000)));
         return true;
+    }
+
+    /**
+     * 弹幕屏蔽词（1.3.3 反馈：能不能加入弹幕屏蔽词）：设置里逗号/空白分隔的关键词，
+     * 弹幕文本含任一关键词即整条摘除。只作用于批量装载的弹幕（prepared 回调里调用，
+     * 此时引擎未开始渲染，从集合移除是安全的）；自己发送的弹幕不走这里。
+     * 每次装载读一次存档，设置改完下个视频生效；过滤异常一律吞掉，不影响装载。
+     */
+    private void filterBlockedDanmaku(BaseDanmakuParser parser) {
+        try {
+            String raw = SharedPreferencesUtil.getString("danmaku_blocked_words", "");
+            if (raw == null || raw.trim().isEmpty()) return;
+            java.util.List<String> words = new ArrayList<>();
+            for (String w : raw.split("[,，、;；\\s]+")) {
+                if (!w.trim().isEmpty()) words.add(w.trim());
+            }
+            if (words.isEmpty()) return;
+            IDanmakus danmakus = parser.getDanmakus();
+            java.util.List<BaseDanmaku> blocked = new ArrayList<>();
+            IDanmakuIterator it = danmakus.iterator();
+            while (it.hasNext()) {
+                BaseDanmaku d = it.next();
+                if (d == null || d.text == null) continue;
+                for (String w : words) {
+                    if (d.text.toString().contains(w)) {
+                        blocked.add(d);
+                        break;
+                    }
+                }
+            }
+            for (BaseDanmaku d : blocked) danmakus.removeItem(d);
+            if (!blocked.isEmpty()) Logu.d("danmaku", "屏蔽词过滤 " + blocked.size() + " 条");
+        } catch (Throwable t) {
+            Logu.e("danmaku", "屏蔽词过滤失败: " + t);
+        }
     }
 
     public void addDanmaku(String text, int color) {
@@ -3896,6 +3934,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             btn_rotate.setVisibility(View.VISIBLE);
         else
             btn_rotate.setVisibility(View.GONE);
+
+        //顶栏时间显隐（1.3.3 反馈：右上角只有电量，加时间显示开关）
+        View playerClock = findViewById(R.id.player_clock);
+        if (playerClock != null)
+            playerClock.setVisibility(SharedPreferencesUtil.getBoolean("player_show_clock", true)
+                    ? View.VISIBLE : View.GONE);
 
         //弹幕按钮的可见性必须和旋转按钮一样在 initUI 就定下来：原来它拖到 onPrepared 才下发，
         //观感就是"刚进页面按钮还在、开播瞬间凭空少一个"，也让"设置里关掉了"这种正常状态
