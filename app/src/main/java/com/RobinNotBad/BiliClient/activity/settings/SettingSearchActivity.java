@@ -15,6 +15,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.util.Logu;
+import android.content.Context;
+import com.RobinNotBad.BiliClient.model.SettingSection;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 
 import java.util.ArrayList;
@@ -119,72 +122,94 @@ public class SettingSearchActivity extends BaseActivity {
         list.add(new Entry(page, "打开该设置页", target));
     }
 
+    /** 列表型设置页的条目清单数据源（各设置页的静态构建器） */
+    private interface SectionProvider {
+        java.util.List<SettingSection> get(Context context);
+    }
+
+    private static final class AutoPage {
+        final String title;
+        final Class<?> target;
+        final SectionProvider provider;
+
+        AutoPage(String title, Class<?> target, SectionProvider provider) {
+            this.title = title;
+            this.target = target;
+            this.provider = provider;
+        }
+    }
+
     /**
-     * 全部可搜索条目。新增设置项时请同步这里，否则搜不到。
+     * 列表型设置页注册表（2026-11-07 设置页重构）：条目索引从各页 {@code buildSections}
+     * 静态清单自动生成，新增设置项自动可搜，不再手维护别名（旧手写索引已腐烂：
+     * 「从历史位置播放」重复登记两次，且重构迁移后的条目指向旧页面）。
      */
-    private static List<Entry> buildIndex() {
+    private static final AutoPage[] AUTO_PAGES = {
+            new AutoPage("偏好设置", SettingPrefActivity.class, SettingPrefActivity::buildSections),
+            new AutoPage("内置播放器设置", SettingTerminalPlayerActivity.class, SettingTerminalPlayerActivity::buildSections),
+            new AutoPage("实验室", SettingLaboratoryActivity.class, SettingLaboratoryActivity::buildSections),
+            new AutoPage("详情页设置", SettingInfoActivity.class, SettingInfoActivity::buildSections),
+            new AutoPage("评论区设置", SettingRepliesActivity.class, SettingRepliesActivity::buildSections),
+            new AutoPage("推荐与搜索", RecommendSearchSettingsActivity.class, RecommendSearchSettingsActivity::buildSections),
+            new AutoPage("下载与存储", DownloadStorageSettingsActivity.class, DownloadStorageSettingsActivity::buildSections),
+            new AutoPage("隐私与安全", PrivacySecuritySettingsActivity.class, PrivacySecuritySettingsActivity::buildSections),
+            new AutoPage("通知与后台", NotificationBackgroundSettingsActivity.class, NotificationBackgroundSettingsActivity::buildSections),
+    };
+
+    /**
+     * 全部可搜索条目 = 自动索引（列表型设置页）+ 手写条目（自绘/特殊设置页）。
+     * 自绘页仍需在下面补条目，但范围已从全部设置缩小到 5 个自绘页。
+     */
+    private List<Entry> buildIndex() {
         List<Entry> list = new ArrayList<>();
 
-        //整页级入口：本身就是一个设置入口的，点开即可
+        //自动索引：页级入口 + 每个条目（title/divider 行跳过；open 行直接定位目标页）
+        for (AutoPage page : AUTO_PAGES) {
+            addPage(list, page.target, page.title);
+            try {
+                for (SettingSection section : page.provider.get(this)) {
+                    if (section.name == null || section.name.isEmpty()) continue;
+                    if (section.type.equals("title") || section.type.equals("divider")) continue;
+                    Class<?> target = page.target;
+                    if (section.type.equals("open") && section.id != null) {
+                        try {
+                            target = Class.forName(section.id);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                    list.add(new Entry(section.name, page.title, target));
+                }
+            } catch (Throwable t) {
+                Logu.e("setting-search", "索引生成失败 " + page.title + ": " + t);
+            }
+        }
+
+        //自绘/特殊设置页：没有 SettingSection 清单，手工列出
         addPage(list, SettingUIActivity.class, "界面设置");
-        addPage(list, SettingMenuActivity.class, "菜单设置");
-        add(list, SettingMenuActivity.class, "菜单设置",
-                "显示“番剧”", "显示“短视频”", "显示“热门”", "显示“热搜”", "菜单排序");
-        addPage(list, SettingTerminalPlayerActivity.class, "内置播放器设置");
-        addPage(list, SettingPrefActivity.class, "偏好设置");
-        addPage(list, SettingRepliesActivity.class, "评论区设置");
-        addPage(list, SettingInfoActivity.class, "详情页设置");
-        addPage(list, SettingLaboratoryActivity.class, "实验室");
-        addPage(list, ThemeColorActivity.class, "主题配色");
-        addPage(list, SettingQualityActivity.class, "默认清晰度");
-        addPage(list, SortSettingActivity.class, "菜单排序");
-        addPage(list, SearchSortActivity.class, "搜索类别排序");
-        addPage(list, com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class, "隐私与伪装");
+        add(list, SettingUIActivity.class, "界面设置",
+                "界面大小", "左右留白", "上下留白", "强制屏幕密度", "新版美学设计",
+                "番剧页显示推荐", "圆屏适配", "背景图", "背景图暗度", "恢复默认界面设置");
         addPage(list, SettingPlayerChooseActivity.class, "播放器选择");
         add(list, SettingPlayerChooseActivity.class, "播放器选择",
+                "内置播放器", "凉腕播放器", "小电视播放器", "默认清晰度",
                 "移动数据清晰度", "Wi-Fi 清晰度");
+        add(list, ThemeColorActivity.class, "主题配色",
+                "主题颜色", "自定义颜色", "恢复默认配色");
+        addPage(list, com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class, "隐私与伪装");
+        add(list, com.RobinNotBad.BiliClient.activity.privacy.PrivacyLockSettingsActivity.class, "隐私与伪装",
+                "启动密码锁", "设置/修改密码", "图标伪装成计算器", "忘密码兜底入口");
+        add(list, SettingMenuActivity.class, "菜单设置",
+                "显示“番剧”", "显示“短视频”", "显示“热门”", "显示“热搜”", "显示“直播”",
+                "显示“入站必刷”", "显示“全站排行榜”", "显示“时间线”");
+        addPage(list, SortSettingActivity.class, "菜单排序");
+        addPage(list, SearchSortActivity.class, "搜索类别排序");
         addPage(list, UpdateActivity.class, "检查更新");
+        add(list, UpdateActivity.class, "检查更新",
+                "更新源", "切换镜像", "跳过该版本");
         addPage(list, UpdateLogActivity.class, "更新日志");
         addPage(list, AboutActivity.class, "关于");
-
-        add(list, SettingTerminalPlayerActivity.class, "内置播放器设置",
-                "长按倍速", "双击快进快退", "横滑调进度", "横滑调进度灵敏度", "快进快退秒数", "显示快进快退按钮",
-                "无极调音（0-100）", "双击优先还原缩放/移动", "洗脑循环", "记住倍速",
-                "后台/熄屏继续播放", "默认横屏", "从历史位置播放", "显示实时人数", "听视频模式",
-                "视频可缩放", "缩放时可移动", "番剧片头/片尾跳过",
-                "显示方式", "解码方式", "音频输出",
-                "显示高能进度条", "弹幕防重叠", "合并重复弹幕", "强制为滚动弹幕",
-                "显示直播弹幕发送者", "空降弹幕", "弹幕最大行数", "弹幕字号大小", "弹幕不透明度", "弹幕速度",
-                "自动弹出字幕选择", "允许仅AI字幕", "字幕校准",
-                "从历史位置播放", "本地缓存续播",
-                "显示旋转按钮", "显示弹幕按钮", "显示清晰度按钮", "显示分P按钮",
-                "互动选项字体大小", "互动选项自动竖屏");
-
-        add(list, SettingPrefActivity.class, "偏好设置",
-                "隐私模式", "崩溃上报", "活跃设备统计", "长按复制", "创作中心", "隐私与伪装",
-                "搜索建议", "默认搜索内容", "搜索页显示热搜", "搜索类别排序", "识别链接",
-                "首页使用app端推荐", "App 推荐设备标识", "App 推荐附带客户端签名", "App 推荐附带 access_key",
-                "推荐屏蔽的 UP 主", "推荐屏蔽的关键词",
-                "新动态数量检查", "消息数量检查", "最近更新的UP主", "私信自动已读", "我的关注列表分组",
-                "夜深了", "记住退出页面", "启动时检查更新",
-                "禁用返回键", "禁止视频在相册中显示", "请求JPG格式图片",
-                "加载渐入渐出动画", "关闭界面过渡动画", "翻动时不加载图片", "异步加载布局",
-                "新提示信息显示方式", "新版开屏动画", "启动时等待请求完成",
-                "启用表冠适配", "表冠适配灵敏度（Recycler）", "表冠适配灵敏度（Scroll）");
-
-        add(list, SettingLaboratoryActivity.class, "实验室",
-                "新版弹幕获取方式", "私信未读标记", "使用旧版下载器", "缓存路径", "图片下载路径",
-                "横屏模式", "开屏文字", "文字跑马灯", "播放器旋屏兼容方案", "显示视频分段",
-                "系统媒体控件", "互动视频调试", "接口重试间隔（秒）", "接口重试次数",
-                "显示详细接口错误", "允许Logu.v", "允许Logu.d", "允许Logu.i", "调试日志落文件",
-                "番剧进度诊断", "主动触发崩溃");
-
-        add(list, SettingInfoActivity.class, "详情页设置",
-                "收藏夹单选", "收藏成功提示", "点击封面播放", "显示视频标签", "视频相关推荐",
-                "以游客方式观看直播", "一键三连");
-
-        add(list, SettingRepliesActivity.class, "评论区设置",
-                "众生平等", "粉丝铭牌消失术", "昵称不换行显示");
+        add(list, AboutActivity.class, "关于",
+                "开发者模式", "回声洞", "清除教程进度");
 
         return list;
     }
