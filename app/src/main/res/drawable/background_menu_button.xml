@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 圆形描边按钮底（1.3.3 反馈：原渐变描边+card_bg_new 灰底显得灰蒙蒙，
-     改半透明白底让氛围背景透出来，加白描边勾边） -->
+<!-- 圆形按钮底：与视频卡片同一套 token（card_bg_new 半透明灰 / card_border_new 0.5dp
+     描边），替代旧渐变描边版与白描边版（1.3.3 反馈迭代：先嫌灰蒙蒙，最终定稿
+     与选集卡片、顶栏刷新胶囊统一用视频卡片语言） -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="oval">
-            <solid android:color="#26FFFFFF" />
+            <solid android:color="@color/card_bg_new" />
             <stroke
-                android:width="1dp"
-                android:color="#80FFFFFF" />
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
         </shape>
     </item>
 </layer-list>
