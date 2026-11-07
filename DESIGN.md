@@ -22,7 +22,11 @@
 
 ## 渐变豁免（新版美学既有语言）
 
-- **三个 drawable 的渐变/光晕豁免「不加渐变」条款**：`background_card_gradient_border`（卡片渐变描边）、`background_menu_button`（圆形渐变描边）、`splash_text`（开屏光晕，与 AmbientBackground 同源）。**Why:** 2026-11-07 排查确认三者的文件注释都声明是有意的 Re-WearBili 视觉语言，已随新版美学上线。**新增 UI 不得新造渐变/发光**，需要强调时用强调色实底或既有描边 token（`card_border_new` 等）。
+- **两个 drawable 的渐变/光晕豁免「不加渐变」条款**：`background_card_gradient_border`（卡片渐变描边）、`splash_text`（开屏光晕，与 AmbientBackground 同源）。**Why:** 2026-11-07 排查确认三者的文件注释都声明是有意的 Re-WearBili 视觉语言，已随新版美学上线。**新增 UI 不得新造渐变/发光**，需要强调时用强调色实底或既有描边 token（`card_border_new` 等）。
+
+## 主菜单圆形按钮
+
+- **半透明白底 + 白描边，不用灰实底**：`background_menu_button`（cell_menu_grid 的圆形图标底）用 15% 白底 + 50% 白 1dp 描边，让氛围背景透出来；不用渐变描边或深灰实底。**Why:** 用户 2026-11-07 反馈原来的灰底渐变描边「灰蒙蒙的」，改半透明+白描边后更贴主题。
 
 ## 通用清单
 

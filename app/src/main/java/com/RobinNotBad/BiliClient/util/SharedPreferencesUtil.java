@@ -35,6 +35,8 @@ public class SharedPreferencesUtil {
     public static final String API_RETRY_INTERVAL_SECONDS = "api_retry_interval_seconds";
     public static final String API_RETRY_MAX_TIMES = "api_retry_max_times";
     public static final String PRIVACY_MODE = "privacy_mode";
+    //主页顶栏刷新按钮显示开关（1.3.3 反馈：老是误触）；关闭后仍可长按顶栏时间刷新
+    public static final String TOPBAR_REFRESH_ENABLE = "topbar_refresh_enable";
     //视频详情页的「视频摘要」「笔记」两个入口按钮总开关：有反馈嫌它们碍眼（无笔记的稿件尤其），给个显示/隐藏
     public static final String VIDEO_SUMMARY_NOTE_ENABLE = "video_summary_note_enable";
     //冷启动页面恢复总开关（恢复栈读写见 ResumePageUtil），默认关闭：关闭时不再写入恢复栈、冷启动始终进主页

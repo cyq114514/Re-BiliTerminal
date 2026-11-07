@@ -38,6 +38,9 @@ public class SettingPrefActivity extends RefreshListActivity {
                         "每天最多上报一次匿名安装标识、应用版本与机型，用于统计日活/月活设备数；不含账号信息",
                         "true"));
                 add(new SettingSection("switch", "长按复制", "copy_enable", getString(R.string.desc_copy_enable), "true"));
+                //主页顶栏刷新按钮显示开关（优喵 反馈：老是误触）；长按右上角时间仍是刷新入口
+                add(new SettingSection("switch", "显示主页刷新按钮", SharedPreferencesUtil.TOPBAR_REFRESH_ENABLE,
+                        "关闭后主页顶栏不再显示刷新按钮；长按顶栏右上角的时间仍可刷新", "true"));
                 //详情页「视频摘要」「笔记」入口的总开关（柒.刺客 反馈：嫌它们烦，想能控制显示/不显示）
                 add(new SettingSection("switch", "显示视频摘要/笔记入口", SharedPreferencesUtil.VIDEO_SUMMARY_NOTE_ENABLE,
                         "关闭后视频详情页不再显示「视频摘要」和「笔记」两个按钮", "true"));

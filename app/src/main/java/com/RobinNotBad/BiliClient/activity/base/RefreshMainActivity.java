@@ -13,6 +13,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.view.ImageAutoLoadScrollListener;
 
 
@@ -74,7 +75,18 @@ public class RefreshMainActivity extends InstanceActivity {
         //顶栏一键刷新按钮：与下拉刷新等价，另外把列表滚回顶部。
         //用户诉求原文：推荐流往下翻多了没有想看的内容，得先点别的入口再切回首页才有新内容
         refreshButton = findViewById(R.id.btn_refresh);
-        if (refreshButton != null) refreshButton.setOnClickListener(v -> triggerRefresh());
+        if (refreshButton != null) {
+            refreshButton.setOnClickListener(v -> triggerRefresh());
+            //显示开关（1.3.3 反馈：刷新按钮老是误触）；关闭后长按顶栏时间仍是刷新入口
+            refreshButton.setVisibility(SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.TOPBAR_REFRESH_ENABLE, true)
+                    ? View.VISIBLE : View.GONE);
+        }
+        //长按右上角时间 = 一键刷新（与刷新按钮等价）：按钮隐藏后仍有入口，也不再占地方
+        View timeText = findViewById(R.id.timeText);
+        if (timeText != null) timeText.setOnLongClickListener(v -> {
+            triggerRefresh();
+            return true;
+        });
     }
 
     private View refreshButton;
@@ -99,8 +111,11 @@ public class RefreshMainActivity extends InstanceActivity {
         refreshListener = listener;
         swipeRefreshLayout.setOnRefreshListener(listener);
         swipeRefreshLayout.setEnabled(true);
-        //注册了刷新回调才露出按钮：没注册的页面点了不会有任何反应
-        if (refreshButton != null) refreshButton.setVisibility(View.VISIBLE);
+        //注册了刷新回调才露出按钮：没注册的页面点了不会有任何反应；
+        //显隐同时吃「显示主页刷新按钮」开关，避免开关关闭后被这里重新亮回来
+        if (refreshButton != null) refreshButton.setVisibility(
+                SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.TOPBAR_REFRESH_ENABLE, true)
+                        ? View.VISIBLE : View.GONE);
     }
 
     public void setRefreshing(boolean bool) {
