@@ -39,6 +39,7 @@ import com.RobinNotBad.BiliClient.model.AudioQueue;
 import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
+import com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
@@ -407,6 +408,9 @@ public class BaseActivity extends AppCompatActivity {
         //避免每次返回都 findViewById + 读 SP + 重设 LayoutParams（后者会触发 requestLayout）
         if (pagename == roundAppliedOn) return;
         roundAppliedOn = pagename;
+        //顶栏标题溢出时跑马灯（1.3.3 反馈：私信页效果好评，全局加入）；
+        //口径与 MarqueeTextView 完全一致，短标题不溢出不会滚动
+        MarqueeTextView.applyTo(pagename);
 
         TextView clock = findViewById(R.id.timeText);
         //这里的 null 判断是冗余的（上面已 return），保留只是避免把下面 40 行整体再缩进一级

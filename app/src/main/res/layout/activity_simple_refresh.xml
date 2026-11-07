@@ -57,7 +57,7 @@
             android:paddingBottom="2dp"
             android:visibility="gone">
 
-            <TextView
+            <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                 android:id="@+id/filterAll"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -68,9 +68,9 @@
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp"
                 android:text="全部"
-                android:textSize="13sp" />
+                android:textSize="13sp"  />
 
-            <TextView
+            <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                 android:id="@+id/filterUnfinished"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -84,7 +84,7 @@
                 android:textSize="13sp" />
 
             <!-- 「清除所有已看完」：只有「稍后再看」页会点亮；破坏性操作，点击后二次确认 -->
-            <TextView
+            <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                 android:id="@+id/clearWatched"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
