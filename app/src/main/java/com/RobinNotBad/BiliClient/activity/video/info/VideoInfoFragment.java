@@ -540,6 +540,12 @@ public class VideoInfoFragment extends BaseFragment {
             });
         });
 
+        //「显示视频摘要/笔记入口」关闭时整对隐藏：这两个按钮是常驻的，无笔记的稿件也一样占地方
+        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.VIDEO_SUMMARY_NOTE_ENABLE, true)) {
+            rootview.findViewById(R.id.video_summary).setVisibility(View.GONE);
+            rootview.findViewById(R.id.note).setVisibility(View.GONE);
+        }
+
         //视频笔记（只读）：需登录
         MaterialButton note = rootview.findViewById(R.id.note);
         note.setOnClickListener(v -> {

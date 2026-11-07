@@ -35,6 +35,8 @@ public class SharedPreferencesUtil {
     public static final String API_RETRY_INTERVAL_SECONDS = "api_retry_interval_seconds";
     public static final String API_RETRY_MAX_TIMES = "api_retry_max_times";
     public static final String PRIVACY_MODE = "privacy_mode";
+    //视频详情页的「视频摘要」「笔记」两个入口按钮总开关：有反馈嫌它们碍眼（无笔记的稿件尤其），给个显示/隐藏
+    public static final String VIDEO_SUMMARY_NOTE_ENABLE = "video_summary_note_enable";
     //冷启动页面恢复总开关（恢复栈读写见 ResumePageUtil），默认关闭：关闭时不再写入恢复栈、冷启动始终进主页
     public static final String RESUME_PAGE_ENABLE = "resume_page_enable";
     //新版美学设计（移植自 Re-WearBili 的视觉语言）总开关，关闭后回到旧版观感
