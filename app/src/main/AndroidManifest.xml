@@ -167,6 +167,26 @@
             android:label="文章详情"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.RecommendSearchSettingsActivity"
+            android:exported="false"
+            android:label="推荐与搜索"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.settings.DownloadStorageSettingsActivity"
+            android:exported="false"
+            android:label="下载与存储"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.settings.PrivacySecuritySettingsActivity"
+            android:exported="false"
+            android:label="隐私与安全"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.settings.NotificationBackgroundSettingsActivity"
+            android:exported="false"
+            android:label="通知与后台"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.SettingPrefActivity"
             android:exported="false"
             android:label="偏好设置"

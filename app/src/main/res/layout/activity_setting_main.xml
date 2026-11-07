@@ -70,6 +70,14 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="账号"
+                    android:textSize="12sp" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/login"
                 android:layout_width="match_parent"
@@ -88,7 +96,118 @@
                     app:drawableEndCompat="@drawable/arrow_forward"
                     tools:ignore="RtlCompat" />
             </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/login_cookie"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
 
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/cookie_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/cookie_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="查看登录信息"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/cookie_desription"
+                        app:layout_constraintEnd_toStartOf="@+id/cookie_go"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/cookie_desription"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="查看当前账号的登录信息，用于在另外的Re：哔哩终端中特殊登录"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/cookie_go"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/cookie_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/account_switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/account_switch_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/account_switch_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="账号切换"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/account_switch_desription"
+                        app:layout_constraintEnd_toStartOf="@+id/account_switch_go"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/account_switch_desription"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="管理已保存的账号，快速切换登录"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/account_switch_go"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/account_switch_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="播放"
+                    android:textSize="12sp" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/playerSetting"
                 android:layout_width="match_parent"
@@ -155,7 +274,6 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
-
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/terminalPlayerSetting"
                 android:layout_width="match_parent"
@@ -222,7 +340,14 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
-
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="界面与外观"
+                    android:textSize="12sp" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/uiSetting"
                 android:layout_width="match_parent"
@@ -288,8 +413,6 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
-
-
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/menuSetting"
                 android:layout_width="match_parent"
@@ -355,143 +478,14 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/prefSetting"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="visible">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <ImageView
-                        android:id="@+id/prefSetting_go"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginEnd="8dp"
-                        android:layout_marginBottom="16dp"
-                        android:src="@drawable/arrow_forward"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <ImageView
-                        android:id="@+id/prefSetting_icon"
-                        android:layout_width="wrap_content"
-                        android:layout_height="0dp"
-                        android:layout_marginStart="8dp"
-                        android:adjustViewBounds="true"
-                        android:src="@drawable/icon_creative_center"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintHeight_percent="0.4"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintVertical_bias="0.5" />
-
-                    <TextView
-                        android:id="@+id/prefSetting_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginTop="10dp"
-                        android:ellipsize="end"
-                        android:lines="1"
-                        android:text="偏好设置"
-                        android:textSize="12sp"
-                        app:layout_constraintBottom_toTopOf="@+id/prefSetting_desription"
-                        app:layout_constraintEnd_toStartOf="@+id/prefSetting_go"
-                        app:layout_constraintStart_toEndOf="@+id/prefSetting_icon"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
-                        android:id="@+id/prefSetting_desription"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginBottom="10dp"
-                        android:singleLine="true"
-                        android:text="一些特殊适配和特殊需求选项"
-                        android:textSize="11sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toStartOf="@+id/prefSetting_go"
-                        app:layout_constraintStart_toEndOf="@+id/prefSetting_icon"
-                        app:layout_constraintTop_toBottomOf="@+id/prefSetting_title" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/repliesSetting"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="visible">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <ImageView
-                        android:id="@+id/repliesSetting_go"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginEnd="8dp"
-                        android:layout_marginBottom="16dp"
-                        android:src="@drawable/arrow_forward"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <ImageView
-                        android:id="@+id/repliesSetting_icon"
-                        android:layout_width="wrap_content"
-                        android:layout_height="0dp"
-                        android:layout_marginStart="8dp"
-                        android:adjustViewBounds="true"
-                        android:src="@drawable/icon_reply"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintHeight_percent="0.4"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintVertical_bias="0.5" />
-
-                    <TextView
-                        android:id="@+id/repliesSetting_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginTop="10dp"
-                        android:ellipsize="end"
-                        android:lines="1"
-                        android:text="评论区设置"
-                        android:textSize="12sp"
-                        app:layout_constraintBottom_toTopOf="@+id/repliesSetting_desription"
-                        app:layout_constraintEnd_toStartOf="@+id/repliesSetting_go"
-                        app:layout_constraintStart_toEndOf="@+id/repliesSetting_icon"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
-                        android:id="@+id/repliesSetting_desription"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginBottom="10dp"
-                        android:singleLine="true"
-                        android:text="关于评论区的一些设置选项"
-                        android:textSize="11sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toStartOf="@+id/repliesSetting_go"
-                        app:layout_constraintStart_toEndOf="@+id/repliesSetting_icon"
-                        app:layout_constraintTop_toBottomOf="@+id/repliesSetting_title" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="内容"
+                    android:textSize="12sp" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/infoSetting"
                 android:layout_width="match_parent"
@@ -559,7 +553,444 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
             </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/repliesSetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible">
 
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/repliesSetting_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/repliesSetting_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_reply"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/repliesSetting_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="评论区设置"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/repliesSetting_desription"
+                        app:layout_constraintEnd_toStartOf="@+id/repliesSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/repliesSetting_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/repliesSetting_desription"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="关于评论区的一些设置选项"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/repliesSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/repliesSetting_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/repliesSetting_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="推荐与搜索"
+                    android:textSize="12sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/recommendSearchSetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/recommendSearchSetting_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/recommendSearchSetting_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_search"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/recommendSearchSetting_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="推荐与搜索"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/recommendSearchSetting_desc"
+                        app:layout_constraintEnd_toStartOf="@+id/recommendSearchSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/recommendSearchSetting_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/recommendSearchSetting_desc"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="推荐流数据源、屏蔽规则与搜索页选项"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/recommendSearchSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/recommendSearchSetting_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/recommendSearchSetting_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="下载与存储"
+                    android:textSize="12sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/downloadStorageSetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/downloadStorageSetting_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/downloadStorageSetting_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_download"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/downloadStorageSetting_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="下载与存储"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/downloadStorageSetting_desc"
+                        app:layout_constraintEnd_toStartOf="@+id/downloadStorageSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/downloadStorageSetting_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/downloadStorageSetting_desc"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="缓存路径、图片路径与相册显示"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/downloadStorageSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/downloadStorageSetting_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/downloadStorageSetting_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="隐私与安全"
+                    android:textSize="12sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/privacySecuritySetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/privacySecuritySetting_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/privacySecuritySetting_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_person"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/privacySecuritySetting_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="隐私与安全"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/privacySecuritySetting_desc"
+                        app:layout_constraintEnd_toStartOf="@+id/privacySecuritySetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/privacySecuritySetting_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/privacySecuritySetting_desc"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="不留浏览记录、密码锁与图标伪装"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/privacySecuritySetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/privacySecuritySetting_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/privacySecuritySetting_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="通知与后台"
+                    android:textSize="12sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/notificationBackgroundSetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/notificationBackgroundSetting_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/notificationBackgroundSetting_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_info"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/notificationBackgroundSetting_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="通知与后台"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/notificationBackgroundSetting_desc"
+                        app:layout_constraintEnd_toStartOf="@+id/notificationBackgroundSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/notificationBackgroundSetting_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/notificationBackgroundSetting_desc"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="动态/消息检查、记住退出页面与后台播放"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/notificationBackgroundSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/notificationBackgroundSetting_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/notificationBackgroundSetting_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/prefSetting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/prefSetting_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/prefSetting_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_creative_center"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/prefSetting_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="偏好设置"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/prefSetting_desription"
+                        app:layout_constraintEnd_toStartOf="@+id/prefSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/prefSetting_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/prefSetting_desription"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="功能开关、视觉与动画选项"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/prefSetting_go"
+                        app:layout_constraintStart_toEndOf="@+id/prefSetting_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/prefSetting_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+            </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.55"
+                    android:text="更多"
+                    android:textSize="12sp" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/laboratory"
                 android:layout_width="match_parent"
@@ -625,7 +1056,6 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
-
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/about"
                 android:layout_width="match_parent"
@@ -691,115 +1121,6 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/login_cookie"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <ImageView
-                        android:id="@+id/cookie_go"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginEnd="8dp"
-                        android:layout_marginBottom="16dp"
-                        android:src="@drawable/arrow_forward"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/cookie_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginTop="10dp"
-                        android:ellipsize="end"
-                        android:lines="1"
-                        android:text="查看登录信息"
-                        android:textSize="12sp"
-                        app:layout_constraintBottom_toTopOf="@+id/cookie_desription"
-                        app:layout_constraintEnd_toStartOf="@+id/cookie_go"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
-                        android:id="@+id/cookie_desription"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginBottom="10dp"
-                        android:singleLine="true"
-                        android:text="查看当前账号的登录信息，用于在另外的Re：哔哩终端中特殊登录"
-                        android:textSize="11sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toStartOf="@+id/cookie_go"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/cookie_title" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/account_switch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <ImageView
-                        android:id="@+id/account_switch_go"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginEnd="8dp"
-                        android:layout_marginBottom="16dp"
-                        android:src="@drawable/arrow_forward"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/account_switch_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginTop="10dp"
-                        android:ellipsize="end"
-                        android:lines="1"
-                        android:text="账号切换"
-                        android:textSize="12sp"
-                        app:layout_constraintBottom_toTopOf="@+id/account_switch_desription"
-                        app:layout_constraintEnd_toStartOf="@+id/account_switch_go"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
-                        android:id="@+id/account_switch_desription"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginBottom="10dp"
-                        android:singleLine="true"
-                        android:text="管理已保存的账号，快速切换登录"
-                        android:textSize="11sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toStartOf="@+id/account_switch_go"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/account_switch_title" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-
-
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/refresh_tutorial"
                 android:layout_width="match_parent"
@@ -816,7 +1137,6 @@
                     tools:ignore="RtlCompat" />
 
             </com.google.android.material.card.MaterialCardView>
-
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/test"
                 android:layout_width="match_parent"

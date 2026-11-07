@@ -122,6 +122,22 @@ public class SettingMainActivity extends InstanceActivity {
                 startActivity(intent);
             });
 
+            //推荐与搜索
+            findViewById(R.id.recommendSearchSetting).setOnClickListener(view ->
+                    startActivity(new Intent(this, RecommendSearchSettingsActivity.class)));
+
+            //下载与存储
+            findViewById(R.id.downloadStorageSetting).setOnClickListener(view ->
+                    startActivity(new Intent(this, DownloadStorageSettingsActivity.class)));
+
+            //隐私与安全
+            findViewById(R.id.privacySecuritySetting).setOnClickListener(view ->
+                    startActivity(new Intent(this, PrivacySecuritySettingsActivity.class)));
+
+            //通知与后台
+            findViewById(R.id.notificationBackgroundSetting).setOnClickListener(view ->
+                    startActivity(new Intent(this, NotificationBackgroundSettingsActivity.class)));
+
             //实验性设置
             MaterialCardView laboratorySetting = findViewById(R.id.laboratory);
             //laboratorySetting.setVisibility(View.GONE);
