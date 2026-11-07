@@ -48,6 +48,13 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                         "退到后台或熄屏时继续播放，并挂出通知栏遥控", "false"));
                 //1.3.2 反馈：播放视频时后台音乐一起出声（原刻意设计），加开关默认暂停；
                 //被暂停的音乐从通知栏/顶部悬浮球手动继续，不做自动恢复
+                //顶栏时间显示开关（1.3.3 反馈：右上角只有电量，想看时间）
+                add(new SettingSection("switch", "播放页顶栏显示时间", "player_show_clock",
+                        "在播放页顶栏右上角电量旁显示当前时间", "true"));
+                //弹幕屏蔽词（1.3.3 反馈：能不能加入弹幕屏蔽词）
+                add(new SettingSection("input_string", "弹幕屏蔽词", "danmaku_blocked_words",
+                        "逗号或空格分隔的关键词，弹幕文字包含任一关键词即整条不显示；留空不过滤。改完从下个视频生效",
+                        ""));
                 add(new SettingSection("switch", "播放视频时暂停后台音乐", "player_pause_bg_music",
                         "开启后，视频起播会自动暂停正在放的歌（从通知栏或顶部悬浮球手动继续）；"
                                 + "关闭则保持两路同时播放", "true"));
