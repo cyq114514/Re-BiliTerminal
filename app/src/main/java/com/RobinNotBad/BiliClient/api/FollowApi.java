@@ -36,10 +36,18 @@ public class FollowApi {
         @SerializedName("count") public int count;
     }
 
+
+    /**统一把非 0 code 转成带真实 code/message 的异常：MsgUtil.err 按串里的关键词补
+     * 「未登录/风控」提示，压成一句"解析失败"会让 token 过期和风控无从区分（1.3.3 反馈）*/
+    private static JSONException fail(String what, ApiResponse<?> resp) {
+        if (resp == null) return new JSONException(what + "失败（响应为空）");
+        return new JSONException(what + "失败（code=" + resp.code
+                + (resp.message != null && !resp.message.isEmpty() ? " " + resp.message : "") + "）");
+    }
     public static int getFollowingList(long mid, int page, List<UserInfo> userList) throws IOException, JSONException {
         String json = NetWorkUtil.getJson("https://api.bilibili.com/x/relation/followings?vmid=" + mid + "&pn=" + page + "&ps=20&order=desc&order_type=attention").toString();
         ApiResponse<FollowListData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<FollowListData>>(){}.getType());
-        if (resp == null || !resp.isSuccess()) throw new JSONException("获取关注列表失败");
+        if (resp == null || !resp.isSuccess()) throw fail("获取关注列表", resp);
         if (resp.data == null || resp.data.list == null || resp.data.list.isEmpty()) return 1;
         for (FollowItem item : resp.data.list) {
             if (item == null) continue;
@@ -53,7 +61,7 @@ public class FollowApi {
     public static int getFollowerList(long mid, int page, List<UserInfo> userList) throws IOException, JSONException {
         String json = NetWorkUtil.getJson("https://api.bilibili.com/x/relation/followers?vmid=" + mid + "&pn=" + page + "&ps=20&order=desc&order_type=attention").toString();
         ApiResponse<FollowListData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<FollowListData>>(){}.getType());
-        if (resp == null || !resp.isSuccess()) throw new JSONException("获取粉丝列表失败");
+        if (resp == null || !resp.isSuccess()) throw fail("获取粉丝列表", resp);
         if (resp.data == null || resp.data.list == null || resp.data.list.isEmpty()) return 1;
         for (FollowItem item : resp.data.list) {
             if (item == null) continue;

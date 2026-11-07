@@ -393,7 +393,12 @@ public class UserInfoApi {
 
     public static org.json.JSONObject getMedalWall(long targetId) throws IOException, JSONException {
         org.json.JSONObject all = NetWorkUtil.getJson("https://api.live.bilibili.com/xlive/web-ucenter/user/MedalWall?target_id=" + targetId, NetWorkUtil.webHeaders);
-        return all != null ? all.optJSONObject("data") : null;
+        if (all == null) throw new JSONException("勋章墙请求失败（响应为空）");
+        int code = all.optInt("code", -1);
+        //不校验 code 的话，未登录/风控时 data 为 null，页面表现是静默空白，用户无从知道原因
+        if (code != 0) throw new JSONException("勋章墙加载失败（code=" + code
+                + (all.optString("message").isEmpty() ? "" : " " + all.optString("message")) + "）");
+        return all.optJSONObject("data");
     }
 
     public static org.json.JSONObject updateUserSign(String userSign) throws IOException, JSONException {
