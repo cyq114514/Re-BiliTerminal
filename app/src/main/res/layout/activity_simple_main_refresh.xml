@@ -18,7 +18,6 @@
             android:layout_alignParentLeft="true"
             android:layout_marginVertical="3dp"
             android:layout_marginStart="8dp"
-            android:layout_marginEnd="80dp"
             android:layout_toStartOf="@id/timeText"
             android:layout_toLeftOf="@id/timeText"
             android:ellipsize="end"
@@ -26,8 +25,8 @@
             android:text="@string/pagename_default"
             android:textStyle="bold"
             app:drawableStartCompat="@drawable/arrow_down" />
-        <!-- marginEnd 给下面的「刷新」按钮留出固定宽度：标题与按钮都用 layout_toStartOf="@id/timeText"
-             定位，不给标题留白的话长标题会被按钮压住（标题的截断只按 timeText 的位置计算） -->
+        <!-- 标题的右留白由代码按「刷新/听歌」按钮的实际显隐设置（RefreshMainActivity 与
+             LocalListActivity）：按钮隐藏的页面（热门/热搜等）不再白白让出 80dp -->
 
         <!-- 一键刷新（与下拉刷新等价 + 列表回顶部）：始终半透明灰卡片，与视频卡片同一套
              card_bg_new / 10dp 圆角 / 描边；加载中不高亮。没注册刷新回调时隐藏，避免死按钮。 -->

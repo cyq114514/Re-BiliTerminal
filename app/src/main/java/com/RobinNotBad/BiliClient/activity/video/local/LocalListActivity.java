@@ -56,6 +56,13 @@ public class LocalListActivity extends InstanceActivity {
         //按缓存文件夹顺序灌进音频队列，复用收藏夹「听全部」的全屏听歌页与服务
         View localAudioBtn = findViewById(R.id.local_audio_btn);
         localAudioBtn.setVisibility(View.VISIBLE);
+        //听歌按钮占宽，标题右留白同步让位（与 RefreshMainActivity 同一套逻辑）
+        View pageTitle = findViewById(R.id.pageName);
+        if (pageTitle != null) {
+            android.view.ViewGroup.LayoutParams lp = pageTitle.getLayoutParams();
+            if (lp instanceof android.view.ViewGroup.MarginLayoutParams)
+                ((android.view.ViewGroup.MarginLayoutParams) lp).setMarginEnd((int) (88 * getResources().getDisplayMetrics().density + 0.5f));
+        }
         localAudioBtn.setOnClickListener(v -> {
             if (videoList.isEmpty()) {
                 MsgUtil.showMsg("还没有可听的缓存");
