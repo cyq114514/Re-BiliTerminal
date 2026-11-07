@@ -20,7 +20,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
-import java.util.Collections;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
@@ -53,14 +52,6 @@ import java.util.Map;
 public class BangumiInfoFragment extends Fragment {
     private long mediaId;
     private int selectedSection = 0, selectedEpisode = 0;
-    //分集区展示口径（1.3.3 反馈：正片/预告/PV 只平铺第 0 个分区，也没有倒序）：
-    //displaySectionIdx=当前展示的分区，episodeReversed=展示层倒序开关（不动数据层下标）
-    private int displaySectionIdx = 0;
-    private boolean episodeReversed = false;
-    private SeasonTabAdapter sectionTabAdapter;
-    private RecyclerView sectionTabsRecyclerView;
-    private TextView episodeSortBtn;
-    private final java.util.ArrayList<Integer> tabSectionIndex = new java.util.ArrayList<>();
     private Dialog dialog;
     private View rootView;
     private RecyclerView episodeRecyclerView;
@@ -171,14 +162,6 @@ public class BangumiInfoFragment extends Fragment {
         TextView record = rootView.findViewById(R.id.text_record);
         episodeStatus = rootView.findViewById(R.id.episode_status);
         seasonTabsRecyclerView = rootView.findViewById(R.id.rv_season_tabs);
-        sectionTabsRecyclerView = rootView.findViewById(R.id.rv_section_tabs);
-        episodeSortBtn = rootView.findViewById(R.id.episode_sort);
-        if (episodeSortBtn != null) {
-            episodeSortBtn.setOnClickListener(v -> {
-                episodeReversed = !episodeReversed;
-                rebuildEpisodeDisplay();
-            });
-        }
         selectedSection = 0;
 
         rootView.setVisibility(View.GONE);
@@ -302,8 +285,7 @@ public class BangumiInfoFragment extends Fragment {
         episodeCardAdapter = adapter;
 
         adapter.setOnItemClickListener(index -> {
-            //index 是展示口径（可能处于倒序），换算回分区数据原始下标
-            selectedEpisode = originalIndexOf(index);
+            selectedEpisode = index;
             refreshReplies();
         });
 
@@ -338,10 +320,9 @@ public class BangumiInfoFragment extends Fragment {
             if (dialog != null) dialog.show();
         });
 
-        setupSectionTabs();
+        adapter.setData(bangumi.sectionList.get(0).episodeList);
         episodeRecyclerView.setLayoutManager(new CustomLinearManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
         episodeRecyclerView.setAdapter(adapter);
-        rebuildEpisodeDisplay();
 
         //play button setting
         playButton.setOnClickListener(v -> {
@@ -414,100 +395,6 @@ public class BangumiInfoFragment extends Fragment {
     }
 
     /**
-     * 分区 tab（正片/预告/PV…）：数据源是 sectionList，复用季 tab 的样式与交互
-     * （SeasonTabAdapter + cell_season_tab），仅多于一个非空分区时显示整行。
-     * tab 下标与分区下标可能不一致（空分区不生成 tab），映射存在 tabSectionIndex 里。
-     */
-    private void setupSectionTabs() {
-        tabSectionIndex.clear();
-        if (bangumi == null || bangumi.sectionList == null) {
-            if (sectionTabsRecyclerView != null) sectionTabsRecyclerView.setVisibility(View.GONE);
-            return;
-        }
-        ArrayList<Bangumi.Season> tabs = new ArrayList<>();
-        for (int i = 0; i < bangumi.sectionList.size(); i++) {
-            Bangumi.Section section = bangumi.sectionList.get(i);
-            if (section == null || section.episodeList == null || section.episodeList.isEmpty()) continue;
-            Bangumi.Season tab = new Bangumi.Season();
-            tab.season_id = section.id;
-            tab.season_title = section.title;
-            tabs.add(tab);
-            tabSectionIndex.add(i);
-        }
-        if (sectionTabsRecyclerView == null) return;
-        if (tabs.size() <= 1) {
-            sectionTabsRecyclerView.setVisibility(View.GONE);
-            return;
-        }
-        sectionTabAdapter = new SeasonTabAdapter(tabs);
-        sectionTabAdapter.selectedIndex = Math.max(0, tabSectionIndex.indexOf(displaySectionIdx));
-        sectionTabAdapter.setOnTabClickListener(this::switchDisplayedSection);
-        sectionTabsRecyclerView.setLayoutManager(new CustomLinearManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
-        sectionTabsRecyclerView.setAdapter(sectionTabAdapter);
-        sectionTabsRecyclerView.setVisibility(View.VISIBLE);
-    }
-
-    /**点击分区 tab：切到该分区的第 1 集（走 selectEpisode 统一路径：跨分区=整表重建）。 */
-    private void switchDisplayedSection(int tabIndex) {
-        if (tabIndex < 0 || tabIndex >= tabSectionIndex.size()) return;
-        int sectionIdx = tabSectionIndex.get(tabIndex);
-        if (sectionIdx == displaySectionIdx) return;
-        selectEpisode(sectionIdx, 0, true);
-    }
-
-    private int sectionTabIndexOf(int sectionIdx) {
-        int index = tabSectionIndex.indexOf(sectionIdx);
-        return index >= 0 ? index : 0;
-    }
-
-    /**
-     * 按展示口径（displaySectionIdx + episodeReversed）重建分集列表：
-     * setData 会重置选中下标，这里统一按「选中分区+集」映射出展示下标再回填，
-     * 倒序时原下标 i 显示在 size-1-i。数据层（selectedSection/selectedEpisode）始终是原始下标。
-     */
-    private void rebuildEpisodeDisplay() {
-        if (episodeCardAdapter == null) return;
-        if (bangumi == null || bangumi.sectionList == null || bangumi.sectionList.isEmpty()) return;
-        if (displaySectionIdx < 0 || displaySectionIdx >= bangumi.sectionList.size()) displaySectionIdx = 0;
-        Bangumi.Section section = bangumi.sectionList.get(displaySectionIdx);
-        if (section == null || section.episodeList == null || section.episodeList.isEmpty()) return;
-
-        java.util.List<Bangumi.Episode> display = new ArrayList<>(section.episodeList);
-        if (episodeReversed) Collections.reverse(display);
-        episodeCardAdapter.setData(display);
-
-        int mapped = displayIndexOf(selectedSection, selectedEpisode);
-        episodeCardAdapter.setSelectedItemIndex(mapped >= 0 ? mapped : 0);
-        episodeRecyclerView.scrollToPosition(mapped >= 0 ? mapped : 0);
-
-        if (episodeSortBtn != null) {
-            episodeSortBtn.setVisibility(section.episodeList.size() > 1 ? View.VISIBLE : View.GONE);
-            episodeSortBtn.setText(episodeReversed ? "正序" : "倒序");
-        }
-    }
-
-    /**原始下标 → 展示下标；选中不在当前展示分区时返回 -1 */
-    private int displayIndexOf(int sectionIdx, int episodeIdx) {
-        if (sectionIdx != displaySectionIdx) return -1;
-        if (bangumi == null || bangumi.sectionList == null || displaySectionIdx >= bangumi.sectionList.size()) return -1;
-        Bangumi.Section section = bangumi.sectionList.get(displaySectionIdx);
-        if (section == null || section.episodeList == null) return -1;
-        int size = section.episodeList.size();
-        if (episodeIdx < 0 || episodeIdx >= size) return -1;
-        return episodeReversed ? size - 1 - episodeIdx : episodeIdx;
-    }
-
-    /**展示下标 → 原始下标（列表点击回调用），越界原样返回 */
-    private int originalIndexOf(int displayPos) {
-        if (bangumi == null || bangumi.sectionList == null || displaySectionIdx >= bangumi.sectionList.size()) return displayPos;
-        Bangumi.Section section = bangumi.sectionList.get(displaySectionIdx);
-        if (section == null || section.episodeList == null) return displayPos;
-        int size = section.episodeList.size();
-        if (displayPos < 0 || displayPos >= size) return displayPos;
-        return episodeReversed ? size - 1 - displayPos : displayPos;
-    }
-
-    /**
      * 切换当前选中集，并同步 列表数据 / 高亮 / 滚动 / 评论区。
      * 与"点选集列表"相比，这里支持跨分区跳转，供自动定位使用。
      *
@@ -520,23 +407,16 @@ public class BangumiInfoFragment extends Fragment {
         if (section == null || section.episodeList == null) return null;
         if (episodeIndex < 0 || episodeIndex >= section.episodeList.size()) return null;
 
-        boolean sectionChanged = sectionIndex != displaySectionIdx;
+        boolean sectionChanged = sectionIndex != selectedSection;
         selectedSection = sectionIndex;
         selectedEpisode = episodeIndex;
 
         EpisodeCardAdapter adapter = episodeCardAdapter;
         if (adapter != null) {
-            if (sectionChanged) {
-                //跨分区：展示区跟着切，tab 高亮同步，列表整表重建（含倒序与选中映射）
-                displaySectionIdx = sectionIndex;
-                if (sectionTabAdapter != null) sectionTabAdapter.setSelectedIndex(sectionTabIndexOf(sectionIndex));
-                rebuildEpisodeDisplay();
-            } else {
-                //同分区：只改高亮与滚动，避免 setData 打断滚动位置
-                int mapped = displayIndexOf(sectionIndex, episodeIndex);
-                adapter.setSelectedItemIndex(mapped >= 0 ? mapped : 0);
-                if (scrollToIt && mapped >= 0) episodeRecyclerView.scrollToPosition(mapped);
-            }
+            //setData() 会把选中下标重置为 0，所以必须先 setData 再 setSelectedItemIndex
+            if (sectionChanged) adapter.setData(section.episodeList);
+            adapter.setSelectedItemIndex(episodeIndex);
+            if (scrollToIt) episodeRecyclerView.scrollToPosition(episodeIndex);
         }
 
         refreshReplies();
@@ -732,10 +612,9 @@ public class BangumiInfoFragment extends Fragment {
         seasonTabAdapter.setSelectedIndex(tabIndex);
         updateEpisodeStatusText();
 
-        setupSectionTabs();
-        displaySectionIdx = sectionIdx;
-        if (sectionTabAdapter != null) sectionTabAdapter.setSelectedIndex(sectionTabIndexOf(sectionIdx));
-        rebuildEpisodeDisplay();
+        episodeCardAdapter.setData(section.episodeList);
+        episodeCardAdapter.setSelectedItemIndex(episodeIdx);
+        episodeRecyclerView.scrollToPosition(episodeIdx);
 
         refreshReplies();
 
