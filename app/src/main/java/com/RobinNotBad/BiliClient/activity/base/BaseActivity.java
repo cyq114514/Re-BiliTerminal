@@ -452,15 +452,17 @@ public class BaseActivity extends AppCompatActivity {
                             btnRefresh.setLayoutParams(brParams);
                         }
                         //顶栏上锚定 timeText 的其他额外按钮同理：home_btn（详情页一键回首页）
-                        //在圆屏下会随居中的时钟压到居中的标题上（1.3.2 反馈截图），照 btn_refresh
-                        //先例挪到父容器左侧空档（标题圆屏下左右各留 18% 内边距，那片是空的）。
+                        //在圆屏下会随居中的时钟压到居中的标题上（1.3.2 反馈截图）。首版照 btn_refresh
+                        //挪到父容器最左，真机上又嫌太靠边（圆屏页角被裁，图标孤零零）；改成贴在
+                        //居中标题的右边（END_OF pageName），与标题连成一小组，整体仍在可视圆内。
                         //只在圆屏分支动它：其余共用布局的页面 home_btn 是 GONE，重排无副作用
                         View homeBtn = findViewById(R.id.home_btn);
                         if (homeBtn != null) {
                             RelativeLayout.LayoutParams hbParams = new RelativeLayout.LayoutParams(
                                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                            hbParams.addRule(RelativeLayout.ALIGN_PARENT_START);
+                            hbParams.addRule(RelativeLayout.END_OF, R.id.pageName);
                             hbParams.addRule(RelativeLayout.CENTER_VERTICAL);
+                            hbParams.setMarginStart(ToolsUtil.dp2px(6));
                             homeBtn.setLayoutParams(hbParams);
                         }
                         Logu.d("round", "ok");
