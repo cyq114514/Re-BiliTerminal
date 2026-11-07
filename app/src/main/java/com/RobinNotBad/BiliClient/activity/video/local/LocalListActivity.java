@@ -52,6 +52,40 @@ public class LocalListActivity extends InstanceActivity {
         TextView pageName = findViewById(R.id.pageName);
         pageName.setText("缓存");
 
+        //听歌模式入口（1.3.3 反馈：缓存的音频不利用可惜）：把下载目录的 media 文件
+        //按缓存文件夹顺序灌进音频队列，复用收藏夹「听全部」的全屏听歌页与服务
+        View localAudioBtn = findViewById(R.id.local_audio_btn);
+        localAudioBtn.setVisibility(View.VISIBLE);
+        localAudioBtn.setOnClickListener(v -> {
+            if (videoList.isEmpty()) {
+                MsgUtil.showMsg("还没有可听的缓存");
+                return;
+            }
+            java.util.ArrayList<com.RobinNotBad.BiliClient.model.VideoCard> items = new java.util.ArrayList<>();
+            for (com.RobinNotBad.BiliClient.model.LocalVideo localVideo : videoList) {
+                for (int i = 0; i < localVideo.videoFileList.size(); i++) {
+                    com.RobinNotBad.BiliClient.model.VideoCard card = new com.RobinNotBad.BiliClient.model.VideoCard();
+                    //单集标题=文件夹名；分P 标题=文件夹名·分P 名，与本地选集页口径一致
+                    boolean single = localVideo.videoFileList.size() == 1;
+                    card.title = single ? localVideo.title
+                            : localVideo.title + " · " + localVideo.pageList.get(i);
+                    card.upName = "本地缓存";
+                    card.cover = localVideo.cover;
+                    card.localPath = localVideo.videoFileList.get(i);
+                    items.add(card);
+                }
+            }
+            if (items.isEmpty()) {
+                MsgUtil.showMsg("还没有可听的缓存");
+                return;
+            }
+            //mediaId 用 -1：不与任何收藏夹冲突，续播记录天然隔离
+            com.RobinNotBad.BiliClient.service.AudioPlayerService.startQueue(
+                    this, items, -1, "", "本地缓存");
+            startActivity(new android.content.Intent(this,
+                    com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity.class));
+        });
+
         if (!FileUtil.checkStoragePermission()) {
             FileUtil.requestStoragePermission(this);
         }

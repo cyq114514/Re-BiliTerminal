@@ -31,6 +31,30 @@
 
         <!-- 一键刷新（与下拉刷新等价 + 列表回顶部）：始终半透明灰卡片，与视频卡片同一套
              card_bg_new / 10dp 圆角 / 描边；加载中不高亮。没注册刷新回调时隐藏，避免死按钮。 -->
+        <!-- 听歌模式入口：只在本地缓存页点亮（同 filterBar 的先藏后显模式）。
+             把下载目录里的 media 文件灌进音频队列，复用全屏听歌页 -->
+        <TextView
+            android:id="@+id/local_audio_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="6dp"
+            android:layout_toStartOf="@id/btn_refresh"
+            android:layout_toLeftOf="@id/btn_refresh"
+            android:background="@drawable/sel_refresh_chip"
+            android:drawablePadding="6dp"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:singleLine="true"
+            android:text="听歌"
+            android:textColor="@color/text_gray"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:drawableStartCompat="@drawable/ic_audio_queue"
+            app:drawableTint="@color/text_gray"
+            app:drawableTintMode="src_in" />
+
         <TextView
             android:id="@+id/btn_refresh"
             android:layout_width="wrap_content"

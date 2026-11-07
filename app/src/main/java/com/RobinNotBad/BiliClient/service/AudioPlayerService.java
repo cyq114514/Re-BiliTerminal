@@ -465,6 +465,17 @@ public class AudioPlayerService extends Service {
         currentUrls.clear();
         final int generation = ++resolvingGeneration;
 
+        //0) 本地文件条目（1.3.3 反馈：缓存的音频用听歌模式听，不利用可惜）：
+        //直读下载目录里的 media 文件，不走取流/URL缓存/缓存代理（cid=0 时它们天然旁路），
+        //local=true 跳过网络超时与请求头选项。多P展开/预取对 aid=0 的条目本来就有守卫
+        if (item.localPath != null && !item.localPath.isEmpty()
+                && new java.io.File(item.localPath).exists()) {
+            diag("本地直读 " + item.localPath);
+            currentUrls.add(item.localPath);
+            prepareAndPlay(currentUrls, item, true, 0);
+            return;
+        }
+
         //1) 命中预取（下一首已经解析好，切歌秒开）
         if (prefetchUrls != null && prefetchCid == item.cid
                 && System.currentTimeMillis() - prefetchTime < PREFETCH_TTL_MS) {

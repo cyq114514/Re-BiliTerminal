@@ -35,6 +35,8 @@ public class VideoCard implements Parcelable, Serializable {
     public String sourceDetailUrl = ""; // 站点条目页
     public String sourceSubjectId = ""; // 站点内部 id（仅展示/排查）
     public String sourceOriginal = "";  // 原名 / 别名，用于「用原名再搜一次」
+    //本地媒体文件绝对路径（1.3.3 反馈：缓存的音频用听歌模式听）；非空 = 音频队列直读文件，不走取流
+    public String localPath = "";
 
     public VideoCard(String title, String upName, String view, String cover, long aid, String bvid, String type) {
         this.title = title;
@@ -91,6 +93,7 @@ public class VideoCard implements Parcelable, Serializable {
         sourceDetailUrl = in.readString();
         sourceSubjectId = in.readString();
         sourceOriginal = in.readString();
+        localPath = in.readString();
     }
 
     public static final Creator<VideoCard> CREATOR = new Creator<>() {
@@ -133,5 +136,6 @@ public class VideoCard implements Parcelable, Serializable {
         parcel.writeString(sourceDetailUrl);
         parcel.writeString(sourceSubjectId);
         parcel.writeString(sourceOriginal);
+        parcel.writeString(localPath);
     }
 }
