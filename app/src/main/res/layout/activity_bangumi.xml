@@ -59,40 +59,48 @@
 
                 <!-- 主 Tab（4个：推荐/追番/索引/热门；推荐页可在设置中关闭）
                      胶囊式页签：复用筛选 chip 的选择器，选中粉色底白字并加粗 -->
-                <LinearLayout
-                    android:id="@+id/tabBar"
+                <!-- 1.3.3 反馈：界面调大后 4 个页签 + 源入口会挤成一团。
+                     包一层 HorizontalScrollView，页签改按内容宽从左往右排，放不下左右滑 -->
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/tabBar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingHorizontal="8dp">
 
-                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
-                        android:layout_weight="1" android:gravity="center">
+                    <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent"
+                        android:gravity="center">
                         <TextView android:id="@+id/tab0" android:layout_width="wrap_content"
                             android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
                             android:text="推荐" android:textSize="13sp" android:textStyle="bold"
                             android:textColor="@color/sel_bangumi_tab_text"
                             android:background="@drawable/sel_filter_chip" />
                     </LinearLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
-                        android:layout_weight="1" android:gravity="center">
+                    <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent"
+                        android:gravity="center">
                         <TextView android:id="@+id/tab1" android:layout_width="wrap_content"
                             android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
                             android:text="追番" android:textSize="13sp"
                             android:textColor="@color/sel_bangumi_tab_text"
                             android:background="@drawable/sel_filter_chip" />
                     </LinearLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
-                        android:layout_weight="1" android:gravity="center">
+                    <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent"
+                        android:gravity="center">
                         <TextView android:id="@+id/tab2" android:layout_width="wrap_content"
                             android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
                             android:text="索引" android:textSize="13sp"
                             android:textColor="@color/sel_bangumi_tab_text"
                             android:background="@drawable/sel_filter_chip" />
                     </LinearLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent"
-                        android:layout_weight="1" android:gravity="center">
+                    <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent"
+                        android:gravity="center">
                         <TextView android:id="@+id/tab3" android:layout_width="wrap_content"
                             android:layout_height="30dp" android:gravity="center" android:paddingHorizontal="14dp"
                             android:text="热门" android:textSize="13sp"
@@ -111,6 +119,7 @@
                         android:textColor="@color/sel_bangumi_tab_text"
                         android:textSize="12sp" />
                 </LinearLayout>
+                </HorizontalScrollView>
 
                 <!-- 索引筛选栏（动态条件：排序 + 9 组筛选项，默认折叠为 3 行） -->
                 <LinearLayout
