@@ -302,10 +302,12 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
                     if (sortBarFullHeight <= 0) return;
                 }
                 int offset = Math.max(rv.computeVerticalScrollOffset(), 0);
-                //滞回：滚过一整条才收，回到半条以内才展开，避免在阈值附近来回抖
-                if (!sortBarCollapsed && offset > sortBarFullHeight + dp(8)) {
+                //滞回：滚过一整条才收，回到顶部（8dp 内）才展开。展开阈值从「半条」收紧到
+                //「8dp」是 1.3.3 反馈的关键：收起时有滚动补偿，收完 offset 恰好≈8dp，
+                //若保留「半条」阈值会在阈值附近来回收起/展开，表现为内容反复跳
+                if (!sortBarCollapsed && offset > sortBarFullHeight + dp(16)) {
                     animateSortBar(true);
-                } else if (sortBarCollapsed && offset < sortBarFullHeight / 2) {
+                } else if (sortBarCollapsed && offset < dp(8)) {
                     animateSortBar(false);
                 }
             }
@@ -325,6 +327,7 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         final int to = collapse ? 0 : sortBarFullHeight;
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(from, to);
         animator.setDuration(150);
+        final int[] lastH = {from};
         animator.addUpdateListener(animation -> {
             int h = (int) animation.getAnimatedValue();
             android.view.ViewGroup.LayoutParams lp = header.getLayoutParams();
@@ -333,6 +336,13 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
             //位移跟着高度走：视觉上像被顶栏吸上去，而不是从底部被压扁
             header.setTranslationY(-(sortBarFullHeight - h));
             header.setAlpha(h / (float) sortBarFullHeight);
+            //滚动补偿（1.3.3 反馈确认：滚过一屏收起时「跳一下」）：栏每矮 1px，列表
+            //上缘就上移 1px，条目跟着整体上抬。收起时按帧反向 scrollBy，把条目钉在
+            //原屏幕位置——收起只是把底部视口撑高，不再产生位移。展开在列表顶部发生，
+            //「栏推着内容下去」是各 App 通用行为，不补偿
+            int dh = lastH[0] - h;
+            if (collapse && dh > 0 && recyclerView != null) recyclerView.scrollBy(0, -dh);
+            lastH[0] = h;
         });
         //收起结束后直接 GONE：只把高度缩到 0 + 负位移，会在顶部留一条看不见但仍参与绘制的边缘，
         //滚动时表现为"顶栏下方多出一道缝"，用户看到的 UI 割裂就是它
