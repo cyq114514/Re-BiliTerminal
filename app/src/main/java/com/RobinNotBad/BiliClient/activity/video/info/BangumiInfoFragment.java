@@ -52,6 +52,8 @@ import java.util.Map;
 public class BangumiInfoFragment extends Fragment {
     private long mediaId;
     private int selectedSection = 0, selectedEpisode = 0;
+    //全量选集弹窗内的组内倒序开关（1.3.3 反馈）：只影响弹窗展示，详情页列表不变
+    private boolean episodeReversed = false;
     private Dialog dialog;
     private View rootView;
     private RecyclerView episodeRecyclerView;
@@ -430,16 +432,26 @@ public class BangumiInfoFragment extends Fragment {
      * 扁平列出当前季全部分区的剧集（附加分区如"预告花絮"带前缀），选中后经 selectEpisode 跨分区跳转。
      */
     private Dialog getEpisodeChooseDialog() {
+        //1.3.3 反馈：追番没有分类（看完正片要滑到预告那边），希望分类 + 倒序。
+        //按用户要求详情页 UI 不动，全做在这个既有弹窗里：
+        //多分区时插入「【分区名】」标题行（不可选），组内条目可按「倒序显示」翻转
         ArrayList<String> choices = new ArrayList<>();
         ArrayList<int[]> positions = new ArrayList<>();
         boolean multipleSections = bangumi.sectionList.size() > 1;
         for (int s = 0; s < bangumi.sectionList.size(); s++) {
             Bangumi.Section section = bangumi.sectionList.get(s);
-            if (section == null || section.episodeList == null) continue;
-            for (int e = 0; e < section.episodeList.size(); e++) {
+            if (section == null || section.episodeList == null || section.episodeList.isEmpty()) continue;
+            if (multipleSections) {
+                //分区标题行：positions 里放 null，点击回调据此忽略
+                choices.add("【" + section.title + "】");
+                positions.add(null);
+            }
+            int count = section.episodeList.size();
+            for (int i = 0; i < count; i++) {
+                //倒序时组内从最后一话往前排，最新内容在最上面
+                int e = episodeReversed ? count - 1 - i : i;
                 Bangumi.Episode episode = section.episodeList.get(e);
-                String name = (multipleSections ? "【" + section.title + "】" : "")
-                        + episode.title
+                String name = episode.title
                         + (episode.title_long != null && !episode.title_long.isEmpty() ? " " + episode.title_long : "");
                 choices.add(name);
                 positions.add(new int[]{s, e});
@@ -450,6 +462,7 @@ public class BangumiInfoFragment extends Fragment {
         int currentFlatIndex = -1;
         for (int i = 0; i < positions.size(); i++) {
             int[] p = positions.get(i);
+            if (p == null) continue;
             if (p[0] == selectedSection && p[1] == selectedEpisode) {
                 currentFlatIndex = i;
                 break;
@@ -462,9 +475,19 @@ public class BangumiInfoFragment extends Fragment {
         builder.setSingleChoiceItems(choices.toArray(new String[0]), Math.max(currentFlatIndex, 0), (dialog, which) -> {
             if (which < 0 || which >= positions.size()) return;
             int[] position = positions.get(which);
+            if (position == null) return;   //分区标题行不可选
             selectEpisode(position[0], position[1], true);
             dialog.dismiss();
         });
+        if (choices.size() > 1) {
+            //弹窗内倒序开关：重建并重开弹窗（当前弹窗在回调后自动 dismiss）
+            builder.setNeutralButton(episodeReversed ? "正序显示" : "倒序显示", (dialog, which) -> {
+                episodeReversed = !episodeReversed;
+                this.dialog = getEpisodeChooseDialog();
+                if (this.dialog != null) this.dialog.show();
+            });
+        }
+        builder.setNegativeButton("关闭", null);
         this.dialog = builder.create();
 
         return this.dialog;
