@@ -1,9 +1,14 @@
 pluginManagement {
     repositories {
+        //阿里云镜像只在国内网络有优势：GitHub Actions 的美区 runner 上它经常 502，
+        //Gradle 对 5xx 不做仓库间兜底，整个构建直接解析失败（v1.3.3 的 tag CI 实测翻车）。
+        //Actions 环境自带 GITHUB_ACTIONS=true，用它跳过镜像直连官方源；本地开发仍镜像优先
+        if (!System.getenv("GITHUB_ACTIONS")) {
         //阿里云镜像在前是国内网络的现实选择，但 jcenter 镜像对应的上游仓库已冻结只读，移除
         maven { url "https://maven.aliyun.com/repository/public" }
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        }
         gradlePluginPortal()
         google()
         mavenCentral()
@@ -13,8 +18,10 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        if (!System.getenv("GITHUB_ACTIONS")) {
         maven { url "https://maven.aliyun.com/repository/public" }
         maven { url 'https://maven.aliyun.com/repository/google' }
+        }
         google()
         mavenCentral()
         maven { url "https://www.jitpack.io" }
