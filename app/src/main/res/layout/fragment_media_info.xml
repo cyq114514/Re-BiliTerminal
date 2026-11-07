@@ -278,6 +278,21 @@
                 app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
+                android:id="@+id/episode_sort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.75"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingStart="8dp"
+                android:paddingEnd="4dp"
+                android:text="倒序"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/episode_status"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
                 android:id="@+id/episode_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -294,6 +309,18 @@
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <!-- 分区 tab 行（1.3.3 反馈：正片看完要手动滑到预告）：正片/预告/PV 多于一个非空分区才显示 -->
+        <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+            android:id="@+id/rv_section_tabs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/episode_header"
+            tools:listitem="@layout/cell_season_tab" />
+
         <!-- 季 tab 行：同系列多季才显示，单季 GONE -->
         <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
             android:id="@+id/rv_season_tabs"
@@ -303,7 +330,7 @@
             android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/episode_header"
+            app:layout_constraintTop_toBottomOf="@+id/rv_section_tabs"
             tools:listitem="@layout/cell_season_tab" />
 
         <com.google.android.material.card.MaterialCardView
