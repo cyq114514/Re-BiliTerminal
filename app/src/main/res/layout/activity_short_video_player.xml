@@ -7,8 +7,12 @@
   外壳本身**不加背景**：新版美学的氛围层/自定义底图是挂在 DecorView 最底下的，
   这里铺一层黑色就等于把它整片盖住——右侧三页（详情/评论/相关推荐）看起来就是"没吃到 UI 背景"。
   第 0 页（视频流）自己铺黑底（fragment_short_video_feed.xml），不受影响。
+  keepScreenOn 挂在根上：短视频用 TextureView+setSurface，ijkplayer 的
+  setScreenOnWhilePlaying 只认 SurfaceHolder（对 Surface 是空操作），不挂这个
+  看视频就会按系统超时自动熄屏（1.3.3 反馈：短视频会熄屏）。
 -->
 <androidx.viewpager.widget.ViewPager xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pager"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent"
+    android:keepScreenOn="true" />
