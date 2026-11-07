@@ -200,6 +200,10 @@ public class VideoInfoFragment extends BaseFragment {
 
             initView(rootview);
         }).onFailure((error) -> {
+            //VideoInfoActivity 宿主自己 observe 了失败分支（错误图+自动关闭），这里不重复提示；
+            //短视频外壳里内嵌的本页没有宿主兜底，静默空白只会让人以为死机
+            if (getActivity() instanceof VideoInfoActivity) return;
+            MsgUtil.err(error);
         }));
     }
 
