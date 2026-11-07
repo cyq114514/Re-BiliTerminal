@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 搜索输入框底：与卡片同一套 token（10dp 圆角 / 0.5dp 描边 / 卡片底），不再用 2dp 灰描边 -->
+<!-- 搜索输入框底：10dp 圆角 / 0.5dp 描边沿用卡片 token；底色比卡片压暗一档
+     （1.3.3 反馈：搜索框压暗一些，突出文字），四个搜索类输入框统一生效 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/card_bg_new" />
+    <solid android:color="#99121212" />
     <stroke
         android:width="@dimen/card_stroke_new"
         android:color="@color/card_border_new" />
