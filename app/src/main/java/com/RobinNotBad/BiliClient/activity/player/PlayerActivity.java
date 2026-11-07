@@ -3858,6 +3858,34 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         mediaSessionHelper.setPlaybackState(isPlaying, video_now, hasNext, hasPrevious);
     }
 
+    /**
+     * 把底部按钮行收缩进可用宽度（只在放不下时生效，见 initUI 调用处注释）。
+     * 该行 XML 是固定 38dp×N 的 RelativeLayout 链，这里只改每个子项的
+     * 宽高与间距参数，锚定关系不动；下限 24dp 防止极端配置下缩没。
+     */
+    private void fitBottomButtons() {
+        if (bottom_buttons == null || screen_width <= 0) return;
+        float density = getResources().getDisplayMetrics().density;
+        //满编 5 键：菜单/音量-/播放/音量+/选P（选P 仅多P 稿件可见，按最坏情况算，宽屏不受影响）
+        int count = 5, btnDp = 38, gapDp = 6;
+        int needPx = (int) ((count * btnDp + (count - 1) * gapDp) * density + 0.5f);
+        int availPx = screen_width - bottom_buttons.getPaddingLeft() - bottom_buttons.getPaddingRight();
+        if (availPx <= 0 || needPx <= availPx) return;
+        float scale = (float) availPx / needPx;
+        int minW = (int) (24 * density), minH = (int) (26 * density);
+        for (int i = 0; i < bottom_buttons.getChildCount(); i++) {
+            View child = bottom_buttons.getChildAt(i);
+            ViewGroup.LayoutParams lp = child.getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            mlp.width = Math.max((int) (mlp.width * scale), minW);
+            mlp.height = Math.max((int) (mlp.height * scale), minH);
+            mlp.leftMargin = (int) (mlp.leftMargin * scale);
+            mlp.rightMargin = (int) (mlp.rightMargin * scale);
+            child.setLayoutParams(mlp);
+        }
+    }
+
     private void initUI() {
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
@@ -3964,6 +3992,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             text_title.setGravity(Gravity.CENTER);
             //顶栏的时钟已随 TextClock 一并删除（定位见上一段），圆屏这里不再需要给它补间距
         }
+
+        //底部按钮行窄屏收缩（1.3.3 反馈截图：小屏/「界面大小」放大后一排图标被屏幕左右
+        //边缘裁掉）。该行是居中 wrap_content，放不下时两侧对称外溢、被物理边缘裁切；
+        //按满编 5 键（菜单/音量-/播放/音量+/选P）算所需宽度，放不下就整行等比收缩，
+        //宽度足够的屏幕保持原尺寸。必须放在圆屏 padding 之后：padding 会吃掉可用宽度
+        fitBottomButtons();
 
         if ((!SharedPreferencesUtil.getBoolean("player_show_online", false)) || aid == 0 || cid == 0)
             text_online.setVisibility(View.GONE);
@@ -4123,8 +4157,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     try {
                         MsgUtil.showMsg("正在发送~");
 
-                        int result = DanmakuApi.sendVideoDanmakuByAid(cid, editText.getText().toString(), aid,
-                                video_now, ToolsUtil.getRgb888(Color.WHITE), 1);
+                        //直播模式走 live msg/send（aid 存的是 roomid，见 LiveInfoActivity），
+                        //无 progress/color 语义；普通视频仍走 dm/post
+                        int result = isLiveMode
+                                ? DanmakuApi.sendLiveDanmaku(aid, editText.getText().toString())
+                                : DanmakuApi.sendVideoDanmakuByAid(cid, editText.getText().toString(), aid,
+                                        video_now, ToolsUtil.getRgb888(Color.WHITE), 1);
 
                         if (result == 0) {
                             MsgUtil.showMsg("发送成功喵~");

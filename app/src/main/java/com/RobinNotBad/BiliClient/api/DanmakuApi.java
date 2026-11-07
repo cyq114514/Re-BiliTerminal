@@ -45,6 +45,27 @@ public class DanmakuApi {
         return result.getInt("code"); // https://socialsisteryi.github.io/bilibili-API-collect/docs/danmaku/action.html#%E5%8F%91%E9%80%81%E8%A7%86%E9%A2%91%E5%BC%B9%E5%B9%95
     }
 
+    /**
+     * 发送直播弹幕（1.3.3 用户许愿：直播发弹幕）。
+     * POST https://api.live.bilibili.com/msg/send，需登录 cookie + csrf；
+     * 表单字段对照 PiliPlus {@code LiveHttp.sendLiveMsg}（bubble/color/mode/room_type/
+     * jumpfrom/statistics 等固定值，rnd 为秒级时间戳，roomid=直播间 id）。
+     */
+    public static int sendLiveDanmaku(long roomId, String msg) throws IOException, JSONException {
+        String url = "https://api.live.bilibili.com/msg/send";
+        String arg = "bubble=0&mode=1&msg=" + NetWorkUtil.urlEncode(msg)
+                + "&color=16777215&fontsize=25&mode=1&room_type=0&jumpfrom=0"
+                + "&statistics=" + NetWorkUtil.urlEncode("{\"appId\":100,\"platform\":5}")
+                + "&rnd=" + (System.currentTimeMillis() / 1000)
+                + "&roomid=" + roomId
+                + "&csrf=" + NetWorkUtil.getLoginCsrf()
+                + "&csrf_token=" + NetWorkUtil.getLoginCsrf();
+        JSONObject result = new JSONObject(
+                Objects.requireNonNull(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()).string());
+        Logu.i(result.toString());
+        return result.getInt("code");
+    }
+
     // 点赞弹幕
     public static int likeDanmaku(long dmid, long cid, int op) throws IOException, JSONException {
         String url = "https://api.bilibili.com/x/v2/dm/thumbup/add";
