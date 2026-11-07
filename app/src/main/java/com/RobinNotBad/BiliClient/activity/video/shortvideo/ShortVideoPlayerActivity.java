@@ -132,26 +132,21 @@ public class ShortVideoPlayerActivity extends InstanceActivity {
     }
 
     /**
-     * 返回上一级 = 菜单页。
+     * 返回上一级 = 菜单页（盖在本页上面）。
      *
-     * <p>不能只 {@code finish()}：菜单入口是「跳转式」的——{@code MenuActivity.killAndJump()}
-     * 在 startActivity 之后会把自己 finish 掉，栈里只剩当前这一页，
-     * 直接 finish 就等于把任务清空、回到桌面（用户看到的就是"点了返回直接退出应用"）。
-     * 这里照菜单键的做法重新拉起菜单，再关掉自己。
+     * <p>不能 {@code finish()}：旧实现"拉起菜单 + finish 自己"，而关菜单的三条路径
+     * 全是裸 finish()——菜单一关任务栈就空了，直接回桌面。用户反馈的就是这个：
+     * 「拉出菜单后再关掉菜单会退到桌面」。现在改成和其他页面同款语义：菜单盖在本页
+     * 上面，关掉菜单就回到短视频；带上 from，菜单里点「短视频」会命中
+     * {@code MenuActivity} 的回旧页分支（只关菜单、不重建实例）。
      */
     private void exitToMenu() {
         try {
-            //本页马上 finish，菜单里没有"旧的短视频页"可回；不能再继承本页的 from，
-            //否则菜单点「短视频」会命中 killAndJump 的回旧页分支，只关菜单 → 任务栈清空
-            openMenuWithoutFrom();
+            menuClick.run();
         } catch (Throwable e) {
-            //拉菜单失败时绝不能 finish：本页是任务栈里唯一一页（菜单已被 killAndJump finish），
-            //finish 出去就是回桌面，用户看到的就是"返回键直接退出应用"
             android.util.Log.w("short-video", "回菜单失败：" + e);
             MsgUtil.showMsg("回菜单失败，请再按一次返回");
-            return;
         }
-        finish();
     }
 
     @Override

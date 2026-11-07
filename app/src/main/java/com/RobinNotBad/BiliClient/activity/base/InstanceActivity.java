@@ -41,10 +41,9 @@ public class InstanceActivity extends BaseActivity {
     /**
      * 打开菜单，但<b>不</b>把本页的 from 带过去。
      *
-     * <p>给"打开菜单后会把自身 finish 掉"的页面用（当前是短视频页）：这类页面已经不在返回栈里，
-     * 菜单若还带着 from，点同一个入口会命中 {@code MenuActivity.killAndJump} 的
-     * "回到旧页"分支——只关菜单、不启动页面，任务栈被清空，用户看到的就是
-     * "点短视频按钮应用直接退出"。
+     * <p>给"不希望菜单回跳到本页"的调用方备用：菜单若带着 from，点同一个入口会命中
+     * {@code MenuActivity} 的"回到旧页"分支（只关菜单、不重建）。当前没有调用方——
+     * 短视频页 1.3.3 起改回带 from 的 {@link #menuClick}（留在栈里，关菜单即回本页）。
      */
     public void openMenuWithoutFrom() {
         Intent intent = new Intent(this, MenuActivity.class);
