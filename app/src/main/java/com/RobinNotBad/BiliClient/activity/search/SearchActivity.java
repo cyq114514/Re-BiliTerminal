@@ -65,6 +65,8 @@ public class SearchActivity extends InstanceActivity {
     EditText keywordInput;
     private ConstraintLayout searchBar;
     private boolean searchBarVisible = true;
+    /** 类别页签的占位监听只注册一次（buildSearchTabs 每次搜索都会重建内层胶囊） */
+    private boolean tabsPaddingBound = false;
     private boolean refreshing = false;
     private long animate_last;
     Handler handler;
@@ -615,8 +617,18 @@ public class SearchActivity extends InstanceActivity {
         if (container == null) return;
         searchTabsScroll = findViewById(R.id.search_tabs_scroll);
         container.removeAllViews();
-        //给内容区腾出页签高度：页签悬浮在 ViewPager 上，不垫的话第一行结果卡被压住
-        viewPager.setPadding(0, ToolsUtil.dp2px(36f), 0, 0);
+        //给内容区腾出页签高度：页签悬浮在 ViewPager 上，不垫的话第一行结果卡被压住。
+        //高度不能写死 36dp：字体放大后 13sp 文字撑高胶囊，固定值会把第一行结果压掉一截
+        //（用户反馈 2026-11-08「分类有点挡」）。改成按页签实测高度垫，并额外留 6dp 间隙
+        if (!tabsPaddingBound) {
+            tabsPaddingBound = true;
+            searchTabsScroll.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                                        oldLeft, oldTop, oldRight, oldBottom) -> {
+                int tabHeight = bottom - top;
+                if (tabHeight > 0)
+                    viewPager.setPadding(0, tabHeight + ToolsUtil.dp2px(6f), 0, 0);
+            });
+        }
         tabChips.clear();
         int padH = ToolsUtil.dp2px(10f);
         for (int i = 0; i < keys.size(); i++) {
@@ -630,8 +642,11 @@ public class SearchActivity extends InstanceActivity {
             chip.setPadding(padH, 0, padH, 0);
             int idx = i;
             chip.setOnClickListener(v -> viewPager.setCurrentItem(idx, true));
+            //高度用 minHeight + wrap_content：固定 30dp 在字体放大时会把 13sp 文字裁掉
+            chip.setMinHeight(ToolsUtil.dp2px(30f));
+            chip.setGravity(android.view.Gravity.CENTER);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, ToolsUtil.dp2px(30f));
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             lp.setMargins(0, 0, ToolsUtil.dp2px(6f), 0);
             chip.setLayoutParams(lp);
             container.addView(chip);

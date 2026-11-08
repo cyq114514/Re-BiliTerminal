@@ -1013,6 +1013,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                             float normalSpeed = speed_values[seekbar_speed.getProgress()];
                             applySpeed(normalSpeed, "长按加速结束");
                             text_speed.setText(speed_strs[seekbar_speed.getProgress()]);
+                            //松手也要给反馈：3x 期间控制栏是隐藏的，用户看不到倍速文字变化（1.3.4 反馈）
+                            flashCenterText("已恢复 " + speed_strs[seekbar_speed.getProgress()], 1200);
                         }
                         if (gesture_moved)
                             gesture_moved = false;
@@ -1070,6 +1072,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     hidecon.run();
                     applySpeed(3.0f, "长按加速开始");
                     text_speed.setText("x 3.0");
+                    //控制栏已被 hidecon 收起，倍速文字跟着一起看不见，必须在屏幕中间补一条提示
+                    //（用户反馈 2026-11-08：长按倍速时没有任何反馈，不知道生没生效）
+                    flashCenterText("3x 加速中，松手恢复", 1200);
                     onLongClick = true;
                     Logu.v("gesture", "longclick_down");
                     return true;
@@ -3188,11 +3193,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     /** 屏幕中间闪一条提示（复用音量提示那个 TextView，3 秒后自动消失） */
     private void flashCenterText(String text) {
+        flashCenterText(text, 3000);
+    }
+
+    /** 同上，可指定停留时长：长按加速这类"按住期间一直有用"的提示不需要挂 3 秒（用户反馈 2026-11-08） */
+    private void flashCenterText(String text, long durationMs) {
         if (text_volume == null) return;
         text_volume.setVisibility(View.VISIBLE);
         text_volume.setText(text);
         text_volume.removeCallbacks(hideVolume);
-        text_volume.postDelayed(hideVolume, 3000);
+        text_volume.postDelayed(hideVolume, durationMs);
     }
 
     // ---------------------------------------------------------------- 无极调音（软件增益）
@@ -3956,30 +3966,96 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     /**
      * 把底部按钮行收缩进可用宽度（只在放不下时生效，见 initUI 调用处注释）。
-     * 该行 XML 是固定 38dp×N 的 RelativeLayout 链，这里只改每个子项的
-     * 宽高与间距参数，锚定关系不动；下限 24dp 防止极端配置下缩没。
+     *
+     * <p><b>1.3.4 的实现在这里翻过车</b>：{@code bottom_buttons} 是 RelativeLayout，直接子视图
+     * 只有一个宽度为 {@code wrap_content}(-2) 的居中 LinearLayout，真正的 5 个按钮在下一层。
+     * 原代码遍历的是这一层，于是把 -2 乘上 scale 再取 max：
+     * {@code (int)(-2 * scale)} 恒为 -1（MATCH_PARENT），最后被 max 抬到 {@code 24dp}——
+     * 整排按钮的容器被压成 24dp 宽，5 个 38dp 的按钮全挤在里面被裁，
+     * 界面上就是「底部按钮只剩中间一点残片、两头的都不见了」。
+     * 而且只要触发一次就永久生效，不会随字体/密度回退恢复。
+     *
+     * <p>现在的口径：遍历真正的按钮层、按实测参数累加所需宽度（不再写死 38dp/6dp，
+     * XML 改了这里自动跟），下限按「可用宽度均分」兜底而不是裸 dp，
+     * 保证任何倍率下这一行都恰好塞得进屏幕，宽屏保持原尺寸不动。
      */
     private void fitBottomButtons() {
         if (bottom_buttons == null || screen_width <= 0) return;
-        float density = getResources().getDisplayMetrics().density;
-        //满编 5 键：菜单/音量-/播放/音量+/选P（选P 仅多P 稿件可见，按最坏情况算，宽屏不受影响）
-        int count = 5, btnDp = 38, gapDp = 6;
-        int needPx = (int) ((count * btnDp + (count - 1) * gapDp) * density + 0.5f);
+        if (bottom_buttons.getChildCount() == 0) return;
+        //按钮行是 bottom_buttons 里那个居中的 LinearLayout（真按钮在它下面一层）
+        View rowView = bottom_buttons.getChildAt(0);
+        if (!(rowView instanceof ViewGroup)) return;
+        ViewGroup row = (ViewGroup) rowView;
+
         int availPx = screen_width - bottom_buttons.getPaddingLeft() - bottom_buttons.getPaddingRight();
-        if (availPx <= 0 || needPx <= availPx) return;
-        float scale = (float) availPx / needPx;
-        int minW = (int) (24 * density), minH = (int) (26 * density);
-        for (int i = 0; i < bottom_buttons.getChildCount(); i++) {
-            View child = bottom_buttons.getChildAt(i);
-            ViewGroup.LayoutParams lp = child.getLayoutParams();
+        if (availPx <= 0) return;
+
+        int needPx = 0, count = 0;
+        for (int i = 0; i < row.getChildCount(); i++) {
+            ViewGroup.LayoutParams lp = row.getChildAt(i).getLayoutParams();
             if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            //wrap_content/match_parent 的按钮算不出确定宽度，跳过（不参与收缩，避免乘出负数）
+            if (mlp.width <= 0) continue;
+            needPx += mlp.width + mlp.leftMargin + mlp.rightMargin;
+            count++;
+        }
+        if (count == 0 || needPx <= availPx) return;   //放得下：保持原尺寸
+
+        float scale = (float) availPx / needPx;
+        float density = getResources().getDisplayMetrics().density;
+        //下限取「24dp」与「均分可用宽度」中更小的那个：放大到 24dp 本身就超宽时，
+        //宁可按钮变小也要让 5 个都露出来（用户诉求是"能看见能点"）
+        int minW = Math.min((int) (24 * density + 0.5f), availPx / count);
+        int minH = Math.max(1, (int) (minW * 42f / 38f));
+
+        for (int i = 0; i < row.getChildCount(); i++) {
+            ViewGroup.LayoutParams lp = row.getChildAt(i).getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            if (mlp.width <= 0) continue;
             mlp.width = Math.max((int) (mlp.width * scale), minW);
             mlp.height = Math.max((int) (mlp.height * scale), minH);
             mlp.leftMargin = (int) (mlp.leftMargin * scale);
             mlp.rightMargin = (int) (mlp.rightMargin * scale);
-            child.setLayoutParams(mlp);
+            row.getChildAt(i).setLayoutParams(mlp);
         }
+        Logu.d("player_ui", "底部按钮行收缩：所需 " + needPx + "px / 可用 " + availPx
+                + "px，缩放 " + String.format("%.2f", scale) + "，按钮宽 " + minW + "px");
+    }
+
+    /**
+     * 右侧按钮列的高度兜底（弹幕/旋转/菜单 + 「更多」展开行）。
+     *
+     * <p>XML 里它用 {@code below=top + above=bottom_control} 被上下两条横条夹取，
+     * 高度就是两者之间的剩余空间。「界面大小」放大后顶栏与底部控制区都按 density 成倍长高，
+     * 中间剩下的高度可能小于整列内容所需（34dp 展开行 + 3×28dp 按钮），
+     * 超出部分被父容器裁掉——表现为右侧按钮只露一部分、底下几个点不到（1.3.4 反馈）。
+     *
+     * <p>这里在真正布局完之后量一次：装不下就改成 wrap_content + 垂直居中，
+     * 让整列按自身高度落在两条横条中间，而不是被夹成一条缝。圆屏分支此前已经这么处理，
+     * 这里只补非圆屏（方屏/手机放大场景）。
+     */
+    private void fitRightControl() {
+        if (right_control == null || screen_round) return;
+        right_control.post(() -> {
+            if (right_control == null || isFinishing() || isDestroyed()) return;
+            int avail = right_control.getHeight();
+            if (avail <= 0) return;
+            right_control.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int needed = right_control.getMeasuredHeight();
+            if (needed <= avail) return;
+            ViewGroup.LayoutParams lp = right_control.getLayoutParams();
+            if (!(lp instanceof RelativeLayout.LayoutParams)) return;
+            RelativeLayout.LayoutParams rlp = (RelativeLayout.LayoutParams) lp;
+            rlp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            rlp.addRule(RelativeLayout.CENTER_VERTICAL);
+            rlp.removeRule(RelativeLayout.BELOW);
+            rlp.removeRule(RelativeLayout.ABOVE);
+            right_control.setLayoutParams(rlp);
+            Logu.d("player_ui", "右侧按钮列高度不足（需 " + needed + "px / 可用 " + avail + "px），改为自适应居中");
+        });
     }
 
     private void initUI() {
@@ -4136,6 +4212,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //按满编 5 键（菜单/音量-/播放/音量+/选P）算所需宽度，放不下就整行等比收缩，
         //宽度足够的屏幕保持原尺寸。必须放在圆屏 padding 之后：padding 会吃掉可用宽度
         fitBottomButtons();
+        fitRightControl();
 
         if ((!SharedPreferencesUtil.getBoolean("player_show_online", false)) || aid == 0 || cid == 0)
             text_online.setVisibility(View.GONE);
@@ -4459,7 +4536,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 && layout_video != null) {
             float axis = event.getAxisValue(MotionEvent.AXIS_SCROLL);
             if (axis != 0f) {
-                float next = layout_video.getScaleX() * (axis > 0 ? 1.08f : 1f / 1.08f);
+                //灵敏度可调（用户反馈 2026-11-08）：每格缩放倍数读实验室设置，0 表示没设过 → 沿用原来的 1.08
+                float step = SharedPreferencesUtil.getFloat("ui_rotatory_video_zoom_step", 0f);
+                if (step <= 0f) step = 1.08f;
+                step = Math.max(1.01f, Math.min(3f, step));
+                float next = layout_video.getScaleX() * (axis > 0 ? step : 1f / step);
                 next = Math.max(1f, Math.min(5f, next));
                 layout_video.setScaleX(next);
                 layout_video.setScaleY(next);

@@ -28,6 +28,24 @@
     <p class="lead">只写用户能感知的变化。完整的技术细节在仓库的 <code>docs/更新日志.md</code>。</p>
 
     <div class="log-item">
+      <h3>1.3.5</h3>
+      <div class="date">2026-11-08 · versionCode 20261115</div>
+      <ul>
+        <li><strong>修复分组视图的互关徽章</strong>：关注列表切成「分组」后，互关用户头像旁的徽章消失了——分组数据里没有关系字段，现已单独补齐。</li>
+        <li><strong>修复老设备闪退</strong>：Android 4.4 设备上打开「主题配色」会直接退出。</li>
+        <li><strong>修复动态红点</strong>：1.3.4 说修好了，实际刷新后 UP 主头像上的小红点仍在；这次真正清掉。</li>
+        <li><strong>修复放大后播放器底部按钮消失</strong>：「界面大小」调大后，底部那一排按钮会整排不见——收缩逻辑取错了控件层级，把整行压成了 24dp。</li>
+        <li><strong>修复放大后安装按钮点不到</strong>：「检查更新」页正文可滚动，安装按钮固定在屏幕底部。</li>
+        <li><strong>收藏夹更省地方</strong>：「听全部」「下载全部」两张卡片在小屏/手表上只保留一行标题。</li>
+        <li><strong>收藏夹头部跟手</strong>：卡片和排序栏随列表同步滑动，不再「滚过一整屏突然收起」。</li>
+        <li><strong>修复分类标签遮挡</strong>：搜索结果的分类标签在字体放大后不再压住第一条结果。</li>
+        <li><strong>修复回首页图标位置</strong>：视频详情页顶栏的房子图标与标题文字对齐。</li>
+        <li><strong>表冠缩放灵敏度可调</strong>：设置 → 实验室新增两个输入项，默认手感和以前一样。</li>
+        <li><strong>长按加速有提示</strong>：长按画面加速时，屏幕中间提示「3x 加速中，松手恢复」。</li>
+      </ul>
+    </div>
+
+    <div class="log-item">
       <h3>1.3.4</h3>
       <div class="date">2026-11-08 · versionCode 20261110</div>
       <ul>

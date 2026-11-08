@@ -102,7 +102,7 @@ public class ThemeColorActivity extends BaseActivity {
      * 选中态用一圈描边表示——与新版"半透明卡片 + 细描边"的语言一致，不引入新样式。
      */
     private void buildPresets() {
-        if (presetContainer == null) return;
+        if (presetContainer == null || isFinishing() || isDestroyed()) return;
         presetContainer.removeAllViews();
         //色块尺寸按容器实测宽推导（适配审计 20261107 P2-22）：固定 40dp 在窄表/应用内
         //density 放大后会超出均分格宽互相叠压、两边缘列被表圈裁。首帧还没有宽度，post 一次再建
@@ -113,6 +113,11 @@ public class ThemeColorActivity extends BaseActivity {
         }
         final int circleSize = Math.min(dp(40), Math.max(dp(20), containerWidth / 5 - dp(8)));
         final int cellHeight = dp(52);
+        //5 列均分容器宽度。这里不能用 GridLayout.spec(int, float) 做权重：
+        //那个带 weight 的重载是 API 21 才加的，minSdk 19 的机器（Android 4.4）上直接
+        //NoSuchMethodError 闪退（用户反馈 2026-11-08 崩溃堆栈：ThemeColorActivity.buildPresets）。
+        //改成固定像素宽 + spec(int)，全 API 可用
+        final int cellWidth = Math.max(dp(20), containerWidth / 5);
 
         for (int i = 0; i < PRESET_COLORS.length; i++) {
             final int color = PRESET_COLORS[i];
@@ -120,8 +125,8 @@ public class ThemeColorActivity extends BaseActivity {
 
             FrameLayout cell = new FrameLayout(this);
             GridLayout.LayoutParams cellParams = new GridLayout.LayoutParams(
-                    GridLayout.spec(i / 5), GridLayout.spec(i % 5, 1f));
-            cellParams.width = 0;
+                    GridLayout.spec(i / 5), GridLayout.spec(i % 5));
+            cellParams.width = cellWidth;
             cellParams.height = cellHeight;
             cell.setLayoutParams(cellParams);
 
@@ -138,6 +143,12 @@ public class ThemeColorActivity extends BaseActivity {
             cell.addView(dot);
             presetContainer.addView(cell);
         }
+
+        //色块的圆底只在 refreshSwatchSelection() 里落色。首帧容器还没测到宽度时会走上面
+        //的 post 延迟重建，而 onCreate 里那次 refreshPreview() 扫的是空容器——延迟建出来的
+        //10 个圆全是透明 View，表现为「进页面预设配色一片空白，随手点一下才全部出现」。
+        //建完必须自己补一次上色，不能指望后面的刷新链路
+        refreshSwatchSelection();
     }
 
     /** 刷新色块选中环：当前种子色对应的那一枚加描边 */

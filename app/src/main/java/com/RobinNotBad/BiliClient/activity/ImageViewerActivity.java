@@ -51,7 +51,12 @@ public class ImageViewerActivity extends BaseActivity {
             if (pv != null) {
                 float axis = event.getAxisValue(android.view.MotionEvent.AXIS_SCROLL);
                 if (axis != 0f) {
-                    float next = pv.getScale() * (axis > 0 ? 1.15f : 1f / 1.15f);
+                    //灵敏度可调（用户反馈 2026-11-08）：0 表示没设过 → 沿用原来的 1.15
+                    float step = com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+                            .getFloat("ui_rotatory_image_zoom_step", 0f);
+                    if (step <= 0f) step = 1.15f;
+                    step = Math.max(1.01f, Math.min(3f, step));
+                    float next = pv.getScale() * (axis > 0 ? step : 1f / step);
                     next = Math.max(1f, Math.min(6.25f, next));
                     pv.setScale(next);
                     return true;

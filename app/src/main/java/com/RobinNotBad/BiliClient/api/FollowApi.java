@@ -4,6 +4,7 @@ import com.RobinNotBad.BiliClient.model.ApiResponse;
 import com.RobinNotBad.BiliClient.model.FollowTag;
 import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.google.gson.annotations.SerializedName;
 
@@ -91,9 +92,43 @@ public class FollowApi {
         for (FollowItem item : resp.data) {
             if (item == null) continue;
             UserInfo user = new UserInfo(item.mid, item.uname, item.face, item.sign, 0, 0, 0, true, "", 0, "", 0);
+            //分组接口（x/relation/tag）与关注/粉丝列表不同，响应里不带 attribute，
+            //这里恒为 0，互关徽章会全灭。真正的互关状态由 fillMutualFollow 批量补（见下）
             user.mutualFollow = item.attribute == 6;
             userList.add(user);
         }
         return 0;
+    }
+
+    /**
+     * 批量补齐互关状态（分组模式专用）。
+     *
+     * <p>{@code x/relation/tag} 返回的条目没有 {@code attribute} 字段，按它判断互关永远是 false，
+     * 于是「我的关注 → 分组」下互关徽章全部消失。这里改用 {@code x/relation/relations}
+     * 一次查一批（fids 逗号分隔，响应是 key=mid 的 map，attribute==6 即互关）。
+     *
+     * <p>失败/未登录时静默保持原值（与改之前表现一致），不阻断分组加载。
+     */
+    public static void fillMutualFollow(List<UserInfo> users) {
+        if (users == null || users.isEmpty()) return;
+        StringBuilder fids = new StringBuilder();
+        for (UserInfo user : users) {
+            if (user == null || user.mid <= 0) continue;
+            if (fids.length() > 0) fids.append(',');
+            fids.append(user.mid);
+        }
+        if (fids.length() == 0) return;
+        try {
+            String json = NetWorkUtil.getJson("https://api.bilibili.com/x/relation/relations?fids=" + fids).toString();
+            org.json.JSONObject data = new org.json.JSONObject(json).optJSONObject("data");
+            if (data == null) return;
+            for (UserInfo user : users) {
+                if (user == null) continue;
+                org.json.JSONObject rel = data.optJSONObject(String.valueOf(user.mid));
+                if (rel != null) user.mutualFollow = rel.optInt("attribute", 0) == 6;
+            }
+        } catch (Throwable e) {
+            Logu.w("follow", "批量查询互关失败：" + e.getMessage());
+        }
     }
 }

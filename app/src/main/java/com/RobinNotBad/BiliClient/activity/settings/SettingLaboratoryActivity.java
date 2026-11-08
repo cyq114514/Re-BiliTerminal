@@ -59,6 +59,12 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
                 "在看图页旋转表冠放大/缩小当前图片（1x~6.25x，与双指缩放同一个范围）", "false"));
         sectionList.add(new SettingSection("switch", "表冠缩放视频", "ui_rotatory_video_zoom",
                 "在播放页旋转表冠放大/缩小画面（1x~5x，双击可复位）", "false"));
+        //缩放灵敏度（用户反馈 2026-11-08）：步进原来是写死的 1.15/1.08，转一格跳太多，
+        //这里放开成可调。0 = 没设过，代码里回落到原默认值，老用户手感不变
+        sectionList.add(new SettingSection("input_float", "表冠缩放灵敏度（图片）", "ui_rotatory_image_zoom_step",
+                "每一格表冠放大/缩小的倍数。默认 1.15；越接近 1 越细腻，越大越快。填 0 表示用默认值", "0"));
+        sectionList.add(new SettingSection("input_float", "表冠缩放灵敏度（视频）", "ui_rotatory_video_zoom_step",
+                "每一格表冠放大/缩小的倍数。默认 1.08；越接近 1 越细腻，越大越快。填 0 表示用默认值", "0"));
 
         sectionList.add(new SettingSection("title", "播放器", "", "", ""));
         sectionList.add(new SettingSection("switch", "播放器旋屏兼容方案", "dev_player_rotate_software",

@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--检查更新页面：顶栏 + 状态行 + 更新日志 + 下载进度/安装按钮-->
 <!--补齐标准顶栏：普通二级页此前无标题栏，只能靠系统返回键退出（F-02）-->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  布局约束（1.3.4 反馈）：应用内「界面大小」放大后，状态文字（版本号 + 安装包路径）
+  会换行到十几行，把下面的「下载/安装」按钮整排顶出屏幕，点不到。
+  原结构是外层固定 LinearLayout + 中间 ScrollView weight=1：weight 只能把滚动区压到 0，
+  压不动固定高度的按钮行，超出的部分直接被父容器裁掉。
+  改为：状态文字与更新日志一起放进上方滚动区，底部栏（进度/按钮/更新源）alignParentBottom。
+  这样无论文字多长、放大多少倍，安装入口始终贴在屏幕底部可点，滚动区不够就内部滚动。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
     <RelativeLayout
         android:id="@+id/top"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
 
         <TextView
             android:id="@+id/pageName"
@@ -37,43 +45,25 @@
             android:layout_marginEnd="8dp" />
     </RelativeLayout>
 
+    <!-- 底部栏：进度条 + 进度文字 + 操作按钮 + 更新源。高度固定为内容高度并锚底，
+         屏幕再挤也只会挤压上面的滚动区，不会把按钮挤出屏幕 -->
     <LinearLayout
+        android:id="@+id/update_bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
         android:orientation="vertical"
-        android:padding="16dp">
-
-        <TextView
-            android:id="@+id/update_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="15sp"
-            android:text="正在检查更新……" />
-
-        <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
-            android:id="@+id/update_notes_scroll"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="12dp">
-
-            <TextView
-                android:id="@+id/update_notes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="14sp"
-                android:lineSpacingExtra="3dp"
-                android:textIsSelectable="true" />
-        </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
 
         <ProgressBar
             android:id="@+id/update_progress"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100"
             android:layout_marginTop="8dp"
+            android:max="100"
             android:visibility="gone" />
 
         <TextView
@@ -81,61 +71,96 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
+            android:text=""
             android:textSize="13sp"
-            android:visibility="gone"
-            android:text="" />
+            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btn_download"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:visibility="gone"
-                android:text="下载更新包" />
+                android:text="下载更新包"
+                android:visibility="gone" />
 
             <Button
                 android:id="@+id/btn_cancel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:visibility="gone"
-                android:text="取消下载" />
+                android:text="取消下载"
+                android:visibility="gone" />
 
             <Button
                 android:id="@+id/btn_install"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:visibility="gone"
-                android:text="安装" />
+                android:text="安装"
+                android:visibility="gone" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/update_release_link"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="40dp"
             android:gravity="center"
+            android:minHeight="40dp"
             android:padding="6dp"
-            android:textSize="12sp"
-            android:visibility="gone"
             android:text="在浏览器查看完整发布页 >"
-            android:textColor="@color/bili_pink" />
+            android:textColor="@color/bili_pink"
+            android:textSize="12sp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/update_mirror"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="40dp"
             android:gravity="center"
+            android:minHeight="40dp"
             android:padding="6dp"
-            android:textSize="12sp"
-            android:text="更新源：直连（点击切换镜像）" />
+            android:text="更新源：直连（点击切换镜像）"
+            android:textSize="12sp" />
     </LinearLayout>
-</LinearLayout>
+
+    <!-- 滚动区：状态文字与更新日志一起滚动（status 变长时不再把按钮顶走） -->
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:id="@+id/update_notes_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/update_bottom_bar"
+        android:layout_below="@id/top">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:id="@+id/update_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="正在检查更新……"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/update_notes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:lineSpacingExtra="3dp"
+                android:textIsSelectable="true"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+
+</RelativeLayout>

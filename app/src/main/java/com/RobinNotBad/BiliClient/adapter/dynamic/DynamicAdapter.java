@@ -102,6 +102,10 @@ public class DynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 recentUpListHolder.recentUpRecyclerView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false));
                 recentUpListHolder.recentUpAdapter = new RecentUpAdapter(context, recentUpList);
                 recentUpListHolder.recentUpRecyclerView.setAdapter(recentUpListHolder.recentUpAdapter);
+            } else if (recentUpListHolder.recentUpAdapter.getUpList() != recentUpList) {
+                //动态页手动刷新会整体换掉 recentUpList（清 has_update 后赋新对象），
+                //内层 Adapter 还指着旧 List，只重绑刷不掉小红点，这里必须换源
+                recentUpListHolder.recentUpAdapter.setUpList(recentUpList);
             }
         } else if (holder instanceof DynamicHolder) {
             int realPosition = position - dynamicActivity.headerCount();

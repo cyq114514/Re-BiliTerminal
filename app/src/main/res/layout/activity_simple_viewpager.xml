@@ -26,18 +26,22 @@
             app:drawableStartCompat="@drawable/arrow_back" />
 
         <!-- 一键回首页（1.3.2 反馈）：默认 gone——本布局被 5 个页面共用，
-             只有视频详情页把它打开，其余页面顶栏保持原样 -->
+             只有视频详情页把它打开，其余页面顶栏保持原样。
+             垂直位置跟着标题走（1.3.4 反馈：之前用 centerVertical 居中于父容器，
+             父高被右侧时钟撑得比标题行高，图标就比标题低约 3dp）：
+             alignTop+alignBottom 到 pageName，图标中心恒等于标题文字中心 -->
         <ImageView
             android:id="@+id/home_btn"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:layout_marginVertical="3dp"
             android:layout_marginEnd="2dp"
             android:layout_toStartOf="@id/timeText"
-            android:layout_centerVertical="true"
+            android:layout_alignTop="@id/pageName"
+            android:layout_alignBottom="@id/pageName"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="回首页"
             android:padding="4dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/icon_home"
             android:visibility="gone" />
 

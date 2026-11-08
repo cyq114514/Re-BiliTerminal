@@ -20,11 +20,28 @@ import java.util.List;
 public class RecentUpAdapter extends RecyclerView.Adapter<RecentUpAdapter.ViewHolder> {
 
     private final Context context;
-    private final List<DynamicApi.UpInfo> upList;
+    private List<DynamicApi.UpInfo> upList;
 
     public RecentUpAdapter(Context context, List<DynamicApi.UpInfo> upList) {
         this.context = context;
         this.upList = upList;
+    }
+
+    public List<DynamicApi.UpInfo> getUpList() {
+        return upList;
+    }
+
+    /**
+     * 换数据源并重绑。
+     *
+     * <p>必须支持换源：动态页手动刷新时是 {@code recentUpList = 新 List}（整体换对象），
+     * 而这个 Adapter 构造时把当时的 List 引用存成字段。不换源的话外层
+     * {@code notifyItemChanged(1)} 只是重新绑定、读的还是旧 List，
+     * 旧 List 里的 has_update 仍是 true——就是「点刷新小红点不消失」的原因。
+     */
+    public void setUpList(List<DynamicApi.UpInfo> upList) {
+        this.upList = upList;
+        notifyDataSetChanged();
     }
 
     @NonNull

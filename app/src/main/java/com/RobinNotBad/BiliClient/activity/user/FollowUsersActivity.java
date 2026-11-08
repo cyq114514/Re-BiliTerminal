@@ -139,6 +139,8 @@ public class FollowUsersActivity extends RefreshListActivity {
             try {
                 List<UserInfo> tagUsers = new ArrayList<>();
                 int result = FollowApi.getFollowTagUsers(tagid, 1, tagUsers);
+                //分组接口不带 attribute，互关状态要单独批量补一次，否则分组视图里徽章全灭
+                FollowApi.fillMutualFollow(tagUsers);
                 runOnUiThread(() -> {
                     groupAdapter.updateGroupUsers(tagid, tagUsers);
                 });
@@ -157,6 +159,7 @@ public class FollowUsersActivity extends RefreshListActivity {
                 int page = (currentCount / 20) + 1;
                 List<UserInfo> tagUsers = new ArrayList<>();
                 int result = FollowApi.getFollowTagUsers(tagid, page, tagUsers);
+                FollowApi.fillMutualFollow(tagUsers);
                 runOnUiThread(() -> {
                     groupAdapter.addGroupUsers(tagid, tagUsers);
                 });

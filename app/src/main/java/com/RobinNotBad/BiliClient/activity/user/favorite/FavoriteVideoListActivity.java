@@ -7,6 +7,7 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -57,10 +58,8 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
     private View sortBar;
     /** 头部容器（听全部 + 排序栏）：两者一起收起 */
     private View headerBar;
-    /** 头部展开时的完整高度，-1 表示尚未量到 */
+    /** 头部实测高度，-1 表示尚未量到（跟手位移与列表 paddingTop 都用它） */
     private int sortBarFullHeight = -1;
-    private boolean sortBarCollapsed = false;
-    private android.animation.ValueAnimator sortBarAnimator;
 
     @SuppressLint("MissingInflatedId")
     @Override
@@ -94,16 +93,28 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
     /** 音频播放入口：独立一行放在排序条上方（不改通用布局，仅本页面态可见） */
     private void setupAudioQueueEntry() {
         LinearLayout container = findViewById(R.id.listContainer);
-        if (container == null || sortBar == null) return;
+        android.view.ViewGroup root = findViewById(R.id.refresh_root);
+        if (container == null || root == null || sortBar == null) return;
 
-        //把「听全部」与排序栏装进同一个头部容器：两者一起随列表收起，且「听全部」不再是裸文字
+        //把「听全部」与排序栏装进同一个头部容器：两者一起随列表滚动，且「听全部」不再是裸文字。
+        //
+        //挂载方式（用户反馈 2026-11-08：头部不会跟着列表一起滑，要滚过一整屏才突然收起）：
+        //原来是插进 listContainer 这个竖排 LinearLayout 里，头部只能占位、靠定时动画收起，天生不跟手。
+        //改成浮在列表上方的一层（锚在 listContainer 顶部），列表用 paddingTop 给它让位，
+        //滚动时按滚动偏移整块 translationY 上移——真跟手，且不会出现"条目 2 倍速上移"
+        //（列表自身不再做补偿滚动）。
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
         int index = container.indexOfChild(sortBar);
         container.removeView(sortBar);
         if (index < 0) index = 0;
-        container.addView(header, index, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        android.widget.RelativeLayout.LayoutParams headerLp =
+                new android.widget.RelativeLayout.LayoutParams(
+                        android.widget.RelativeLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT);
+        headerLp.addRule(android.widget.RelativeLayout.ALIGN_TOP, R.id.listContainer);
+        headerLp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_START);
+        root.addView(header, headerLp);
         header.addView(sortBar, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -125,6 +136,20 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         android.widget.ImageView icon = card.findViewById(R.id.audioEntryIcon);
         if (titleView != null) titleView.setText(title);
         if (subView != null) subView.setText(subtitle);
+        //小屏/界面放大后两张入口卡会吃掉大半屏（用户反馈 2026-11-08：手表上占 3/4）。
+        //可用高度不足时隐藏副标题、图标再收一档，只留一行标题，两张卡合计高度约减半
+        float density = getResources().getDisplayMetrics().density;
+        int screenHeightDp = (int) (getResources().getDisplayMetrics().heightPixels / density);
+        if (screenHeightDp < 420) {
+            if (subView != null) subView.setVisibility(View.GONE);
+            if (icon != null) {
+                ViewGroup.LayoutParams lp = icon.getLayoutParams();
+                int side = (int) (24 * density + 0.5f);
+                lp.width = side;
+                lp.height = side;
+                icon.setLayoutParams(lp);
+            }
+        }
         if (icon != null && android.os.Build.VERSION.SDK_INT >= 21) {
             icon.setImageTintList(android.content.res.ColorStateList.valueOf(ThemeManager.getPrimary()));
         }
@@ -276,96 +301,50 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
     }
 
     /**
-     * 排序栏随列表滚动收起/展开，不再焊死在顶端。
+     * 头部（听全部 / 下载全部 + 排序栏）随列表 1:1 跟手滑动。
      *
-     * <p>为什么不做"逐像素跟手收缩"：排序栏在列表外面，列表滚动 dy 的同时容器再缩 dy，
-     * 条目在屏幕上会以 2 倍速度上移，手感是错的。真正的跟手折叠要靠 CoordinatorLayout +
-     * AppBarLayout 接管滚动，而这个布局是 RefreshListActivity 与另外 5 个页面共用的，
-     * 改结构会波及回复楼层、经验/硬币记录等页面。
+     * <p>实现要点：头部是浮在列表上方的一层（不参与 LinearLayout 流式排布），列表用
+     * {@code paddingTop} 给它让位，滚动时按 {@code computeVerticalScrollOffset()} 移 {@code translationY}。
+     * 这样头部移走多少、内容就顶上来多少，天然同步。
      *
-     * <p>这里用"滚过一屏就收起、回到顶部再展开"的自动隐藏方案：只在跨过阈值时做一次
-     * 150ms 的收起动画（高度 + 位移 + 透明度一起变），条目本身仍是 1:1 跟手。
+     * <p>为什么不直接把头部当列表的 header item：{@code VideoCardAdapter} 被 10 多个页面共用，
+     * 加 header 会挪动所有 position，波及多选、长按删除、分页插入等一批调用点，回归面太大。
+     *
+     * <p>也不再用"滚过一整屏再播 150ms 收起动画"那一套：动画期间头部是静止的，
+     * 放大/小屏上表现为"不跟着滑、然后突然跳走"（用户反馈 2026-11-08），已整段移除。
      */
     private void attachSortBarCollapse() {
         final View header = headerBar != null ? headerBar : sortBar;
         if (header == null || recyclerView == null) return;
-        header.post(() -> {
-            int h = header.getHeight();
-            if (h > 0) sortBarFullHeight = h;
+
+        //列表给头部让位：paddingTop = 头部高度，内容从头部下方开始；
+        //clipToPadding=false 让内容能画进 padding 区，滚上来时正好接在头部后面
+        recyclerView.setClipToPadding(false);
+        header.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                          oldLeft, oldTop, oldRight, oldBottom) -> {
+            int h = bottom - top;
+            if (h <= 0 || h == sortBarFullHeight) return;
+            sortBarFullHeight = h;
+            recyclerView.setPadding(recyclerView.getPaddingLeft(), h,
+                    recyclerView.getPaddingRight(), recyclerView.getPaddingBottom());
+            header.setTranslationY(-Math.min(
+                    Math.max(recyclerView.computeVerticalScrollOffset(), 0), h));
         });
+
+        //1:1 跟手：滚多少头部上移多少，偏移到自身高度时完全移出屏幕顶部。
+        //不再做"滚过一整屏再播放 150ms 收起动画"——那套在放大/小屏上表现为头部长时间不动、
+        //然后突然跳走（用户反馈 2026-11-08）。列表自身不做补偿滚动，也不会出现 2 倍速位移。
         recyclerView.addOnScrollListener(new androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@androidx.annotation.NonNull androidx.recyclerview.widget.RecyclerView rv,
                                    int dx, int dy) {
-                if (sortBarFullHeight <= 0) {
-                    sortBarFullHeight = header.getHeight();
-                    if (sortBarFullHeight <= 0) return;
-                }
+                if (sortBarFullHeight <= 0) return;
                 int offset = Math.max(rv.computeVerticalScrollOffset(), 0);
-                //滞回：滚过一整条才收，回到顶部（8dp 内）才展开。展开阈值从「半条」收紧到
-                //「8dp」是 1.3.3 反馈的关键：收起时有滚动补偿，收完 offset 恰好≈8dp，
-                //若保留「半条」阈值会在阈值附近来回收起/展开，表现为内容反复跳
-                if (!sortBarCollapsed && offset > sortBarFullHeight + dp(16)) {
-                    animateSortBar(true);
-                } else if (sortBarCollapsed && offset < dp(8)) {
-                    animateSortBar(false);
-                }
+                header.setTranslationY(-Math.min(offset, sortBarFullHeight));
             }
         });
     }
 
-    /** 收起/展开头部（听全部 + 排序栏）：高度、位移、透明度一起走，条目本身不参与动画 */
-    private void animateSortBar(final boolean collapse) {
-        final View header = headerBar != null ? headerBar : sortBar;
-        if (header == null || sortBarFullHeight <= 0) return;
-        sortBarCollapsed = collapse;
-        if (sortBarAnimator != null) {
-            sortBarAnimator.cancel();
-            sortBarAnimator = null;
-        }
-        final int from = collapse ? sortBarFullHeight : 0;
-        final int to = collapse ? 0 : sortBarFullHeight;
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(from, to);
-        animator.setDuration(150);
-        final int[] lastH = {from};
-        animator.addUpdateListener(animation -> {
-            int h = (int) animation.getAnimatedValue();
-            android.view.ViewGroup.LayoutParams lp = header.getLayoutParams();
-            lp.height = h;
-            header.setLayoutParams(lp);
-            //位移跟着高度走：视觉上像被顶栏吸上去，而不是从底部被压扁
-            header.setTranslationY(-(sortBarFullHeight - h));
-            header.setAlpha(h / (float) sortBarFullHeight);
-            //滚动补偿（1.3.3 反馈确认：滚过一屏收起时「跳一下」）：栏每矮 1px，列表
-            //上缘就上移 1px，条目跟着整体上抬。收起时按帧反向 scrollBy，把条目钉在
-            //原屏幕位置——收起只是把底部视口撑高，不再产生位移。展开在列表顶部发生，
-            //「栏推着内容下去」是各 App 通用行为，不补偿
-            int dh = lastH[0] - h;
-            if (collapse && dh > 0 && recyclerView != null) recyclerView.scrollBy(0, -dh);
-            lastH[0] = h;
-        });
-        //收起结束后直接 GONE：只把高度缩到 0 + 负位移，会在顶部留一条看不见但仍参与绘制的边缘，
-        //滚动时表现为"顶栏下方多出一道缝"，用户看到的 UI 割裂就是它
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationStart(android.animation.Animator animation) {
-                if (!collapse) header.setVisibility(View.VISIBLE);
-            }
-
-            @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
-                if (!collapse) return;
-                header.setVisibility(View.GONE);
-                android.view.ViewGroup.LayoutParams lp = header.getLayoutParams();
-                lp.height = 0;
-                header.setLayoutParams(lp);
-                header.setTranslationY(0);
-                header.setAlpha(1f);
-            }
-        });
-        animator.start();
-        sortBarAnimator = animator;
-    }
 
     private void switchOrder(String target) {
         if (order.equals(target)) {
