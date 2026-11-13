@@ -263,7 +263,9 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardHolder> {
                                     //服务端反馈（/x/web-interface/feedback/rcmd）属新接口，留待后续
                                     if (position >= 0 && position < videoCardList.size() && videoCardList.get(position) == card) {
                                         videoCardList.remove(position);
-                                        notifyDataSetChanged();
+                                        //只移除这一条：整表重绑会让所有可见卡片重新 bind（封面重新加载、画面闪一下），
+                                        //与本文件多选点选只刷单条的既有口径一致
+                                        notifyItemRemoved(position);
                                         MsgUtil.showMsg("已减少此类推荐（本地生效）");
                                     }
                                     break;

@@ -3957,6 +3957,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (layout_control != null) layout_control.removeCallbacks(hidecon);
         if (text_volume != null) text_volume.removeCallbacks(hideVolume);
         if (seekbar_progress != null) seekbar_progress.removeCallbacks(progressbarEnable);
+        //无极调音面板的自动收起（showVolumePanel / 拖动续期都挂在 layout_volume 上）：
+        //它走 View 自己的 handler 链，mainHandler.removeCallbacksAndMessages 摘不到，
+        //漏了这一条，退出后最多 4 秒还有一条消息持有 Activity 与整棵 View 树
+        if (layout_volume != null) layout_volume.removeCallbacks(hideVolumePanel);
     }
 
     OkHttpClient okHttpClient;

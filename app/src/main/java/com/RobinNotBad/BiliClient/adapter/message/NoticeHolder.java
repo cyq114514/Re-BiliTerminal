@@ -38,6 +38,13 @@ import java.text.SimpleDateFormat;
 
 public class NoticeHolder extends RecyclerView.ViewHolder {
 
+    /**
+     * 时间格式：原来每次 bind 都 new 一个（构造含 Calendar 初始化，属 bind 热路径上的分配）。
+     * 只在 RecyclerView 的 onBindViewHolder（主线程）里使用，SimpleDateFormat 的非线程安全问题不会触发
+     */
+    @SuppressLint("SimpleDateFormat")
+    private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+
     /** like 页只显示头像（原版口径）：昵称与「赞了xxx」内容重复，用户反馈显得奇怪 */
     public boolean hideNick = false;
 
@@ -101,8 +108,7 @@ public class NoticeHolder extends RecyclerView.ViewHolder {
         }
 
         if (message.timeStamp != 0) {
-            @SuppressLint("SimpleDateFormat") SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-            pubdate.setText(sdf.format(message.timeStamp * 1000));
+            pubdate.setText(TIME_FORMAT.format(message.timeStamp * 1000));
         } else pubdate.setText(message.timeDesc);
 
         action.setText(message.content);

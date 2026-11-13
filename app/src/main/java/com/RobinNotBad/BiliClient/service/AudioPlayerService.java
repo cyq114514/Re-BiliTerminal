@@ -45,7 +45,6 @@ import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -161,7 +160,24 @@ public class AudioPlayerService extends Service {
 
     //候选地址与缓存
     private final List<String> currentUrls = new ArrayList<>();
-    private final Map<Long, CachedUrls> urlCache = new HashMap<>();
+    /**
+     * cid → 候选地址（10 分钟有效）。
+     * get 在主线程（起播）与后台（预取）都有，put 全在解析线程：并发容器是必须的，
+     * 否则并发写会丢条目。过期条目由读取路径顺手 remove（见 playCurrent / prefetchNext），
+     * 不然服务存活期内按 cid 只增不减
+     */
+    private final Map<Long, CachedUrls> urlCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 通知里的 4 个按钮意图 + 点正文回播放页意图：组件、action、requestCode 在服务存活期内都不变，
+     * 建一次复用。原先每次 buildNotification() 都新建 5 个 PendingIntent，而进度 tick 每 2 秒跑一次
+     */
+    private PendingIntent prevPending, togglePending, nextPending, stopPending, contentPending;
+    /**
+     * 上一次真正 notify 出去的内容快照：暂停时 title/进度/按钮全不变，
+     * 没必要每 2 秒重建 Builder 并重发（主线程读写，全部调用点都在主线程）
+     */
+    private String lastNotificationSnapshot;
     private long prefetchCid = 0;
     private List<String> prefetchUrls = null;
     private long prefetchTime = 0;
@@ -297,8 +313,11 @@ public class AudioPlayerService extends Service {
             channel.setShowBadge(false);
             notifyManager.createNotificationChannel(channel);
         }
+        initNotificationIntents();
         try {
             startForeground(NOTIFICATION_ID, buildNotification());
+            //刚发出去的就是最新内容：进度 tick 第一次比较时才不会白重建一次
+            lastNotificationSnapshot = notificationSnapshot();
         } catch (Throwable t) {
             Logu.e("audio-service", "startForeground 失败: " + t);
         }
@@ -328,6 +347,8 @@ public class AudioPlayerService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         try {
             startForeground(NOTIFICATION_ID, buildNotification());
+            //与 onCreate 同口径：刚发出去的内容视为最新，避免下一次 tick 白重建
+            lastNotificationSnapshot = notificationSnapshot();
         } catch (Throwable ignored) {
         }
 
@@ -517,6 +538,8 @@ public class AudioPlayerService extends Service {
             prepareAndPlay(currentUrls, item, false, 0);
             return;
         }
+        //过期条目读时绕过就顺手摘掉：否则服务存活期内按 cid 单调累积
+        if (cached != null) urlCache.remove(item.cid);
 
         //3) 重新解析
         new Thread(() -> {
@@ -1027,6 +1050,8 @@ public class AudioPlayerService extends Service {
             prefetchTime = cached.time;
             return;
         }
+        //与 playCurrent 同口径：过期条目顺手摘掉
+        if (cached != null) urlCache.remove(next.cid);
 
         new Thread(() -> {
             try {
@@ -1281,29 +1306,55 @@ public class AudioPlayerService extends Service {
     private Notification buildNotification() {
         VideoCard item = AudioQueue.get().current();
         String title = item != null && item.title != null ? item.title : "音频播放";
-        String text = item != null ? AudioQueue.get().positionText()
-                + (item.upName != null && !item.upName.isEmpty() ? " · " + item.upName : "")
-                + "  " + formatTime(positionMs) + " / " + formatTime(durationMs) : "";
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.icon)
                 .setContentTitle(title)
-                .setContentText(text)
+                .setContentText(notificationText(item))
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW);
 
-        builder.addAction(0, "上一首", actionPending(ACTION_PREV, 1));
+        builder.addAction(0, "上一首", prevPending);
         builder.addAction(playing ? R.drawable.btn_player_pause : R.drawable.btn_player_play,
-                playing ? "暂停" : "播放", actionPending(ACTION_TOGGLE, 2));
-        builder.addAction(0, "下一首", actionPending(ACTION_NEXT, 3));
-        builder.addAction(0, "关闭", actionPending(ACTION_STOP, 4));
+                playing ? "暂停" : "播放", togglePending);
+        builder.addAction(0, "下一首", nextPending);
+        builder.addAction(0, "关闭", stopPending);
 
+        builder.setContentIntent(contentPending);
+        return builder.build();
+    }
+
+    /** 通知正文（标题与进度）：buildNotification 与内容快照共用，保证两处永远同源 */
+    private String notificationText(VideoCard item) {
+        if (item == null) return "";
+        return AudioQueue.get().positionText()
+                + (item.upName != null && !item.upName.isEmpty() ? " · " + item.upName : "")
+                + "  " + formatTime(positionMs) + " / " + formatTime(durationMs);
+    }
+
+    /** 通知内容快照：内容没变就不重建、不重发（暂停挂后台时每 2 秒一次纯属浪费） */
+    private String notificationSnapshot() {
+        VideoCard item = AudioQueue.get().current();
+        return (playing ? 1 : 0) + "|"
+                + (item != null && item.title != null ? item.title : "音频播放") + "|"
+                + notificationText(item);
+    }
+
+    /**
+     * 5 个 PendingIntent 只在服务创建时建一次：系统内部按 (组件, action, requestCode) 复用，
+     * 每次 getXxx 仍是一次 binder 往返，而进度 tick 每 2 秒就会走一遍 buildNotification
+     */
+    @SuppressLint("UnspecifiedImmutableFlag")
+    private void initNotificationIntents() {
+        prevPending = actionPending(ACTION_PREV, 1);
+        togglePending = actionPending(ACTION_TOGGLE, 2);
+        nextPending = actionPending(ACTION_NEXT, 3);
+        stopPending = actionPending(ACTION_STOP, 4);
         Intent content = new Intent(this, AudioPlayerActivity.class);
         content.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        builder.setContentIntent(PendingIntent.getActivity(this, 5, content,
-                PendingIntent.FLAG_UPDATE_CURRENT));
-        return builder.build();
+        contentPending = PendingIntent.getActivity(this, 5, content,
+                PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     private PendingIntent actionPending(String action, int requestCode) {
@@ -1313,6 +1364,9 @@ public class AudioPlayerService extends Service {
 
     private void refreshNotification() {
         try {
+            String snapshot = notificationSnapshot();
+            if (snapshot.equals(lastNotificationSnapshot)) return;
+            lastNotificationSnapshot = snapshot;
             notifyManager.notify(NOTIFICATION_ID, buildNotification());
         } catch (Throwable ignored) {
         }

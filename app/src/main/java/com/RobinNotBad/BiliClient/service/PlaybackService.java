@@ -55,6 +55,19 @@ public class PlaybackService extends Service {
     private NotificationManager notifyManager;
     private Timer updateTimer;
 
+    /**
+     * 点正文回任务的通知点击意图：包级 launch intent 在服务存活期内不会变，
+     * 构建一次复用。原先每次 refresh() 都调 getPackageManager().getLaunchIntentForPackage()
+     * （binder IPC），而 refresh() 每秒一次
+     */
+    private volatile PendingIntent contentIntent;   //onCreate（主线程）写，refresh() 可能被 Timer 线程调用
+    /**
+     * 上一次真正 notify 出去的内容快照：暂停态下 title/进度/按钮都不变，
+     * 没必要每秒重建 Builder + 重发通知（Wear OS 上通知就是表盘元素，重渲染更明显）。
+     * 只在 Timer 线程读写，无需同步
+     */
+    private String lastSnapshot;
+
     /**Activity 退后台时调用；重复调用无害，只是多走一次 onStartCommand 刷新通知。*/
     public static void start(Context context, PlayerActivity activity) {
         sPlayerActivityRef = new WeakReference<>(activity);
@@ -87,6 +100,15 @@ public class PlaybackService extends Service {
             startForeground(NOTIFICATION_ID, buildPlaceholder());
         } catch (Throwable t) {
             Logu.e("playback", "startForeground 失败: " + t);
+        }
+        //content intent 提前建好（放在 startForeground 之后，不推迟进前台）：
+        //refresh() 每秒被 Timer 调用，原先每次都做一次 getLaunchIntentForPackage 的 binder IPC，
+        //而包级 launch intent 在服务存活期内不会变，建一次就够
+        Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (launch != null) {
+            launch.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            contentIntent = PendingIntent.getActivity(this, 2, launch,
+                    PendingIntent.FLAG_UPDATE_CURRENT);
         }
     }
 
@@ -139,9 +161,33 @@ public class PlaybackService extends Service {
                     this.cancel();
                     return;
                 }
-                notifyManager.notify(NOTIFICATION_ID, refresh());
+                notifyIfChanged();
             }
         }, 1000, 1000);
+    }
+
+    /**
+     * 内容有变化才重建并重发通知。
+     *
+     * <p>暂停（或缓冲卡住）时 title / 进度 / 按钮全都不变，原先每秒照样 new Builder + 2 个
+     * PendingIntent + notify()，后台挂一小时就是 3600 次无意义重渲染。这里先取一份内容快照
+     * 比较，没变化直接返回；播放中进度每秒前进，快照必然变化，观感与原来完全一致。
+     */
+    private void notifyIfChanged() {
+        String snapshot = notifySnapshot();
+        if (snapshot.equals(lastSnapshot)) return;
+        lastSnapshot = snapshot;
+        notifyManager.notify(NOTIFICATION_ID, refresh());
+    }
+
+    /** 通知内容快照（只读 Activity 的轻量 getter，不构造任何对象树） */
+    private String notifySnapshot() {
+        PlayerActivity activity = getPlayerActivity();
+        if (activity == null) return "";
+        return activity.serviceIsPlaying()
+                + "|" + activity.serviceTitle()
+                + "|" + activity.servicePositionMs()
+                + "|" + activity.serviceDurationMs();
     }
 
     @SuppressLint("UnspecifiedImmutableFlag")
@@ -182,11 +228,9 @@ public class PlaybackService extends Service {
                         PendingIntent.FLAG_UPDATE_CURRENT));
 
         //点正文把现有任务调回前台（REORDER_TO_FRONT 不新建实例，PlayerActivity 的 onResume 会停掉服务）
-        Intent content = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        if (content != null) {
-            content.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-            builder.setContentIntent(PendingIntent.getActivity(this, 2, content,
-                    PendingIntent.FLAG_UPDATE_CURRENT));
+        //意图在 onCreate 已建好并缓存，这里不再做 binder IPC
+        if (contentIntent != null) {
+            builder.setContentIntent(contentIntent);
         }
         return builder.build();
     }
