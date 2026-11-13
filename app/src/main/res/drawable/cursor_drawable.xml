@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 全局输入光标（EditTextStyle）：颜色对齐默认强调色。
+     光标随自定义主题无 API19 兼容方案（textCursorDrawable 只能给静态 drawable，
+     拿不到 ThemeManager 的运行时色），此处只保证默认主题下不是旧版粉 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#eeFB7299" />
+    <solid android:color="#eeFE679A" />
     <size android:width="2dp" />
 </shape>

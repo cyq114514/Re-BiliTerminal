@@ -51,7 +51,7 @@
             android:paddingHorizontal="5dp"
             android:paddingVertical="1dp"
             android:text="互关"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/textwhite"
             android:textSize="10sp"
             android:visibility="gone"
             android:layout_marginStart="5dp"

@@ -10,6 +10,7 @@ import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetworkPlaybackQuality;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -144,7 +145,8 @@ public class SettingPlayerChooseActivity extends BaseActivity {
         checkPosition = position;
         for (int i = 0; i < cardViewList.size(); i++) {
             if (position == i) {
-                cardViewList.get(i).setStrokeColor(getResources().getColor(R.color.pink));
+                //选中描边走主题强调色：此前是 R.color.pink（旧粉族 #FBFB8787），自定义主题下不跟随
+                cardViewList.get(i).setStrokeColor(ThemeManager.getPrimary());
                 cardViewList.get(i).setStrokeWidth(ToolsUtil.dp2px(1));
             } else {
                 cardViewList.get(i).setStrokeColor(getResources().getColor(R.color.gray));

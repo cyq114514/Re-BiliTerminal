@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.model.UserInfo;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.bumptech.glide.Glide;
@@ -68,6 +69,10 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
         UserInfo user = userList.get(position);
         if (user == null)
             return;
+
+        //与 FollowGroupAdapter 同根因：互关徽章底是 @drawable/background_badge，
+        //RecyclerView 行不在 setContentView 那次 ThemeApplier.apply 的覆盖范围内
+        ThemeApplier.apply(holder.itemView);
 
         holder.name.setText(user.name);
         //非 vip 必须恢复主题默认色（textwhite #ebe0e2，不能显式设纯白，否则普通用户全部变色）；

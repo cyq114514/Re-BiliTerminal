@@ -152,7 +152,7 @@
                 android:layout_marginTop="4dp"
                 android:text="@string/bgm_source_hint"
                 android:textColor="@color/text_gray"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
 
             <TextView
                 android:id="@+id/btn_summary_toggle"
@@ -188,7 +188,7 @@
                 android:layout_marginTop="6dp"
                 android:gravity="center"
                 android:textColor="@color/text_gray"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
         </LinearLayout>
     </ScrollView>
 </RelativeLayout>

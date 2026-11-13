@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 
 import java.util.ArrayList;
 
@@ -27,7 +28,6 @@ public class PageChooseAdapter extends RecyclerView.Adapter<PageChooseAdapter.Ho
     //上次观看的分P下标（-1 表示无记录），bind 时必须双向赋色，避免复用残影
     private int historyIndex = -1;
     private final int defaultTextColor;
-    private static final int HISTORY_COLOR = 0xfffb7299;
 
     OnItemClickListener onItemClickListener;
     OnItemLongClickListener onItemLongClickListener;
@@ -67,7 +67,9 @@ public class PageChooseAdapter extends RecyclerView.Adapter<PageChooseAdapter.Ho
             return;
 
         holder.folder_name.setText(nameList.get(position));
-        holder.folder_name.setTextColor(position == historyIndex ? HISTORY_COLOR : defaultTextColor);
+        //历史分P高亮走主题强调色：此前是硬编码旧版粉 0xFFFB7299，自定义主题下永远是旧粉
+        holder.folder_name.setTextColor(position == historyIndex
+                ? ThemeManager.getPrimary() : defaultTextColor);
 
         //点击时取 ViewHolder 当前位置，不捕获 bind 时的 position：删除后未重绑的 ViewHolder 会带回旧下标
         holder.itemView.setOnClickListener(view -> {

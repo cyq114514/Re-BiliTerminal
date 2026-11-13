@@ -84,6 +84,8 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
         holder.title.setTextColor(selected ? ThemeManager.getPrimary() : normalColor(holder.itemView));
 
         //播放中图标：仅当前集显示（官方选集卡同款声波标）
+        //vector 的 fillColor 不能引用主题属性，只能在这里按主题色上 tint（默认主题下等于原色）
+        holder.playing.setColorFilter(ThemeManager.getPrimary());
         holder.playing.setVisibility(selected ? View.VISIBLE : View.GONE);
 
         if (episode.badge != null && !episode.badge.isEmpty()) {

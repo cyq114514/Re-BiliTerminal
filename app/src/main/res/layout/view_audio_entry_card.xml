@@ -56,7 +56,7 @@
                 android:singleLine="true"
                 android:text="按当前列表顺序连续播放"
                 android:textColor="@color/text_gray"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
         <ImageView

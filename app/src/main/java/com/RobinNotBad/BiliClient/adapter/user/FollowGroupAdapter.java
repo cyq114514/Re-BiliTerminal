@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.model.FollowTag;
 import com.RobinNotBad.BiliClient.model.UserInfo;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -220,6 +221,10 @@ public class FollowGroupAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         if (position < 0 || position >= getItemCount())
             return;
+
+        //行是异步绑定进 RecyclerView 的，setContentView 时那一次 ThemeApplier.apply 覆盖不到，
+        //互关徽章底（@drawable/background_badge）必须在 bind 期补一次才跟随自定义主题
+        ThemeApplier.apply(holder.itemView);
 
         if (holder instanceof GroupHolder) {
             GroupItem group = getGroupForPosition(position);

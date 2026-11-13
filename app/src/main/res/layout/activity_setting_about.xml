@@ -254,7 +254,7 @@
                     android:id="@+id/anim_scale_text"
                     android:layout_height="wrap_content"
                     android:layout_width="match_parent"
-                    android:textSize="10sp"
+                    android:textSize="11sp"
                     android:alpha="0.7"
                     android:padding="3dp"
                     android:text="动画缩放诊断中……"

@@ -286,10 +286,11 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+                <!-- 音量键 40dp：手表触控目标口径，36dp 在圆表上易误触（适配审计 W1） -->
                 <ImageButton
                     android:id="@+id/volDown"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
                     android:adjustViewBounds="true"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:contentDescription="音量减"
@@ -309,8 +310,8 @@
 
                 <ImageButton
                     android:id="@+id/volUp"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
                     android:adjustViewBounds="true"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:contentDescription="音量加"

@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.api.FavoriteApi;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -69,7 +70,8 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
         holder.itemView.setOnClickListener(view -> {
             if (!adding && position < chooseState.size() && position < mediaIdList.size()) {
                 adding = true;
-                cardView.setStrokeColor(context.getResources().getColor(R.color.low_pink));
+                //请求进行中的描边走主题强调色（原 R.color.low_pink 旧粉不跟随自定义主题）
+                cardView.setStrokeColor(ThemeManager.getPrimary());
                 cardView.setStrokeWidth(ToolsUtil.dp2px(1f));
 
                 if (chooseState.get(position)) {
@@ -135,7 +137,8 @@ public class FolderChooseAdapter extends RecyclerView.Adapter<FolderChooseAdapte
 
     private void setCardView(MaterialCardView cardView, boolean bool) {
         if (bool) {
-            cardView.setStrokeColor(context.getResources().getColor(R.color.pink));
+            //已收藏描边走主题强调色（原 R.color.pink 旧粉族 #FBFB8787，自定义主题下不跟随）
+            cardView.setStrokeColor(ThemeManager.getPrimary());
             cardView.setStrokeWidth(ToolsUtil.dp2px(1));
         } else {
             cardView.setStrokeColor(context.getResources().getColor(R.color.gray));

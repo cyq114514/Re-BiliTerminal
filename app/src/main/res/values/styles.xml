@@ -56,7 +56,7 @@
     </style>
 
     <style name="EditTextStyle" parent="Widget.AppCompat.EditText">
-        <item name="android:textColorHint">#80ffffff</item>
+        <item name="android:textColorHint">@color/text_hint</item>
         <item name="android:textCursorDrawable">@drawable/cursor_drawable</item>
         <item name="android:textColor">@color/textwhite</item>
     </style>
