@@ -64,6 +64,10 @@ public class SearchActivity extends InstanceActivity {
     ViewPager viewPager;
     EditText keywordInput;
     private ConstraintLayout searchBar;
+    /** 搜索框 + 类别页签的头部容器：收起/展开动画整体作用在它身上，页签才不会单独留在顶上 */
+    private View searchHeader;
+    /** 头部收起后会被量成 0 高，展开动画要用收起前的高度，这里缓存一份 */
+    private int searchHeaderHeight = 0;
     private boolean searchBarVisible = true;
     /** 类别页签的占位监听只注册一次（buildSearchTabs 每次搜索都会重建内层胶囊） */
     private boolean tabsPaddingBound = false;
@@ -145,6 +149,7 @@ public class SearchActivity extends InstanceActivity {
             View searchBtn = findViewById(R.id.search);
             keywordInput = findViewById(R.id.keywordInput);
             searchBar = findViewById(R.id.searchbar);
+            searchHeader = findViewById(R.id.search_header);
             sortButton = findViewById(R.id.sortButton);
             sortButton.setOnClickListener(view -> showSortDialog());
             historyRecyclerview = findViewById(R.id.history_recyclerview);
@@ -623,11 +628,8 @@ public class SearchActivity extends InstanceActivity {
         if (!tabsPaddingBound) {
             tabsPaddingBound = true;
             searchTabsScroll.addOnLayoutChangeListener((v, left, top, right, bottom,
-                                                        oldLeft, oldTop, oldRight, oldBottom) -> {
-                int tabHeight = bottom - top;
-                if (tabHeight > 0)
-                    viewPager.setPadding(0, tabHeight + ToolsUtil.dp2px(6f), 0, 0);
-            });
+                                                        oldLeft, oldTop, oldRight, oldBottom) ->
+                    syncTabsPadding());
         }
         tabChips.clear();
         int padH = ToolsUtil.dp2px(10f);
@@ -653,6 +655,19 @@ public class SearchActivity extends InstanceActivity {
             tabChips.add(chip);
         }
         selectTab(viewPager.getCurrentItem());
+    }
+
+    /**
+     * 结果列表顶部给「悬浮类别页签」让出的高度，只该在页签真正可见时存在。
+     *
+     * <p>页签现在收在 search_header 里跟着搜索框一起收起，收起后再留着这块 padding
+     * 会在顶栏下沿空出一条带（页签已经不在了，没人填它）。
+     */
+    private void syncTabsPadding() {
+        if (viewPager == null || searchTabsScroll == null) return;
+        boolean needPad = searchBarVisible && searchTabsScroll.getVisibility() == View.VISIBLE;
+        int top = needPad ? searchTabsScroll.getHeight() + ToolsUtil.dp2px(6f) : 0;
+        if (viewPager.getPaddingTop() != top) viewPager.setPadding(0, top, 0, 0);
     }
 
     private void selectTab(int position) {
@@ -682,7 +697,7 @@ public class SearchActivity extends InstanceActivity {
         //回到历史/建议面板时隐藏类别页签（适配审计 P2-11），同时收回给内容区垫的高度
         if (searchTabsScroll != null) {
             searchTabsScroll.setVisibility(View.GONE);
-            viewPager.setPadding(0, 0, 0, 0);
+            syncTabsPadding();
         }
         //热搜开关关闭时一律显示历史卡：两张卡同位叠放互斥，给历史让位就等于关掉热搜面板
         if (hotSearchEnabled && !hotSearchList.isEmpty()) {
@@ -753,7 +768,15 @@ public class SearchActivity extends InstanceActivity {
             }
         }
 
+        //搜索执行后页签与搜索框一起亮出来。上一次搜索若已经把头部收起（滑到列表下方再点历史词
+        //就会这样），这里必须复原，否则结果出来了页签还跟着头部一起藏着
         if (searchTabsScroll != null) searchTabsScroll.setVisibility(View.VISIBLE);
+        if (searchHeader != null) {
+            searchBarVisible = true;
+            searchHeader.setVisibility(View.VISIBLE);
+            searchHeader.setTranslationY(0);
+            searchHeader.post(this::syncTabsPadding);
+        }
         if (!refreshing) {
             InputMethodManager manager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             View curFocus;
@@ -860,24 +883,37 @@ public class SearchActivity extends InstanceActivity {
     }
 
     public void onScrolled(int dy) {
-        float height = searchBar.getHeight() + ToolsUtil.dp2px(2f);
+        //动画整体作用在 search_header 上：搜索框和类别页签是同一个头部的两行，
+        //分别做动画会出现"框走了、胶囊还钉在顶上"（2026-11-14 用户要求一起收起/展开）
+        View header = searchHeader != null ? searchHeader : searchBar;
+        if (header == null) return;
+
+        int rawHeight = header.getHeight();
+        if (rawHeight > 0) searchHeaderHeight = rawHeight;
+        //收起后头部 GONE 会被量成 0 高，展开时要用收起前的高度，否则动画起点塌成 0、变成硬跳
+        float height = (rawHeight > 0 ? rawHeight : searchHeaderHeight) + ToolsUtil.dp2px(2f);
 
         if (System.currentTimeMillis() - animate_last > 200) {
             if (dy > 0 && searchBarVisible) {
                 animate_last = System.currentTimeMillis();
                 this.searchBarVisible = false;
                 @SuppressLint("ObjectAnimatorBinding")
-                ObjectAnimator animator = ObjectAnimator.ofFloat(searchBar, "translationY", 0, -height);
+                ObjectAnimator animator = ObjectAnimator.ofFloat(header, "translationY", 0, -height);
                 animator.start();
-                handler.postDelayed(() -> searchBar.setVisibility(View.GONE), 200);
+                handler.postDelayed(() -> {
+                    header.setVisibility(View.GONE);
+                    //头部连同页签一起走了，结果列表顶上就没人需要这块让位了
+                    syncTabsPadding();
+                }, 200);
             }
             if (dy < -1 && !searchBarVisible) {
                 animate_last = System.currentTimeMillis();
                 this.searchBarVisible = true;
-                searchBar.setVisibility(View.VISIBLE);
+                header.setVisibility(View.VISIBLE);
                 @SuppressLint("ObjectAnimatorBinding")
-                ObjectAnimator animator = ObjectAnimator.ofFloat(searchBar, "translationY", -height, 0);
+                ObjectAnimator animator = ObjectAnimator.ofFloat(header, "translationY", -height, 0);
                 animator.start();
+                header.post(this::syncTabsPadding);
             }
         }
 

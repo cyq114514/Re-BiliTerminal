@@ -32,7 +32,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/searchbar"
+        app:layout_constraintTop_toBottomOf="@+id/search_header"
         tools:itemCount="4"
         tools:listitem="@layout/cell_choose" />
 
@@ -62,23 +62,32 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/searchbar"
+        app:layout_constraintTop_toBottomOf="@+id/search_header"
         tools:itemCount="4"
         tools:listitem="@layout/cell_choose" />
 
+    <!-- 搜索框 + 类别页签合成一个头部容器：两者必须一起收起/展开。
+         此前页签单独锚在 searchbar 下沿，searchbar 滑走 GONE 后它塌缩到顶栏下沿，
+         变成一条常驻顶栏，手表小屏上白白吃掉一行结果的高度。 -->
+    <LinearLayout
+        android:id="@+id/search_header"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/top">
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/searchbar"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
                 android:background="@drawable/background_searchbar"
                 android:paddingStart="4dp"
                 android:paddingTop="3dp"
                 android:paddingEnd="6dp"
-                android:paddingBottom="3dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/top">
+                android:paddingBottom="3dp">
 
         <EditText
             android:id="@+id/keywordInput"
@@ -126,6 +135,31 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <!--
+          类别页签（适配审计 20261107 P2-11）：此前 5 个结果分类只能盲横滑，手表换类要连滑 4 次。
+          复用番剧页签的胶囊语言（选中=主题强调色、未选=暗底，代码级重建保证跟随主题）。
+          搜索执行后显示、回历史/建议面板隐藏；且必须留在 search_header 里，
+          跟着搜索框一起收起/展开（2026-11-14 用户要求），不再单独悬停在结果列表顶部。
+        -->
+        <HorizontalScrollView
+            android:id="@+id/search_tabs_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+            android:layout_marginTop="4dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/search_tabs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="2dp" />
+        </HorizontalScrollView>
+
+    </LinearLayout>
+
     <RelativeLayout
         android:id="@+id/top"
         android:layout_width="match_parent"
@@ -171,32 +205,5 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/top" />
-
-    <!--
-      类别页签（适配审计 20261107 P2-11）：此前 5 个结果分类只能盲横滑，手表换类要连滑 4 次。
-      复用番剧页签的胶囊语言（选中=主题强调色、未选=暗底，代码级重建保证跟随主题）。
-      搜索执行后显示、回历史/建议面板隐藏；搜索栏下滑隐藏时页签自动顶到原搜索栏位置
-      （约束锚在 gone 的 searchbar 下会塌缩），成为结果页的常驻顶栏。
-      作为 ConstraintLayout 的最后一个孩子悬浮在结果列表之上。
-    -->
-    <HorizontalScrollView
-        android:id="@+id/search_tabs_scroll"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
-        android:layout_marginTop="4dp"
-        android:scrollbars="none"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/searchbar">
-
-        <LinearLayout
-            android:id="@+id/search_tabs"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingHorizontal="2dp" />
-    </HorizontalScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
