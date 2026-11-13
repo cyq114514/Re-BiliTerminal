@@ -76,7 +76,10 @@ public class ThemeColorActivity extends BaseActivity {
             findViewById(R.id.btn_reset_theme).setOnClickListener(view -> {
                 ThemeManager.resetToDefault();
                 refreshPreview();
-                MsgUtil.showMsg("已恢复默认配色\n其他页面重新进入后生效");
+                //「默认」可能是背景图主色：说清楚，避免用户以为恢复默认就等于回到粉色
+                MsgUtil.showMsg(ThemeManager.isSeedFromBackground()
+                        ? "已清除手动配色\n当前跟随背景图主色，其他页面重新进入后生效"
+                        : "已恢复默认配色\n其他页面重新进入后生效");
             });
             findViewById(R.id.btn_preview).setOnClickListener(view -> {
                 Intent intent = new Intent();
@@ -151,10 +154,12 @@ public class ThemeColorActivity extends BaseActivity {
         refreshSwatchSelection();
     }
 
-    /** 刷新色块选中环：当前种子色对应的那一枚加描边 */
+    /** 刷新色块选中环：当前生效的种子色对应的那一枚加描边 */
     private void refreshSwatchSelection() {
         if (presetContainer == null) return;
-        final int current = ThemeManager.getSeed();
+        //用"生效色"而不是"手选值"：配色来自背景图时没有哪一枚预设被选中，
+        //否则默认粉那枚会被点亮，与实际界面颜色对不上
+        final int current = ThemeManager.getEffectiveSeed();
         final int strokeColor = getResources().getColor(R.color.textwhite);
         for (int i = 0; i < presetContainer.getChildCount(); i++) {
             FrameLayout cell = (FrameLayout) presetContainer.getChildAt(i);
@@ -281,6 +286,11 @@ public class ThemeColorActivity extends BaseActivity {
             boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true);
             if (!newUi) {
                 stateText.setText("已保存 " + toHex(seed) + "，但「新版美学设计」已关闭，当前不生效");
+            } else if (ThemeManager.isSeedFromBackground()) {
+                //没手选过配色 + 开着背景图：颜色来自图的主色，输入框里仍是"手选值"（默认粉）
+                stateText.setText("当前配色来自背景图 "
+                        + toHex(ThemeManager.getEffectiveSeed())
+                        + "（点预设或输入 HEX 即改为手动配色）");
             } else if (ThemeManager.isDefault()) {
                 stateText.setText("当前为默认配色 " + toHex(seed) + "（与原版一致）");
             } else {

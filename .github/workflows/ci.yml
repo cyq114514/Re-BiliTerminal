@@ -37,26 +37,50 @@ jobs:
           if-no-files-found: error
 
       # ===== 以下仅 tag 推送时执行 =====
-      - name: 写入签名配置（未配置密钥 secrets 时跳过，产出未签名包）
+      # 只写 tag 发版构建：push/PR 的 debug 包不带凭据，避免凭据随 artifact 外泄。
+      # 三组 secret 各自独立：缺签名密钥 → 出未签名包；缺反代凭据 → Bangumi 只能直连；
+      # 缺弹弹play 凭据 → 第三方番剧没有弹幕（其余功能不受影响）。
+      - name: 写入构建配置（签名 + Bangumi 反代 + 弹弹play 凭据）
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           ALIAS_NAME: ${{ secrets.ALIAS_NAME }}
           ALIAS_PASSWORD: ${{ secrets.ALIAS_PASSWORD }}
+          BGM_PROXY_AUTH: ${{ secrets.BGM_PROXY_AUTH }}
+          DANDAN_APP_ID: ${{ secrets.DANDAN_APP_ID }}
+          DANDAN_APP_SECRET: ${{ secrets.DANDAN_APP_SECRET }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$HOME/release.jks"
-            {
-              echo "sdk.dir=$ANDROID_HOME"
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            if [ -n "$KEYSTORE_B64" ]; then
+              echo "$KEYSTORE_B64" | base64 -d > "$HOME/release.jks"
               echo "KEY_PATH=$HOME/release.jks"
               echo "KEY_PASSWORD=$KEY_PASSWORD"
               echo "ALIAS_NAME=$ALIAS_NAME"
               echo "ALIAS_PASSWORD=$ALIAS_PASSWORD"
-            } > local.properties
-          else
-            echo "未配置 KEYSTORE_B64 等 secrets，本次 Release 包不做正式签名"
+            fi
+            # 整行写入（含 "Basic " 前缀）；Base64 只含 A-Za-z0-9+/=，不会被 Properties 解析破坏
+            if [ -n "$BGM_PROXY_AUTH" ]; then
+              echo "BGM_PROXY_AUTH=$BGM_PROXY_AUTH"
+            fi
+            # 弹弹play：纯 ASCII（AppId 短串 + 32 位 Secret），同样不受 ISO-8859-1 解析影响
+            if [ -n "$DANDAN_APP_ID" ] && [ -n "$DANDAN_APP_SECRET" ]; then
+              echo "DANDAN_APP_ID=$DANDAN_APP_ID"
+              echo "DANDAN_APP_SECRET=$DANDAN_APP_SECRET"
+            fi
+          } > local.properties
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::未配置 KEYSTORE_B64 等 secrets，本次 Release 包不做正式签名"
           fi
+          if [ -z "$BGM_PROXY_AUTH" ]; then
+            echo "::warning::未配置 BGM_PROXY_AUTH，包内 Bangumi 接口只能直连 api.bgm.tv（境内大概率不可用）"
+          fi
+          if [ -z "$DANDAN_APP_ID" ] || [ -z "$DANDAN_APP_SECRET" ]; then
+            echo "::warning::未配置 DANDAN_APP_ID / DANDAN_APP_SECRET，第三方番剧不会有弹幕"
+          fi
+          # 打印时抹掉敏感值，保留键名供排查
+          sed -E 's/(KEY_PASSWORD|ALIAS_PASSWORD|BGM_PROXY_AUTH|DANDAN_APP_ID|DANDAN_APP_SECRET)=.*/\1=***/' local.properties
 
       - name: 构建 Release 包
         if: startsWith(github.ref, 'refs/tags/v')

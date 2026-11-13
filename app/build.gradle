@@ -56,6 +56,13 @@ android {
         def dandanSecret = danmakuProps.getProperty("DANDAN_APP_SECRET", "")
         buildConfigField "String", "DANDAN_APP_ID", "\"${dandanAppId}\""
         buildConfigField "String", "DANDAN_APP_SECRET", "\"${dandanSecret}\""
+
+        //Bangumi 反代（Basic 鉴权）凭据：同样只从 local.properties 读，不入库；
+        //CI 在 tag 发版时由仓库 secret BGM_PROXY_AUTH 注入。
+        //值为完整请求头（含 "Basic " 前缀）、纯 ASCII，Properties.load 按 ISO-8859-1 解析不会坏。
+        //缺失时反代不进候选，客户端自动退回 api.bgm.tv 直连（境外可用，境内大概率连不上）。
+        def bgmProxyAuth = danmakuProps.getProperty("BGM_PROXY_AUTH", "").trim()
+        buildConfigField "String", "BGM_PROXY_AUTH", "\"${bgmProxyAuth}\""
     }
 
     signingConfigs {

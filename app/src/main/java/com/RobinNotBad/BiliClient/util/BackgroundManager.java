@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.ui.theme.ImageSeeder;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -40,6 +41,32 @@ public class BackgroundManager {
     public static final String KEY_PATH = "bg_image_path";
     /** 暗度：0-100，越大越暗 */
     public static final String KEY_DIM = "bg_image_dim";
+    /**
+     * 背景图主色（主题色种子）：导入时算一次落盘，冷启动零解码开销。
+     * <p>0/缺省 = 没有可用颜色；是否已经算过看 {@link #KEY_SEED_DONE}。
+     */
+    public static final String KEY_SEED = "bg_image_seed";
+
+    /**
+     * 是否已经尝试过取色。
+     *
+     * <p>为什么不用「seed == 某个哨兵值」表示"算过但没取到"：种子是不透明 ARGB
+     * （{@code 0xFFRRGGBB}），在 Java 里是负数，任何 int 哨兵都可能是一张图真实的主色
+     * （例如纯白 {@code 0xFFFFFFFF} 恰好等于 -1）。用独立的布尔键才不会互相污染。
+     */
+    public static final String KEY_SEED_DONE = "bg_image_seed_done";
+
+    /**
+     * 已保存主色对应的取色算法版本。
+     *
+     * <p>算法改动（如 2026-11-14 从「量化簇心」换成「色相直方图」）后，旧值不再代表
+     * 当前算法的主色，必须重算一次才能看到新结果。版本号对不上时，{@link #getSeed()}
+     * 返回 0（先用默认配色），解码图片时后台重算，下一次启动生效。
+     */
+    public static final String KEY_SEED_VERSION = "bg_image_seed_ver";
+
+    /** 当前取色算法版本；改动 {@code ImageSeeder} 的选色逻辑时 +1 */
+    private static final int SEED_VERSION = 3;
 
     private static final String FILE_NAME = "custom_background.jpg";
     /** 背景图最长边上限（像素）：超过屏幕分辨率没有意义，只会白占内存与磁盘 */
@@ -102,9 +129,16 @@ public class BackgroundManager {
             out = new FileOutputStream(target);
             bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out);
             out.flush();
+
+            //主色提取顺手在这里做掉：位图已经在内存里，且本方法本来就在后台线程；
+            //落盘后开屏与全站强调色都能零成本读到（见 ThemeManager 的有效种子解析）
+            int seed = ImageSeeder.extractSeed(bitmap);
             bitmap.recycle();
 
             SharedPreferencesUtil.putString(KEY_PATH, target.getAbsolutePath());
+            SharedPreferencesUtil.putInt(KEY_SEED, seed);
+            SharedPreferencesUtil.putBoolean(KEY_SEED_DONE, true);
+            SharedPreferencesUtil.putInt(KEY_SEED_VERSION, SEED_VERSION);
             //换了图，缓存必须失效
             resetCache();
             return true;
@@ -123,7 +157,30 @@ public class BackgroundManager {
         if (f.isFile() && !f.delete()) Logu.e("background", "删除背景图失败");
         SharedPreferencesUtil.putString(KEY_PATH, "");
         SharedPreferencesUtil.putBoolean(KEY_ENABLE, false);
+        //主色跟着图一起失效，否则删图后还会残留一个"来自背景图"的主题色
+        SharedPreferencesUtil.removeValue(KEY_SEED);
+        SharedPreferencesUtil.removeValue(KEY_SEED_DONE);
+        SharedPreferencesUtil.removeValue(KEY_SEED_VERSION);
         resetCache();
+    }
+
+    /**
+     * 背景图主色，供主题色当种子用。
+     *
+     * <p>只有「启用背景图 + 有图 + 取到了可用颜色」三者同时成立才返回非 0；
+     * 其余情况调用方应回退默认主题色。所有读取都是 SharedPreferences（内存缓存），
+     * 可以在主线程调用——开屏页的 AmbientBackground 每帧都可能问一次。
+     *
+     * @return 不透明 ARGB；0 表示不可用
+     */
+    public static int getSeed() {
+        if (!isEnabled()) return 0;
+        //算法升级后旧主色作废：先回退默认配色，等解码时重算，下一次启动换成新颜色
+        if (SharedPreferencesUtil.getInt(KEY_SEED_VERSION, 0) != SEED_VERSION) return 0;
+        int seed = SharedPreferencesUtil.getInt(KEY_SEED, 0);
+        //注意不能写 seed > 0：不透明 ARGB 是 0xFFRRGGBB，在 Java 里恒为负数
+        if (seed == 0) return 0;
+        return 0xFF000000 | (seed & 0x00FFFFFF);
     }
 
     private static void resetCache() {
@@ -161,6 +218,7 @@ public class BackgroundManager {
                 opts.inPreferredConfig = Bitmap.Config.RGB_565;
                 cached = BitmapFactory.decodeFile(path, opts);
                 cachedPath = path;
+                backfillSeedIfNeeded(cached);
                 return cached;
             } catch (Throwable e) {
                 Logu.e("background", "解码背景图失败：" + e);
@@ -169,6 +227,25 @@ public class BackgroundManager {
                 return null;
             }
         }
+    }
+
+    /**
+     * 老版本导入的图没有主色记录：解码本来就在后台线程，顺手补算一次。
+     *
+     * <p>补算结果要下次启动才生效（本次进程里主题色已经渲染完，中途换色只会让
+     * 光晕和文字色对不上，见 {@code ThemeManager.refreshSeed} 的说明）。
+     * 失败也写哨兵值，避免每次解码都重算一遍注定失败的量化。
+     */
+    private static void backfillSeedIfNeeded(Bitmap bitmap) {
+        if (bitmap == null || bitmap.isRecycled()) return;
+        //算过、且是当前算法算的，才跳过；旧版本存的颜色（哪怕当时算出来了）也要重算
+        if (SharedPreferencesUtil.getBoolean(KEY_SEED_DONE, false)
+                && SharedPreferencesUtil.getInt(KEY_SEED_VERSION, 0) == SEED_VERSION) return;
+        int seed = ImageSeeder.extractSeed(bitmap);
+        SharedPreferencesUtil.putInt(KEY_SEED, seed);
+        SharedPreferencesUtil.putBoolean(KEY_SEED_DONE, true);
+        SharedPreferencesUtil.putInt(KEY_SEED_VERSION, SEED_VERSION);
+        Logu.d("background", "背景图主色计算完成：" + Integer.toHexString(seed));
     }
 
     /**

@@ -43,7 +43,11 @@ public class SettingUIActivity extends BaseActivity {
                 CenterThreadPool.run(() -> {
                     final boolean ok = BackgroundManager.importImage(getApplicationContext(), uri);
                     runOnUiThread(() -> {
-                        if (ok) SharedPreferencesUtil.putBoolean(BackgroundManager.KEY_ENABLE, true);
+                        if (ok) {
+                            SharedPreferencesUtil.putBoolean(BackgroundManager.KEY_ENABLE, true);
+                            //图主色已在 importImage 里算好落盘，这里把已打开的页面同步换色
+                            ThemeManager.refreshSeed();
+                        }
                         if (bgSwitch != null) bgSwitch.setChecked(ok);
                         updateBgImageState();
                         MsgUtil.showMsg(ok ? "背景图已设置\n返回其他页面即可看到效果"
@@ -134,6 +138,8 @@ public class SettingUIActivity extends BaseActivity {
             bgSwitch.setChecked(BackgroundManager.isEnabled());
             bgSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 SharedPreferencesUtil.putBoolean(BackgroundManager.KEY_ENABLE, isChecked);
+                //开关决定图主色能不能当种子（关闭即回退默认配色/手选配色）
+                ThemeManager.refreshSeed();
                 updateBgImageState();
             });
 
@@ -156,6 +162,8 @@ public class SettingUIActivity extends BaseActivity {
             });
             findViewById(R.id.btn_bg_clear).setOnClickListener(view -> {
                 BackgroundManager.clear(SettingUIActivity.this);
+                //clear() 已删掉主色记录，这里让主题色立即回到手选值/默认粉
+                ThemeManager.refreshSeed();
                 bgSwitch.setChecked(false);
                 updateBgImageState();
                 MsgUtil.showMsg("已清除背景图\n返回其他页面即可看到效果");
@@ -283,7 +291,13 @@ public class SettingUIActivity extends BaseActivity {
     /** 刷新背景设置的状态文案：让用户能区分"没启用"和"启用了但还没选图" */
     private void updateBgImageState() {
         if (bgImageState == null) return;
-        bgImageState.setText(BackgroundManager.describeState(this));
+        String text = BackgroundManager.describeState(this);
+        //配色来源要说清楚：只有「没手选过主题色」时图主色才会接管，否则仍以手选值为准
+        if (ThemeManager.isSeedFromBackground()) {
+            text += "\n主题配色取自图主色 #"
+                    + String.format("%06X", ThemeManager.getEffectiveSeed() & 0xFFFFFF);
+        }
+        bgImageState.setText(text);
     }
 
     @Override

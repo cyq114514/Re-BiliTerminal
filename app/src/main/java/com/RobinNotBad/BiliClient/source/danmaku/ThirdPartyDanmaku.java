@@ -44,8 +44,7 @@ public final class ThirdPartyDanmaku {
         final File dir = new File(context.getCacheDir(), "third_danmaku");
         if (!dir.exists() && !dir.mkdirs()) return null;
         final File target = new File(dir, cacheName(animeTitle, episodeNumber));
-        if (target.exists() && target.length() > 128
-                && System.currentTimeMillis() - target.lastModified() < TTL_MS) {
+        if (isUsableCache(target)) {
             Logu.w("third-danmaku", "命中缓存：" + target.getName() + " " + target.length() + " 字节");
             return target;
         }
@@ -65,13 +64,7 @@ public final class ThirdPartyDanmaku {
                 return null;
             }
             String xml = DanmakuXml.build(comments);
-            FileOutputStream stream = new FileOutputStream(target);
-            OutputStreamWriter writer = new OutputStreamWriter(stream, "UTF-8");
-            try {
-                writer.write(xml);
-            } finally {
-                writer.close();
-            }
+            writeAtomically(target, xml);
             Logu.w("third-danmaku", "弹幕就绪：" + best.display() + " 共 " + comments.size() + " 条"
                     + " 耗时=" + (System.currentTimeMillis() - startAt) + "ms"
                     + " XML=" + target.length() + " 字节");
@@ -82,6 +75,71 @@ public final class ThirdPartyDanmaku {
                     + "ms）：" + t.getClass().getSimpleName()
                     + " " + (t.getMessage() == null ? "" : t.getMessage()));
             return null;
+        }
+    }
+
+    /**
+     * 缓存是否可用：存在、未过期、且**内容完整**。
+     *
+     * <p>为什么还要看末尾：写盘中途被系统杀掉会留下半截 XML，解析器只会静默返回 0 条，
+     * 而旧实现只看「长度 &gt; 128」，于是这一集会被当成「有缓存」继续错 7 天。
+     * 写盘已改成原子替换，这里再兜一道历史脏数据。
+     */
+    private static boolean isUsableCache(File file) {
+        if (file == null || !file.exists() || file.length() <= 128) return false;
+        if (System.currentTimeMillis() - file.lastModified() >= TTL_MS) return false;
+        return endsWithClosingTag(file);
+    }
+
+    private static boolean endsWithClosingTag(File file) {
+        java.io.RandomAccessFile raf = null;
+        try {
+            raf = new java.io.RandomAccessFile(file, "r");
+            long length = raf.length();
+            int tail = (int) Math.min(24, length);
+            raf.seek(length - tail);
+            byte[] buffer = new byte[tail];
+            raf.readFully(buffer);
+            return new String(buffer, "UTF-8").trim().endsWith("</i>");
+        } catch (Throwable t) {
+            return false;
+        } finally {
+            if (raf != null) {
+                try {
+                    raf.close();
+                } catch (Throwable ignored) {
+                    //关不上不影响结果
+                }
+            }
+        }
+    }
+
+    /**
+     * 原子写：先写 .tmp 再改名。
+     *
+     * <p>直接写目标文件时，进程被杀/断电会留下半截 XML，比「没有缓存」更糟——
+     * 它会以「有缓存」的身份活 7 天，这期间这一集一直没有弹幕。
+     */
+    private static void writeAtomically(File target, String xml) throws java.io.IOException {
+        File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
+        FileOutputStream stream = new FileOutputStream(tmp);
+        OutputStreamWriter writer = new OutputStreamWriter(stream, "UTF-8");
+        try {
+            writer.write(xml);
+        } finally {
+            writer.close();
+        }
+        if (tmp.renameTo(target)) return;
+        //部分文件系统不允许 rename 覆盖已存在文件：先删再改（删失败就明确报错，不留半成品）
+        if (target.exists() && !target.delete()) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw new java.io.IOException("无法覆盖弹幕缓存");
+        }
+        if (!tmp.renameTo(target)) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw new java.io.IOException("无法重命名弹幕缓存");
         }
     }
 

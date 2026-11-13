@@ -86,6 +86,30 @@ public class SourceException extends Exception {
     }
 
     public static SourceException http(String source, Phase phase, int code) {
-        return new SourceException(phase, Kind.HTTP, source, "HTTP " + code);
+        return new SourceException(phase, Kind.HTTP, source, describeHttp(code));
+    }
+
+    /**
+     * 状态码 → 一句人话。
+     *
+     * <p>为什么要翻译：用户看到的只有 {@code userMessage()} 这一行，
+     * 「HTTP 429」和「HTTP 403」的处置方式完全不同（等一会儿 / 换源或开网页解析），
+     * 光给数字等于让用户猜。
+     */
+    private static String describeHttp(int code) {
+        switch (code) {
+            case 401:
+                return "HTTP 401（站点要求登录）";
+            case 403:
+                return "HTTP 403（站点拒绝访问）";
+            case 404:
+                return "HTTP 404（页面不存在）";
+            case 429:
+                return "HTTP 429（访问过于频繁）";
+            case 468:
+                return "HTTP 468（站点要求验证码）";
+            default:
+                return code >= 500 ? "HTTP " + code + "（站点服务器错误）" : "HTTP " + code;
+        }
     }
 }

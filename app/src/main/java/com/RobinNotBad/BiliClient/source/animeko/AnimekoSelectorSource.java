@@ -105,8 +105,13 @@ public class AnimekoSelectorSource implements ThirdPartySource {
             if ("json-path-indexed".equals(format)) return searchFromJson(url);
 
             //HTML 只抓一次：主格式、备用格式、通用兜底共用同一份文档，避免同一页请求 2~3 次
-            Document document = WebFetch.getHtml(url, requestHeaders(), info.name,
+            WebFetch.Html page = WebFetch.getHtml(url, requestHeaders(), info.name,
                     SourceException.Phase.SEARCH, RuleLimits.SEARCH_TIMEOUT_MS);
+            if (!page.hasDocument()) {
+                throw new SourceException(SourceException.Phase.SEARCH, SourceException.Kind.PARSE,
+                        info.name, page.failureReason());
+            }
+            Document document = page.document;
             List<SourceSubject> subjects = null;
             SourceException primary = null;
             try {
@@ -133,15 +138,25 @@ public class AnimekoSelectorSource implements ThirdPartySource {
             }
 
             //通用兜底：从页面里认「详情页链接」。选择器全面失效时仍能列出条目，
-            //代价是可能混入侧栏的其它作品，所以日志里明确标「兜底」
-            List<SourceSubject> generic = searchGenericAnchors(document, url);
-            if (!generic.isEmpty()) {
-                Logu.d("third-diag", info.name + " 通用兜底命中 " + generic.size() + " 条");
-                return generic;
+            //代价是可能混入侧栏的其它作品，所以日志里明确标「兜底」。
+            //只在 2xx 上启用：403/503 的反爬壳页往往带着全站导航，那会把侧栏链接当成搜索结果
+            if (page.httpOk()) {
+                List<SourceSubject> generic = searchGenericAnchors(document, url);
+                if (!generic.isEmpty()) {
+                    Logu.d("third-diag", info.name + " 通用兜底命中 " + generic.size() + " 条");
+                    return generic;
+                }
             }
-            if (primary != null) throw primary;
+            if (primary != null) {
+                //页面本身就被拒（403/429…）时优先报状态码：这时「选择器没命中」只是次生现象
+                if (!page.httpOk())
+                    throw new SourceException(SourceException.Phase.SEARCH, SourceException.Kind.HTTP,
+                            info.name, "HTTP " + page.code + "（未解析到搜索结果）");
+                throw primary;
+            }
             throw new SourceException(SourceException.Phase.SEARCH, SourceException.Kind.PARSE,
-                    info.name, "没有解析到搜索结果（选择器与页面结构不匹配）");
+                    info.name, "没有解析到搜索结果（选择器与页面结构不匹配）"
+                            + (page.httpOk() ? "" : "；页面返回 HTTP " + page.code));
         } catch (SourceException e) {
             throw e;
         } catch (IllegalArgumentException e) {
@@ -268,8 +283,9 @@ public class AnimekoSelectorSource implements ThirdPartySource {
         try {
             root = JsonParser.parseString(body);
         } catch (Exception e) {
+            //带上状态码：403/429 时站点回的是 HTML 错误页，只报「不是 JSON」会把真正原因藏起来
             throw new SourceException(SourceException.Phase.SEARCH, SourceException.Kind.PARSE,
-                    info.name, "搜索响应不是 JSON：" + e.getMessage(), e);
+                    info.name, "搜索响应不是 JSON（HTTP " + response.code + "）：" + e.getMessage(), e);
         }
         JsonPathLite linkPath = JsonPathLite.parse(config.search.selectorJsonPath.selectLinks);
         JsonPathLite namePath = JsonPathLite.parse(config.search.selectorJsonPath.selectNames);
@@ -369,8 +385,13 @@ public class AnimekoSelectorSource implements ThirdPartySource {
         if (subject.detailUrl.toLowerCase(java.util.Locale.ROOT).startsWith("http://"))
             throw SourceException.config(info.name, "该源是明文 http 地址，本端只支持 https");
         throttle();
-        Document page = WebFetch.getHtml(subject.detailUrl, requestHeaders(), info.name,
+        WebFetch.Html fetched = WebFetch.getHtml(subject.detailUrl, requestHeaders(), info.name,
                 SourceException.Phase.CHANNEL, RuleLimits.RESOLVE_PAGE_TIMEOUT_MS);
+        if (!fetched.hasDocument()) {
+            throw new SourceException(SourceException.Phase.CHANNEL, SourceException.Kind.PARSE,
+                    info.name, fetched.failureReason());
+        }
+        Document page = fetched.document;
 
         String format = config.search.channelFormatId == null ? "no-channel"
                 : config.search.channelFormatId.trim();
@@ -389,7 +410,8 @@ public class AnimekoSelectorSource implements ThirdPartySource {
         }
         if (channels.isEmpty())
             throw new SourceException(SourceException.Phase.CHANNEL, SourceException.Kind.PARSE,
-                    info.name, "没有解析到剧集（选择器与页面结构不匹配）");
+                    info.name, "没有解析到剧集（选择器与页面结构不匹配）"
+                            + (fetched.httpOk() ? "" : "；页面返回 HTTP " + fetched.code));
         return channels;
     }
 

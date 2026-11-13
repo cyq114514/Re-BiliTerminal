@@ -120,9 +120,18 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
                                 + "确定要打开吗？",
                         "关闭后会【立即删除】本地已写入的日志文件（app-log.txt），"
                                 + "已抓到的日志无法恢复。\n\n"
-                                + "如果还需要这份日志，请先把它复制或发送出去，再回来关闭。\n\n"
+                                +                         "如果还需要这份日志，请先把它复制或发送出去，再回来关闭。\n\n"
                                 + "确定要关闭吗？"
                 }));
+        //弹幕渲染链路二选一：位置驱动（新，默认） vs 时钟驱动（旧）。
+        //旧链路靠 seek 纠偏，而 seek 必然清屏，表现为"整屏弹幕消失、过一会儿又冒出来"
+        //（尤其在长按加速/倍速之后，DFM 的 mSpeedOffset 无法回退）。保留开关便于一键回退对比。
+        sectionList.add(new SettingSection("switch", "弹幕按播放位置驱动",
+                "player_danmaku_feed_mode",
+                "打开后：弹幕的「何时出现」由播放位置决定，卡顿、缓冲、倍速都不会让弹幕整屏消失。"
+                        + "关闭后回退旧的时钟驱动链路（靠 seek 纠偏），仅用于对比排查。"
+                        + "改完下一个视频生效。",
+                "true"));
         //番剧进度诊断默认关闭：它会额外请求服务端并在设备上写诊断文件，
         //普通使用没必要承担这份开销与痕迹；排查番剧进度问题时才打开
         sectionList.add(new SettingSection("switch", "番剧进度诊断", "diag_readback",

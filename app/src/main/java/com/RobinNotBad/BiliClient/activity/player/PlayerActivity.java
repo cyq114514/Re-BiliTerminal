@@ -66,6 +66,7 @@ import com.RobinNotBad.BiliClient.api.InteractionVideoApi;
 import com.RobinNotBad.BiliClient.api.PlayerApi;
 import com.RobinNotBad.BiliClient.api.VideoInfoApi;
 import com.RobinNotBad.BiliClient.event.SnackEvent;
+import com.RobinNotBad.BiliClient.model.DanmakuElem;
 import com.RobinNotBad.BiliClient.model.DmSegMobileReply;
 import com.RobinNotBad.BiliClient.model.HighEnergyData;
 import com.RobinNotBad.BiliClient.model.InteractionVideoData;
@@ -122,6 +123,7 @@ import master.flame.danmaku.controller.IDanmakuView;
 import master.flame.danmaku.danmaku.loader.ILoader;
 import master.flame.danmaku.danmaku.loader.android.DanmakuLoaderFactory;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
+import master.flame.danmaku.danmaku.model.Duration;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
 import master.flame.danmaku.danmaku.model.IDanmakuIterator;
 import master.flame.danmaku.danmaku.model.IDanmakus;
@@ -129,6 +131,7 @@ import master.flame.danmaku.danmaku.model.IDisplayer;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.model.android.Danmakus;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
+import master.flame.danmaku.danmaku.util.DanmakuUtils;
 import master.flame.danmaku.danmaku.parser.IDataSource;
 import master.flame.danmaku.danmaku.parser.android.BiliDanmukuParser;
 import master.flame.danmaku.danmaku.parser.android.BiliProtobufDanmakuParser;
@@ -381,6 +384,24 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private boolean danmakuRenderFailedTipShown = false;
     //当前倍速缓存：DFM 的 prepared 回调跑在弹幕线程上，那里不能去读 SeekBar（跨线程碰 View）
     private volatile float currentSpeed = 1.0f;
+
+    // ---------- 位置驱动的弹幕投放（1.3.6 根治"弹幕整屏消失又出现"）----------
+    //原先由 DFM 自己按墙钟走时间轴，再用 seek 纠偏；因为 seek 必然清屏，一旦时钟分叉就表现为
+    //"消失→出现"。这里改成：出现时机由播放位置决定，DFM 只负责飘动。开关置 false 可回退旧链路。
+    private static final String KEY_DANMAKU_FEED_MODE = "player_danmaku_feed_mode";
+    private DanmakuFeedController danmakuFeeder;
+    /** 本次弹幕装载是否走位置驱动（和 danmakuFeeder 同时置位，供不持有台账的路径做分支） */
+    private volatile boolean danmakuFeedMode = false;
+    /** seek/起播后需要补投一屏历史弹幕：交给下一个 tick 做，避开"清屏消息还在队列里"的竞态 */
+    private volatile boolean danmakuFeedWarmup = false;
+    /** 「强制为滚动弹幕」开关快照：旧链路在解析器里做，位置驱动只能在这里补同样的语义 */
+    private boolean danmakuForceR2L = false;
+    /** 当前生效的滚动时长因子（基础速度 × 播放倍速）：变速时要拿它算新旧比例 */
+    private volatile float danmakuFactor = 1.0f;
+    /** 屏蔽词原始串缓存：位置驱动是逐条判定，每次读 SharedPreferences 会拖慢 tick */
+    private String blockedWordsCache;
+    /** 屏蔽词切分结果，随 blockedWordsCache 同生命周期 */
+    private java.util.List<String> blockedWordsParsed;
 
     private int screen_width, screen_height;
     /** 取流响应的真实时长（毫秒）：换P/换清晰度取流成功后回填（F4），0=未取得 */
@@ -1885,7 +1906,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (speed_values[i] == savedSpeed && i != 2) {
                     ijkPlayer.setSpeed(speed_values[i]);
                     currentSpeed = speed_values[i];
-                    if (mDanmakuView != null) mDanmakuView.setSpeed(speed_values[i]);
+                    //位置驱动模式下弹幕时钟恒 1.0；此时 streamDanmaku 可能还没跑（mContext 为 null），
+                    //滚动速度因子由 prepared 回调统一补设，所以这里只管旧的时钟驱动链路
+                    if (mDanmakuView != null && !isDanmakuFeedMode())
+                        mDanmakuView.setSpeed(speed_values[i]);
                     text_speed.setText(speed_strs[i]);
                     seekbar_speed.setProgress(i);   //fromUser=false，监听器不会重复应用
                     break;
@@ -2836,6 +2860,126 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         return parser;
     }
 
+    /** 位置驱动开关（实验室项）：关掉即回退"整包装载 + 时钟纠偏"的旧链路 */
+    private static boolean isDanmakuFeedMode() {
+        return SharedPreferencesUtil.getBoolean(KEY_DANMAKU_FEED_MODE, true);
+    }
+
+    /** 空解析器：位置驱动模式下弹幕由 {@link #feedDanmaku} 逐条投放，引擎里不预装任何条目 */
+    private BaseDanmakuParser createEmptyParser() {
+        return new BaseDanmakuParser() {
+            @Override
+            protected Danmakus parse() {
+                return new Danmakus();
+            }
+        };
+    }
+
+    /**
+     * 按播放位置投放弹幕（位置驱动模式的核心，挂在既有的 250ms 进度 tick 上）。
+     *
+     * <p>为什么这样就不会"整屏消失"：弹幕的可见性不再由引擎时钟决定，而是每次 tick 把
+     * {@code (上次位置, 当前位置]} 区间内的弹幕投进去，{@code time} 一律设成"引擎时钟+1"。
+     * 引擎时钟跑快跑慢都只影响飘动速度，不会出现"该出现的没出现"。
+     *
+     * <p>暂停/缓冲时进度 tick 本身不跑（见 startProgressTimer 的 isPlaying 判断），
+     * 所以恢复后游标仍停在暂停前的位置，不会漏投也不会补投一大段。
+     */
+    private void feedDanmaku(long positionMs) {
+        DanmakuFeedController feeder = danmakuFeeder;
+        IDanmakuView view = mDanmakuView;
+        if (!danmakuFeedMode || feeder == null || view == null || destroyed) return;
+        if (!view.isPrepared()) return;
+        //用户关掉弹幕时不投放，只把游标跟上：重新打开时从当前位置开始，
+        //而不是把关闭期间攒下的几百条一次性倒出来
+        if (!isDanmakuVisible) {
+            feeder.reset(positionMs);
+            danmakuFeedWarmup = true;
+            return;
+        }
+        boolean warmup = danmakuFeedWarmup;
+        danmakuFeedWarmup = false;
+        java.util.List<DanmakuElem> batch = feeder.take(positionMs, warmup);
+        if (batch.isEmpty()) return;
+        long clock = safeDanmakuTime();
+        if (clock < 0) clock = positionMs;
+        for (DanmakuElem e : batch) addDanmakuElem(view, e, clock);
+        Logu.v("弹幕投放", (warmup ? "补投 " : "投放 ") + batch.size()
+                + " 条 pos=" + positionMs + " 游标=" + feeder.cursor());
+    }
+
+    /**
+     * 把一条台账弹幕投进引擎。
+     *
+     * <p>{@code time} 用"引擎当前时钟 + 1ms"而不是原始的 {@code progress}：位置驱动的语义就是
+     * "现在该出现"，引擎只按 time 判断可见性，给一个 1ms 之后的时刻既不会跳帧也不会被判过期。
+     */
+    private void addDanmakuElem(IDanmakuView view, DanmakuElem e, long clockMs) {
+        if (e == null || e.content == null || e.content.isEmpty()) return;
+        int mode = e.mode;
+        //高级弹幕(7)/代码弹幕(8)：DFM 没有对应的渲染实现，与旧链路一样直接丢弃
+        if (mode == 7 || mode == 8) return;
+        //「强制为滚动弹幕」：把顶部/底部弹幕也改成从右往左，语义与旧链路一致
+        if (danmakuForceR2L) mode = 1;
+        if (isBlockedDanmaku(e.content)) return;
+        try {
+            BaseDanmaku item = mContext.mDanmakuFactory.createDanmaku(mode, mContext);
+            if (item == null) return;
+            //倍速下的时长快照：DFM 的滚动 Duration 是**所有弹幕共享的一个对象**，
+            //直接改 factor 会让在屏弹幕的位置当场跳变（加速瞬间整屏消失、减速时倒着退回去）。
+            //每条弹幕投出时把当前时长拷一份，之后切倍速只影响新投的弹幕，新旧自然过渡。
+            if (item.getDuration() > 0) item.setDuration(new Duration(item.getDuration()));
+            item.time = clockMs + 1;
+
+            String text = e.content;
+            int color = e.color | 0xFF000000;
+            int shadow = color <= Color.BLACK ? Color.WHITE : Color.BLACK;
+            float sizeScale = 1f;
+            //空降弹幕高亮：与整包装载时同一套钩子，开关关掉则按服务端原样渲染
+            if (SharedPreferencesUtil.getBoolean("player_danmaku_airborne", true)
+                    && AIRBORNE_HIGHLIGHTER.isTimestamp(text)) {
+                color = AIRBORNE_HIGHLIGHTER.color();
+                shadow = Color.BLACK;
+                sizeScale = AIRBORNE_HIGHLIGHTER.sizeScale();
+                String prefix = AIRBORNE_HIGHLIGHTER.prefix();
+                if (prefix != null && !prefix.isEmpty()) text = prefix + text;
+            }
+
+            DanmakuUtils.fillText(item, text);
+            item.textSize = e.fontsize * (mContext.getDisplayer().getDensity() - 0.6f) * sizeScale;
+            item.textColor = color;
+            item.textShadowColor = shadow;
+            view.addDanmaku(item);
+        } catch (Throwable t) {
+            //单条失败只丢这一条：整批中断会让后面几十条一起消失
+            Logu.e("弹幕投放", "单条投放失败: " + t);
+        }
+    }
+
+    /** 弹幕屏蔽词命中判定；每次调用读一次存档（与旧链路"每次装载读一次"的开销同量级）*/
+    private boolean isBlockedDanmaku(String content) {
+        if (content == null || content.isEmpty()) return false;
+        String raw = blockedWordsCache;
+        if (raw == null) {
+            raw = SharedPreferencesUtil.getString("danmaku_blocked_words", "");
+            blockedWordsCache = raw == null ? "" : raw;
+            blockedWordsParsed = null;
+        }
+        if (raw.trim().isEmpty()) return false;
+        java.util.List<String> words = blockedWordsParsed;
+        if (words == null) {
+            words = new ArrayList<>();
+            for (String w : raw.split("[,，、;；\\s]+")) {
+                if (!w.trim().isEmpty()) words.add(w.trim());
+            }
+            blockedWordsParsed = words;
+        }
+        for (int i = 0; i < words.size(); i++) {
+            if (content.contains(words.get(i))) return true;
+        }
+        return false;
+    }
+
     private void streamDanmaku(String danmakuFile) {
         streamDanmaku(danmakuFile, null);
     }
@@ -2887,8 +3031,26 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 .setMaximumLines(maxLinesPair)
                 .setDanmakuTransparency(SharedPreferencesUtil.getFloat("player_danmaku_transparency", 0.5f))
                 .preventOverlapping(overlap);
+        //记下当前因子：建context时已经按设置值设过一次，变速时要用它算新旧比例
+        float initFactor = SharedPreferencesUtil.getFloat("player_danmaku_speed", 1.0f);
+        danmakuFactor = initFactor > 0f ? initFactor : 1f;
 
-        BaseDanmakuParser mParser = createParser(danmakuFile, protobufSegments);
+        //位置驱动：protobuf 通道建立台账，DFM 只拿一个空解析器（不再把上万条灌进引擎）。
+        //旧版 XML 通道没有 progress 维度上的现成结构，仍走原来的整包装载。
+        danmakuFeedMode = protobufSegments != null && isDanmakuFeedMode();
+        //强制滚动弹幕：旧链路在 BiliProtobufDanmakuParser 里改 mode，位置驱动在这里读同一份存档
+        danmakuForceR2L = SharedPreferencesUtil.getBoolean("player_danmaku_forceR2L", false);
+        if (danmakuFeedMode) {
+            danmakuFeeder = new DanmakuFeedController(DanmakuFeedController.flatten(protobufSegments));
+            danmakuFeedWarmup = true;
+            Logu.w("弹幕装载", "位置驱动：台账 " + danmakuFeeder.size() + " 条，引擎只做渲染");
+        } else {
+            danmakuFeeder = null;
+        }
+
+        BaseDanmakuParser mParser = danmakuFeedMode
+                ? createEmptyParser()
+                : createParser(danmakuFile, protobufSegments);
 
         mDanmakuView.setCallback(new DrawHandler.Callback() {
             @Override
@@ -2912,7 +3074,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 //引擎实际装载了多少条：0 条=数据层为空；>0 条而屏幕空白=渲染层停摆（看门狗负责捞）
                 Logu.w("弹幕同步", "prepared 引擎条数=" + danmakuCount(mParser)
                         + " anchor=" + anchor + "ms 播放位置=" + video_now);
-                if (anchor > 0) {
+                if (danmakuFeedMode) {
+                    //位置驱动：引擎时钟只负责"飘多快"，不再承担"何时出现"，所以这里不 seek。
+                    //也不在这里定游标——此刻 video_now 可能是旧实例的位置（换清晰度/切听视频）甚至是 0，
+                    //交给下一个 250ms tick 用真实播放位置初始化（见 DanmakuFeedController#take 的首调分支）
+                    danmakuFeedWarmup = true;
+                    Logu.w("弹幕投放", "prepared anchor=" + anchor + "ms 台账="
+                            + (danmakuFeeder == null ? -1 : danmakuFeeder.size()) + " 等首个 tick 定游标");
+                } else if (anchor > 0) {
                     Logu.w("弹幕跳转", "source=PREPARED pos=" + anchor + " 引擎条数=" + danmakuCount(mParser));
                     danmakuView.seekTo(anchor);
                     lastDanmakuSyncMs = System.currentTimeMillis();
@@ -2921,10 +3090,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 //高能进度条的密度统计放在这里：只有走到 prepared，弹幕集合才按正确视口解析完
                 //（parse 依赖 DanmakuFactory 的 viewport，早于此时调用要么 NPE 要么算出错误速度）。
                 //本回调就跑在 DFM 线程上，遍历弹幕集合不会与绘制线程互踩共享迭代器。
-                loadHighEnergyData(mParser);
+                if (danmakuFeedMode) loadHighEnergyData();
+                else loadHighEnergyData(mParser);
                 //prepare() 之后 handler 才 isPrepared，此前 onPrepared 里的 setSpeed 会被静默丢弃，
-                //倍速播放时弹幕时钟就停在 1x——这里补一次
-                danmakuView.setSpeed(currentPlayerSpeed());
+                //倍速播放时弹幕时钟就停在 1x——这里补一次。
+                //位置驱动模式下时钟恒定 1.0，倍速由滚动时长因子体现（见 applyDanmakuScrollSpeed）
+                if (danmakuFeedMode) {
+                    danmakuView.setSpeed(1.0f);
+                    applyDanmakuScrollSpeed(currentPlayerSpeed());
+                } else {
+                    danmakuView.setSpeed(currentPlayerSpeed());
+                }
                 Logu.d("倍速", "prepared 后同步弹幕倍速 " + currentPlayerSpeed() + "x");
                 //弹幕通常晚于取流加载完：如果用户在这之前就按了暂停，上面的 seekTo 会顺带把
                 //绘制线程拉起来（DFM 内部 SEEK_POS → RESUME），这里再压一次
@@ -4620,6 +4796,27 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             return;
         }
         if (positionMs < 0) positionMs = 0;
+        if (danmakuFeedMode) {
+            //位置驱动：只清屏 + 重整游标，绝不碰引擎时钟（动它就会累积 mSpeedOffset 且无法回退）。
+            //补投交给下一个 250ms tick：clearDanmakusOnScreen 是投递到 DFM 线程的异步消息，
+            //这里立刻 addDanmaku 会被随后到达的清屏消息一起抹掉。
+            resetDanmakuTick();
+            if (danmakuFeeder != null) danmakuFeeder.reset(positionMs);
+            danmakuFeedWarmup = true;
+            if (mDanmakuView.isPrepared()) {
+                pendingDanmakuSeekMs = -1;
+                //两步都要做：removeAllDanmakus 清台账侧（danmakuList），否则旧弹幕会在下一帧
+                //被 drawDanmakus 的窗口重新捞回屏幕；clearDanmakusOnScreen 清渲染器与当前屏集合
+                mDanmakuView.removeAllDanmakus(true);
+                mDanmakuView.clearDanmakusOnScreen();
+                Logu.w("弹幕跳转", "source=" + source + " pos=" + positionMs + " 位置驱动：清屏并重整游标");
+            } else {
+                pendingDanmakuSeekMs = positionMs;
+                Logu.w("弹幕跳转", "source=" + source + " pos=" + positionMs + " 引擎未就绪，记录待补投");
+            }
+            pauseDanmakuIfUserPaused();
+            return;
+        }
         //主动跳转后先进入冷却：播放器 seek 需要时间才真正到位，期间不能反过来把弹幕拉回旧位置
         lastDanmakuSyncMs = System.currentTimeMillis();
         //同时打开落点校正窗口：ijk 关键帧落点与请求位置的偏差由窗口期内的 tick 尽快修正
@@ -4789,6 +4986,18 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * <p>只允许在后台定时任务里读播放器位置，绝不能在 DFM 的线程里读（见 updateTimer 的注释）。
      */
     private void syncDanmakuIfDrifted(long playerPositionMs) {
+        if (danmakuFeedMode) {
+            //位置驱动：没有第二套时钟，就没有可纠的偏差。这里只按位置投放，并保留心跳用于诊断。
+            //卡顿/缓冲/倍速都走这条路径，全部不需要 seek。
+            if (isPrepared && isPlaying && !isSeeking) {
+                IDanmakuView view = mDanmakuView;
+                if (view != null && view.isPrepared()) {
+                    feedDanmaku(playerPositionMs);
+                    maybeDanmakuHeartbeat(playerPositionMs, false);
+                }
+            }
+            return;
+        }
         if (!isPrepared || !isPlaying || isSeeking || !isDanmakuVisible) {
             resetDanmakuTick();
             return;
@@ -4960,8 +5169,97 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void applySpeed(float speed, String source) {
         currentSpeed = speed;
         if (ijkPlayer != null) ijkPlayer.setSpeed(speed);
-        if (mDanmakuView != null) mDanmakuView.setSpeed(speed);
-        Logu.d("倍速", source + " -> " + speed + "x（播放器与弹幕同步设置）");
+        if (danmakuFeedMode) {
+            //位置驱动：引擎时钟恒 1.0——把倍速喂给时钟会累积 mSpeedOffset 且无法回退
+            //（见 DrawHandler.syncTimer），这正是之前"弹幕整屏消失又出现"的根源。
+            //"弹幕跟随视频倍速"改用滚动时长因子实现，只改飞行时长、不碰时间轴。
+            applyDanmakuScrollSpeed(speed);
+        } else if (mDanmakuView != null) {
+            mDanmakuView.setSpeed(speed);
+        }
+        Logu.d("倍速", source + " -> " + speed + "x（弹幕"
+                + (danmakuFeedMode ? "时钟 1.0x + 滚动时长 ×" + speed + "）" : "时钟同步）"));
+    }
+
+    /**
+     * 弹幕跟随视频倍速（位置驱动模式）。
+     *
+     * <p>等价于 PiliPlus 的 {@code duration / speed}：只改每条弹幕的飞行时长，
+     * 不改变引擎时钟，所以既跟得上倍速，又不会产生任何累积偏移。
+     *
+     * <p>切换前先调 {@link #retimeOnScreenDanmaku} 把在屏弹幕按新旧时长重定基准，
+     * 保证位置连续——加速时不会整屏消失重来，减速时也不会往回跳。
+     */
+    private void applyDanmakuScrollSpeed(float speed) {
+        DanmakuContext ctx = mContext;
+        if (ctx == null) return;
+        float base = SharedPreferencesUtil.getFloat("player_danmaku_speed", 1.0f);
+        if (base <= 0f) base = 1f;
+        if (speed <= 0f) speed = 1f;
+        float target = base * speed;
+        float old = danmakuFactor > 0f ? danmakuFactor : base;
+        if (Math.abs(target - old) < 0.001f) return;
+        //顺序不能反：必须先用**旧时长**算出重定基准后的 time，再切因子；
+        //切因子会触发全局重测量，那时新时长已经生效，位置才对得上
+        retimeOnScreenDanmaku(old, target);
+        ctx.setScrollSpeedFactor(target);
+        danmakuFactor = target;
+    }
+
+    /**
+     * 倍速切换时让**已经在屏的弹幕**也换速度，同时保持位置连续。
+     *
+     * <p>滚动弹幕的屏幕位置只取决于 {@code elapsed / duration} 这个比值
+     * （{@code R2LDanmaku#getAccurateLeft}）。时长从 D 变成 D' 时，只要把基准时间
+     * 反向挪成 {@code time' = now - elapsed × D'/D}，比值不变、位置不动，
+     * 之后它就按新时长继续移动——这就是"原地变速"。
+     *
+     * <p>顶部/底部弹幕位置固定，只影响剩余停留时间，不动它们。
+     */
+    private void retimeOnScreenDanmaku(float oldFactor, float newFactor) {
+        IDanmakuView view = mDanmakuView;
+        if (view == null || newFactor <= 0f) return;
+        IDanmakus visible;
+        try {
+            visible = view.getCurrentVisibleDanmakus();
+        } catch (Throwable t) {
+            return;
+        }
+        if (visible == null || visible.isEmpty()) return;
+        long now = safeDanmakuTime();
+        if (now < 0) return;
+        float ratio = oldFactor / newFactor;
+        if (ratio <= 0f) return;
+        int changed = 0;
+        try {
+            IDanmakuIterator it = visible.iterator();
+            while (it.hasNext()) {
+                BaseDanmaku d = it.next();
+                if (d == null) continue;
+                int type = d.getType();
+                if (type != BaseDanmaku.TYPE_SCROLL_RL && type != BaseDanmaku.TYPE_SCROLL_LR) continue;
+                long dur = d.getDuration();
+                if (dur <= 0) continue;
+                //基准必须用弹幕自己的计时器（layout() 用的就是它）；getCurrentTime() 会扣掉
+                //mRemainingTime，和 layout 的基准差几十毫秒，重定之后仍会有细小的横向跳变
+                DanmakuTimer itemTimer = d.getTimer();
+                long ref = itemTimer != null ? itemTimer.currMillisecond : now;
+                long elapsed = ref - d.time;
+                //刚投放（elapsed<=0）或已经过期的不动：没有位置需要守恒
+                if (elapsed <= 0 || elapsed >= dur) continue;
+                long newDur = (long) (dur * (double) ratio);
+                if (newDur <= 0) continue;
+                d.time = ref - (long) (elapsed * (double) newDur / dur);
+                d.setDuration(new Duration(newDur));
+                changed++;
+            }
+        } catch (Throwable t) {
+            Logu.e("倍速", "在屏弹幕重定基准失败: " + t);
+            return;
+        }
+        if (changed > 0) {
+            Logu.d("倍速", "在屏弹幕变速 " + changed + " 条（系数 " + oldFactor + " -> " + newFactor + "）");
+        }
     }
 
     private void toggleAudioOnlyMode() {
@@ -5182,6 +5480,65 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         } catch (Throwable t) {
             //统计失败只该"没有波形"，不能让播放页崩
             Logu.e("高能进度条", "弹幕密度统计失败: " + t);
+            return;
+        }
+        final float[] result = events;
+        runOnUiThread(() -> {
+            if (destroyed || seekbar_progress == null) return;
+            seekbar_progress.setHighEnergyData(result, stepSec);
+        });
+    }
+
+    /**
+     * 高能进度条数据（位置驱动模式）：直接对台账按 10s 分桶统计。
+     *
+     * <p>语义与整包装载时完全一致（弹幕越密的一段越"热"），只是不再依赖解析器——
+     * 位置驱动模式下解析器是空的，走原来那条路会得到一条空波形。
+     */
+    private void loadHighEnergyData() {
+        if (seekbar_progress == null || destroyed) return;
+        if (!SharedPreferencesUtil.getBoolean("player_high_energy", false)) {
+            clearHighEnergyOnUi("功能已禁用");
+            return;
+        }
+        DanmakuFeedController feeder = danmakuFeeder;
+        if (feeder == null || feeder.isEmpty()) {
+            clearHighEnergyOnUi("没有弹幕，清掉波形");
+            return;
+        }
+        final int stepSec = 10;
+        float[] events;
+        try {
+            java.util.List<DanmakuElem> ledger = feeder.ledger();
+            //第一遍：最大时间（决定桶数）
+            long maxTime = 0;
+            for (int i = 0; i < ledger.size(); i++) {
+                DanmakuElem e = ledger.get(i);
+                if (e == null || e.progress <= 0) continue;
+                if (e.progress > maxTime) maxTime = e.progress;
+            }
+            if (maxTime <= 0) {
+                clearHighEnergyOnUi("弹幕时间全为 0，清掉波形");
+                return;
+            }
+            //桶数与整包装载口径一致：取"视频总时长"和"最后一条弹幕时间"的较大者
+            long spanMs = videoDurationMs > maxTime ? videoDurationMs : maxTime;
+            int buckets = (int) (spanMs / (stepSec * 1000L)) + 1;
+            events = new float[buckets];
+            //第二遍：按时间落桶
+            int total = 0;
+            for (int i = 0; i < ledger.size(); i++) {
+                DanmakuElem e = ledger.get(i);
+                if (e == null || e.progress <= 0) continue;
+                int b = e.progress / (stepSec * 1000);
+                if (b >= 0 && b < buckets) {
+                    events[b] += 1f;
+                    total++;
+                }
+            }
+            Logu.d("高能进度条", "位置驱动密度：条数=" + total + " 桶数=" + buckets + " 步长=" + stepSec + "s");
+        } catch (Throwable t) {
+            Logu.e("高能进度条", "位置驱动密度统计失败: " + t);
             return;
         }
         final float[] result = events;

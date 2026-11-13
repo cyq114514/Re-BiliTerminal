@@ -42,6 +42,8 @@ public final class SourceHttp {
         public String finalUrl = "";
         /** Content-Type 原文（可能为空） */
         public String contentType = "";
+        /** 响应头 Retry-After 解析出的等待毫秒数；-1 = 没带或解析不出（429 退避用） */
+        public long retryAfterMs = -1L;
 
         public String charset() {
             if (contentType == null) return null;
@@ -188,6 +190,7 @@ public final class SourceHttp {
         result.code = response.code();
         result.finalUrl = url;
         result.contentType = response.header("Content-Type", "");
+        result.retryAfterMs = parseRetryAfter(response.header("Retry-After"));
 
         ResponseBody body = response.body();
         if (body == null) return result;
@@ -230,5 +233,34 @@ public final class SourceHttp {
             }
         }
         return merged;
+    }
+
+    /**
+     * 解析 Retry-After：既支持秒数（{@code "120"}），也支持 HTTP-date。
+     *
+     * @return 需要等待的毫秒数；没带、格式不认识、或时间已过去都返回 -1，
+     * 由调用方用自己的默认退避（不在这里猜「站点想让我等多久」）
+     */
+    private static long parseRetryAfter(String value) {
+        if (value == null) return -1L;
+        String text = value.trim();
+        if (text.isEmpty()) return -1L;
+        try {
+            long seconds = Long.parseLong(text);
+            return seconds < 0 ? -1L : seconds * 1000L;
+        } catch (NumberFormatException ignored) {
+            //不是秒数，再按 HTTP-date 试
+        }
+        try {
+            java.text.SimpleDateFormat format = new java.text.SimpleDateFormat(
+                    "EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
+            format.setTimeZone(java.util.TimeZone.getTimeZone("GMT"));
+            java.util.Date date = format.parse(text);
+            if (date == null) return -1L;
+            long wait = date.getTime() - System.currentTimeMillis();
+            return wait > 0 ? wait : -1L;
+        } catch (Exception ignored) {
+            return -1L;
+        }
     }
 }

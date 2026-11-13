@@ -20,12 +20,15 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -38,19 +41,30 @@ import okhttp3.ResponseBody;
  *
  * <p><b>为什么必须自建 OkHttpClient</b>：{@link NetWorkUtil} 的全局客户端会把 B 站 Cookie /
  * Origin / Referer 注入每个请求，且关闭了重定向跟随并只允许跳回 B 站域。拿它请求 api.bgm.tv
- * 等于把 SESSDATA 交给第三方，所以这里一切从零构建：不带 Cookie、只走 https、独立 UA、
- * 关闭跨站重定向跟随（只允许同 host 内的 https 跳转）。
+ * 等于把 SESSDATA 交给第三方，所以这里一切从零构建：不带 Cookie、只走 https、独立 UA。
  *
- * <p><b>镜像</b>：国内网络普遍无法直连 api.bgm.tv。这里按「镜像优先、官方兜底」的顺序
- * 逐个尝试真实请求，第一个成功者被记住 24 小时（见 {@link #candidateBases()}）。
- * 实测可用的镜像：{@code https://api.bgmapi.com}（api.bgm.tv 的完整透明反代）、
- * {@code https://api.kazumi.fyi}（Kazumi 官方镜像，仅部分路径 + 独立季节时间表接口）。
+ * <p><b>接口源</b>：国内网络普遍无法直连 api.bgm.tv，主通道换成带 Basic 鉴权的反代
+ * {@link #BASE_PROXY}（文档：Bangumi 反代 · 接入说明）。反代要求三个头——{@code Authorization}、
+ * 以 {@code ReBiliClient/} 开头的 {@code User-Agent}、{@code X-Rebili-Device}——统一由网络拦截器
+ * 加（见 {@link #client()}）。凭据编进 {@code BuildConfig.BGM_PROXY_AUTH}（local.properties /
+ * CI secret 注入，不入库）：为空时反代不进候选，只走 api.bgm.tv 直连。
+ *
+ * <p>逐个候选真实请求，第一个成功者被记住 24 小时（见 {@link #candidateBases()}）。
+ *
+ * <p><b>封面图不走反代</b>：反代的 {@code /lain/*} 图片路由实测 404（302 跳过去是 nginx 404 页），
+ * 图片链路维持 wsrv.nl 代理（见 {@link #imageFor(String, int)}），与接口源解耦。
  */
 public class BgmApi {
 
+    /** 反代入口：只开放 8443（HTTPS/HTTP2），域名证书正常。文档给的 IP 兜底（证书 6 天）未接入 */
+    private static final String BASE_PROXY = "https://bangumi.moe.zsapp.asia:8443/basic";
+    private static final String PROXY_HOST = "bangumi.moe.zsapp.asia";
+    private static final int PROXY_PORT = 8443;
     private static final String BASE_DIRECT = "https://api.bgm.tv";
-    private static final String BASE_BGMAPI = "https://api.bgmapi.com";
+    /** 仅用于热门榜单（反代没有榜单接口）；通用 /v0 路径在它上面会 401 */
     private static final String BASE_KAZUMI = "https://api.kazumi.fyi";
+    /** 反代按设备去重统计的标识：一台设备一个固定值，只存摘要，内容随意 */
+    private static final String DEVICE_ID_KEY = "bgm_device_id";
 
     /** 服务端把 search 的 limit 硬钳在 20（请求 100 也只回 20），分页必须按 20 走 */
     public static final int PAGE_SIZE = 20;
@@ -67,15 +81,65 @@ public class BgmApi {
     private static final Object CLIENT_LOCK = new Object();
     private static volatile OkHttpClient client;
     private static volatile String activeBase;
+    private static volatile String deviceIdCache;
 
     private BgmApi() {
     }
 
     // ==================== 网络底座 ====================
 
+    /**
+     * 反代对 JSON 接口做 UA 白名单：必须以 {@code ReBiliClient/} 开头（区分大小写），否则 403。
+     * 同一个 UA 对 api.bgm.tv 与 kazumi 同样合法，没必要按域名分支。
+     */
     private static String userAgent() {
-        return "ReBiliTerminal/" + BuildConfig.VERSION_NAME
-                + " (Android " + Build.VERSION.SDK_INT + ")";
+        return "ReBiliClient/" + BuildConfig.VERSION_NAME
+                + " (ReBiliTerminal; Android " + Build.VERSION.SDK_INT + ")";
+    }
+
+    /** 反代凭证：完整请求头值（含 "Basic " 前缀）；空字符串 = 未配置，反代不可用 */
+    private static String proxyAuth() {
+        String auth = BuildConfig.BGM_PROXY_AUTH;
+        return auth == null ? "" : auth.trim();
+    }
+
+    public static boolean isProxyConfigured() {
+        return !proxyAuth().isEmpty();
+    }
+
+    private static boolean isProxyUrl(HttpUrl url) {
+        return url != null && url.isHttps() && url.port() == PROXY_PORT
+                && PROXY_HOST.equalsIgnoreCase(url.host());
+    }
+
+    /**
+     * 设备标识：一台设备固定一个 UUID。
+     *
+     * <p>为什么存主配置而不是 {@link BgmCache}：BgmCache 有按写入时间淘汰季度键的逻辑，
+     * 设备标识被顺手淘汰就会让服务端把同一台设备算成新设备。
+     * 取不到存储时退回进程内随机值——只影响“有多少台设备”这项统计，不影响功能。
+     */
+    private static String deviceId() {
+        String cached = deviceIdCache;
+        if (cached != null) return cached;
+        synchronized (CLIENT_LOCK) {
+            if (deviceIdCache == null) {
+                String value = null;
+                try {
+                    value = SharedPreferencesUtil.getString(DEVICE_ID_KEY, null);
+                } catch (Throwable ignored) {
+                }
+                if (value == null || value.isEmpty()) {
+                    value = UUID.randomUUID().toString();
+                    try {
+                        SharedPreferencesUtil.putString(DEVICE_ID_KEY, value);
+                    } catch (Throwable ignored) {
+                    }
+                }
+                deviceIdCache = value;
+            }
+            return deviceIdCache;
+        }
     }
 
     private static OkHttpClient client() {
@@ -83,11 +147,23 @@ public class BgmApi {
         synchronized (CLIENT_LOCK) {
             if (client == null) {
                 client = NetWorkUtil.setOkHttpSsl(new OkHttpClient.Builder())
-                        //跟随重定向有风险（镜像可能把人带到任意域），但 Bangumi 的图片/详情
-                        //偶尔会 301 到同域新路径；这里宁可少跟随，只在同一 host 内自动跳
+                        //跟随重定向有风险（反代可能把人带到任意域），但取封面确实需要跟一跳
+                        //同 host 的 https 302；凭据只在网络拦截器里按目标 host 精确附加，跟到外域也不会带出去
                         .followRedirects(true)
                         .followSslRedirects(true)
                         .retryOnConnectionFailure(true)
+                        //反代三件套必须挂网络拦截器：应用拦截器只跑第一次请求，302 之后的第二跳
+                        //收不到头（反代文档第 6 节专门警告的坑）；网络拦截器对每一跳都执行
+                        .addNetworkInterceptor(chain -> {
+                            Request request = chain.request();
+                            if (!isProxyUrl(request.url())) return chain.proceed(request);
+                            Request.Builder builder = request.newBuilder()
+                                    .header("User-Agent", userAgent())
+                                    .header("X-Rebili-Device", deviceId());
+                            String auth = proxyAuth();
+                            if (!auth.isEmpty()) builder.header("Authorization", auth);
+                            return chain.proceed(builder.build());
+                        })
                         .connectTimeout(6, TimeUnit.SECONDS)
                         .readTimeout(10, TimeUnit.SECONDS)
                         .dns(new NetWorkUtil.Inet4Selector())
@@ -100,9 +176,10 @@ public class BgmApi {
     /**
      * 候选 base，按「最可能可用」排序。
      *
-     * <p>顺序理由：目标用户在国内，api.bgm.tv 基本连不上，所以镜像排前面；
-     * 直连垫底（海外用户/开代理的用户命中它）。用户显式指定时只试那一个，
-     * 避免「设置成直连却偷偷走镜像」这种不可预期的行为。
+     * <p>顺序理由：目标用户在国内，api.bgm.tv 既被 DNS 污染又被限流，所以反代排前面；
+     * 直连垫底（海外用户/开代理的用户命中它）。反代凭据没注入时不把反代放进候选——
+     * 放进去只会白打一次 401。用户显式指定时只试那一个，
+     * 避免「设置成直连却偷偷走反代」这种不可预期的行为。
      */
     private static List<String> candidateBases() {
         List<String> bases = new ArrayList<>();
@@ -118,38 +195,38 @@ public class BgmApi {
                 && isKnownBase(remembered)) {
             bases.add(remembered);
         }
-        //不再把 api.kazumi.fyi 当通用候选：实测它的 /v0/* 返回 401（需要 Kazumi 自己的
-        //AppID 签名），只有 /kazumi/v1/popular/subjects 免签可用。放进候选只会让每次
-        //兜底都白打一次 401。热门榜仍然固定用它，见 getPopular()。
-        for (String base : new String[]{BASE_BGMAPI, BASE_DIRECT}) {
-            if (!bases.contains(base)) bases.add(base);
-        }
+        //kazumi 不进通用候选：它的 /v0/* 需要自己的 AppID 签名（实测 401），只有
+        ///kazumi/v1/popular/subjects 免签可用，热门榜仍固定用它，见 getPopular()
+        if (isProxyConfigured() && !bases.contains(BASE_PROXY)) bases.add(BASE_PROXY);
+        if (!bases.contains(BASE_DIRECT)) bases.add(BASE_DIRECT);
         return bases;
     }
 
     private static boolean isKnownBase(String base) {
-        //不含 kazumi：旧版本可能把它记成 active_base，通用路径会 401，直接忽略这条缓存
-        return BASE_DIRECT.equals(base) || BASE_BGMAPI.equals(base);
+        //只认当前两套。历史版本把 api.bgmapi.com / api.kazumi.fyi 记进过 active_base，
+        //升级后必须判为无效，否则 24 小时内还会继续往已弃用的镜像打请求
+        return BASE_PROXY.equals(base) || BASE_DIRECT.equals(base);
     }
 
     private static String toBase(String mode) {
         switch (mode) {
             case "direct":
                 return BASE_DIRECT;
-            case "kazumi":
-                //kazumi 镜像只对 /kazumi/v1/* 免签，通用 /v0/* 需要它的 AppID 签名（实测 401）。
-                //用户选「kazumi」时把通用请求落到 bgmapi，避免整页 401；热门榜始终走 kazumi。
-                return BASE_BGMAPI;
+            case "proxy":
             case "bgmapi":
+            case "kazumi":
             default:
-                return BASE_BGMAPI;
+                //旧版本的 bgmapi/kazumi 模式值一并映射到反代；凭据缺失时反代必然 401，
+                //此时退回直连，而不是让用户看到整页错误
+                return isProxyConfigured() ? BASE_PROXY : BASE_DIRECT;
         }
     }
 
     /** 当前实际生效的 base；null 表示还没成功过任何一次请求 */
     public static String getActiveBase() {
-        if (activeBase != null) return activeBase;
-        return BgmCache.get(ACTIVE_BASE_KEY);
+        String base = activeBase;
+        if (base == null) base = BgmCache.get(ACTIVE_BASE_KEY);
+        return isKnownBase(base) ? base : null;
     }
 
     public static boolean isUsingMirror() {
@@ -197,7 +274,7 @@ public class BgmApi {
         }
     }
 
-    private static String execute(String url, String method, String jsonBody) throws IOException {
+    private static Request buildBgmRequest(String url, String method, String jsonBody) {
         Request.Builder builder = new Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent())
@@ -213,11 +290,30 @@ public class BgmApi {
         } else {
             builder.get();
         }
+        return builder.build();
+    }
 
+    private static String execute(String url, String method, String jsonBody) throws IOException {
         Response response = null;
         try {
-            response = client().newCall(builder.build()).execute();
+            response = client().newCall(buildBgmRequest(url, method, jsonBody)).execute();
+            if (response.code() == 429) {
+                //反代按 IP 限流（JSON 8 请求/秒，突发 20），文档要求退避重试。
+                //只退避一次：全部 Bangumi 接口都是只读请求，重发安全；再失败就交给上层换源
+                response.close();
+                response = null;
+                try {
+                    Thread.sleep(800);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                response = client().newCall(buildBgmRequest(url, method, jsonBody)).execute();
+            }
             int code = response.code();
+            //反代把两种拒绝分得很清楚：先判 UA（403），再判凭证（401）。
+            //文案写进异常是为了让真机 logcat 一眼看出该改 UA 还是该换密钥
+            if (code == 401) throw new IOException("HTTP 401（反代凭证缺失或已失效）");
+            if (code == 403) throw new IOException("HTTP 403（User-Agent 未通过反代白名单）");
             if (code != 200) throw new IOException("HTTP " + code);
 
             ResponseBody body = response.body();
@@ -505,6 +601,11 @@ public class BgmApi {
      *
      * <p>为什么不用开播日期推算：新番开播日与固定放送星期并不等价（首播可能是特番），
      * 需求明确禁止把未知/不确定的条目塞进某个星期。calendar 是官方给出的唯一权威来源。
+     *
+     * <p><b>为什么优先 /p1/calendar</b>：反代只转发 {@code /v0}、{@code /p1}、{@code /lain} 三类路径，
+     * 官方的老 {@code /calendar} 不在保护范围内，实测直接断连（curl 返回 000）。p1 的同名接口
+     * 返回结构不同（{@code {"1":[{"subject":{"id":…},"watchers":…}]}}），所以这里按响应首字符
+     * 自动判形：{@code {} → p1}、{@code [] → 老版}。直连 api.bgm.tv 时 p1 会 404，自动退回老接口。
      */
     public static Map<Long, Integer> getCalendarWeekdays(boolean allowCache) throws IOException {
         String key = "calendar_weekday";
@@ -512,31 +613,66 @@ public class BgmApi {
         if (allowCache && BgmCache.isFresh(key, TTL_CALENDAR)) text = BgmCache.get(key);
 
         if (text == null) {
-            text = request("/calendar", "GET", null);
+            try {
+                text = request("/p1/calendar", "GET", null);
+            } catch (IOException p1Error) {
+                Logu.w("bgm-api", "p1/calendar 不可用，退回 /calendar：" + p1Error.getMessage());
+                text = request("/calendar", "GET", null);
+            }
             BgmCache.put(key, text);
         }
 
         Map<Long, Integer> map = new HashMap<>();
         try {
-            JSONArray days = new JSONArray(text);
-            for (int i = 0; i < days.length(); i++) {
-                JSONObject day = days.optJSONObject(i);
-                if (day == null) continue;
-                JSONObject weekday = day.optJSONObject("weekday");
-                int id = weekday == null ? 0 : weekday.optInt("id", 0);
-                if (id < 1 || id > 7) continue;
-                JSONArray items = day.optJSONArray("items");
-                if (items == null) continue;
-                for (int j = 0; j < items.length(); j++) {
-                    JSONObject item = items.optJSONObject(j);
-                    if (item == null) continue;
-                    map.put(item.optLong("id", 0), id);
-                }
-            }
+            String trimmed = text.trim();
+            if (trimmed.startsWith("{")) parseCalendarP1(new JSONObject(trimmed), map);
+            else parseCalendarLegacy(new JSONArray(trimmed), map);
         } catch (JSONException e) {
             throw new IOException("Bangumi 放送表解析失败", e);
         }
         return map;
+    }
+
+    /** p1 结构：{"1":[{subject:{id},watchers}], …, "7":[…]}，键就是放送星期 */
+    private static void parseCalendarP1(JSONObject root, Map<Long, Integer> map) {
+        Iterator<String> keys = root.keys();
+        while (keys.hasNext()) {
+            String weekdayKey = keys.next();
+            int weekday;
+            try {
+                weekday = Integer.parseInt(weekdayKey);
+            } catch (NumberFormatException e) {
+                continue;
+            }
+            if (weekday < 1 || weekday > 7) continue;
+            JSONArray items = root.optJSONArray(weekdayKey);
+            if (items == null) continue;
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                JSONObject subject = item.optJSONObject("subject");
+                long id = subject == null ? 0 : subject.optLong("id", 0);
+                if (id > 0) map.put(id, weekday);
+            }
+        }
+    }
+
+    /** 老结构：[{weekday:{id},items:[{id}]}] */
+    private static void parseCalendarLegacy(JSONArray days, Map<Long, Integer> map) {
+        for (int i = 0; i < days.length(); i++) {
+            JSONObject day = days.optJSONObject(i);
+            if (day == null) continue;
+            JSONObject weekday = day.optJSONObject("weekday");
+            int id = weekday == null ? 0 : weekday.optInt("id", 0);
+            if (id < 1 || id > 7) continue;
+            JSONArray items = day.optJSONArray("items");
+            if (items == null) continue;
+            for (int j = 0; j < items.length(); j++) {
+                JSONObject item = items.optJSONObject(j);
+                if (item == null) continue;
+                map.put(item.optLong("id", 0), id);
+            }
+        }
     }
 
     // ==================== 热门番组 ====================
@@ -550,8 +686,9 @@ public class BgmApi {
      *
      * <p>数据源两级：
      * ①Kazumi 镜像的榜单接口 {@code /kazumi/v1/popular/subjects}（实测 200，支持 limit/offset，
-     *   字段为驼峰 nameCN/metaTags，platform 是对象）；
-     * ②镜像不可用时退回 Bangumi 官方 v0 搜索按排名取（{@code sort=rank} + tag=日本）。
+     *   字段为驼峰 nameCN/metaTags，platform 是对象）。反代只转发 /v0、/p1、/lain，没有榜单接口，
+     *   所以这一级保持原样，不随接口源切换而变；
+     * ②Kazumi 不可用时退回 v0 搜索按排名取（{@code sort=rank} + tag=日本，走当前接口源）。
      * 第二条只是兜底，条数受服务端 limit=20 钳制，所以一次最多 20 条。
      */
     public static List<BgmSubject> getPopular(int limit, int offset) throws IOException {
@@ -678,6 +815,10 @@ public class BgmApi {
      * 卡片宽度却随列数变化：拿 100px 放大必糊，直接下原图又浪费流量。
      * 这里统一按像素宽请求（wsrv 会自动缩放到 w 指定的宽度）。
      * 用户关掉图片代理时原样返回，不破坏地址。
+     *
+     * <p><b>为什么不用反代取图</b>：反代 {@code /basic/v0/…/image} 会 302 到
+     * {@code /basic/lain/…}，但该路由实测是 nginx 404（2026-11-14 用同一组请求头复测），
+     * 直接切过去会全站裂图。图片链路继续走 wsrv，与接口源解耦；等反代补上 /lain 再改这一处。
      */
     public static String imageFor(String raw, int widthPx) {
         String url = raw == null ? "" : raw.trim();
@@ -887,6 +1028,8 @@ public class BgmApi {
     /** 仅供调试：当前接口源与候选顺序 */
     public static Map<String, String> debugInfo() {
         Map<String, String> info = new LinkedHashMap<>();
+        //不打印凭据本身，只打印"是否已注入"，避免把密钥抄进日志/用户反馈截图
+        info.put("proxyConfigured", String.valueOf(isProxyConfigured()));
         info.put("activeBase", String.valueOf(getActiveBase()));
         StringBuilder candidates = new StringBuilder();
         for (String base : candidateBases()) {

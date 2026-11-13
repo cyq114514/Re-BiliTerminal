@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.ui.theme;
 
 import android.graphics.Color;
 
+import com.RobinNotBad.BiliClient.util.BackgroundManager;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.google.android.material.color.utilities.Hct;
@@ -25,9 +26,13 @@ import java.util.List;
  *       不用 {@code Scheme}/{@code DynamicColor}——它们引用 {@code java.util.function}（API 24+），
  *       minSdk 19 下会崩。</li>
  *   <li><b>不做每帧计算</b>：派生结果在种子变化时算一次，之后只读字段。</li>
+ *   <li><b>种子有两个来源</b>：用户手选（持久化在 {@link #KEY_SEED}）优先；从没手选过、
+ *       且启用了自定义背景图时，用背景图主色（{@code BackgroundManager.getSeed()}）。
+ *       两者都在 {@link #resolveEffectiveSeed()} 里收敛成一个"生效种子"。</li>
  * </ul>
  *
  * <p>线程模型：只在主线程读写（设置页点击 / View 创建期），派生开销在微秒级，不加锁。
+ * 唯一要求调用方注意主线程的是 {@link #refreshSeed()}（会同步通知自绘组件重绘）。
  */
 public final class ThemeManager {
 
@@ -57,7 +62,12 @@ public final class ThemeManager {
     private static final double MIN_TONE_LIFTED = 55d;
 
     private static boolean loaded = false;
+    /** 用户手选的种子（持久化值）；等于 {@link #DEFAULT_SEED} 时可能是"没选过"，也可能是"手点了 B 站粉" */
     private static int seed = DEFAULT_SEED;
+    /** 是否手选过配色：决定背景图主色能不能接管（手选优先） */
+    private static boolean seedExplicit = false;
+    /** 实际生效的种子：手选过用手选，否则在启用背景图且取到主色时用图主色 */
+    private static int effectiveSeed = DEFAULT_SEED;
     private static int primary = DEFAULT_PRIMARY;
     private static int primarySoft = DEFAULT_PRIMARY_SOFT;
     private static int primaryBorder = DEFAULT_PRIMARY_BORDER;
@@ -107,6 +117,21 @@ public final class ThemeManager {
     }
 
     /**
+     * 实际生效的种子色：用户手选优先；没手选过且启用了自定义背景图时，取背景图主色。
+     * 与 {@link #getSeed()} 的差别只在这一种情况，其余完全相等。
+     */
+    public static int getEffectiveSeed() {
+        ensureLoaded();
+        return effectiveSeed;
+    }
+
+    /** 当前配色是否来自背景图主色（用于设置页文案与色块选中态） */
+    public static boolean isSeedFromBackground() {
+        ensureLoaded();
+        return !seedExplicit && effectiveSeed != DEFAULT_SEED;
+    }
+
+    /**
      * 当前是否需要走动态配色：只有「新版美学设计」开启且种子不是默认色时才生效。
      *
      * <p>关掉新版美学（经典样式）后必须完全回到改造前的观感——经典样式本来就不属于
@@ -114,7 +139,7 @@ public final class ThemeManager {
      */
     public static boolean isDefault() {
         ensureLoaded();
-        return !themeActive() || seed == DEFAULT_SEED;
+        return !themeActive() || effectiveSeed == DEFAULT_SEED;
     }
 
     /** 新版美学总开关；关掉时一切强调色都保持原版（开关变更会重启进程，无需缓存失效） */
@@ -134,17 +159,42 @@ public final class ThemeManager {
         if (Color.alpha(argb) == 0) return false;   // 全透明视作非法，避免"设置后什么都没有"
         int opaque = 0xFF000000 | (argb & 0x00FFFFFF);
         seed = opaque;
+        seedExplicit = true;
+        resolveEffectiveSeed();
         derive();
         SharedPreferencesUtil.putInt(KEY_SEED, opaque);
         notifyListeners();
         return true;
     }
 
-    /** 恢复默认主题：删掉配置而不是写默认值，缺配置时与首次安装走同一条路径 */
+    /**
+     * 恢复默认主题：删掉配置而不是写默认值，缺配置时与首次安装走同一条路径。
+     *
+     * <p>注意「默认」的含义：没手选配色的用户如果启用了自定义背景图，默认色就是背景图主色
+     * （见 {@link #resolveEffectiveSeed()}）。想强制回到 B 站粉，需要点预设里的「B站粉」
+     * ——那是显式手选，会写入配置挡住图色。
+     */
     public static void resetToDefault() {
         seed = DEFAULT_SEED;
+        seedExplicit = false;
+        resolveEffectiveSeed();
         derive();
         SharedPreferencesUtil.removeValue(KEY_SEED);
+        notifyListeners();
+    }
+
+    /**
+     * 背景图主色或「背景图」开关变化后重新解析一次种子。
+     *
+     * <p><b>必须在主线程调用</b>：会同步通知已创建的自绘组件重建渐变与缓存图。
+     * 手选过配色时本方法不产生任何变化（手选优先）。
+     */
+    public static void refreshSeed() {
+        ensureLoaded();
+        int old = effectiveSeed;
+        resolveEffectiveSeed();
+        if (old == effectiveSeed) return;
+        derive();
         notifyListeners();
     }
 
@@ -158,28 +208,45 @@ public final class ThemeManager {
         // 缺配置（0）/ 全透明 / 越界都安全回退默认色
         if (stored == 0 || Color.alpha(stored) == 0) {
             seed = DEFAULT_SEED;
+            seedExplicit = false;
         } else {
             seed = 0xFF000000 | (stored & 0x00FFFFFF);
+            seedExplicit = true;
         }
+        resolveEffectiveSeed();
         derive();
+    }
+
+    /**
+     * 解析实际生效的种子：手选优先；没手选过（无配置）且背景图启用时，用背景图主色。
+     *
+     * <p>为什么手选优先：用户明确点过色块/输入过 HEX，就是"我要这个颜色"，
+     * 此时被一张底图悄悄改掉是更坏的行为（且换图后整站变色，用户很难理解）。
+     * 反过来没手选过的用户，默认值本来就是"没有偏好"，用底图主色更协调。
+     */
+    private static void resolveEffectiveSeed() {
+        effectiveSeed = seed;
+        if (seedExplicit) return;
+        int fromImage = BackgroundManager.getSeed();
+        if (fromImage != 0) effectiveSeed = fromImage;
     }
 
     /** 按种子算一套强调色。默认种子直接命中常量表，不跑算法 */
     private static void derive() {
-        if (seed == DEFAULT_SEED) {
+        if (effectiveSeed == DEFAULT_SEED) {
             primary = DEFAULT_PRIMARY;
             primarySoft = DEFAULT_PRIMARY_SOFT;
             primaryBorder = DEFAULT_PRIMARY_BORDER;
             ambient = DEFAULT_AMBIENT;
             return;
         }
-        double[] hct = toHct(seed);
+        double[] hct = toHct(effectiveSeed);
         double hue = hct[0];
         double chroma = hct[1];
         double tone = hct[2];
         if (tone < MIN_TONE) tone = MIN_TONE_LIFTED;
 
-        primary = fromHct(hue, chroma, tone, seed);
+        primary = fromHct(hue, chroma, tone, effectiveSeed);
         primaryBorder = primary;
         primarySoft = (primary & 0x00FFFFFF) | (SOFT_ALPHA << 24);
         // 氛围光晕比强调色略亮一点：它铺满整屏还要压到 0x59 alpha，太暗会看不见；

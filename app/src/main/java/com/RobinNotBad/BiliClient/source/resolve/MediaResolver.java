@@ -7,6 +7,7 @@ import com.RobinNotBad.BiliClient.source.model.SourceException;
 import com.RobinNotBad.BiliClient.source.model.SourceInfo;
 import com.RobinNotBad.BiliClient.source.model.SourceMedia;
 import com.RobinNotBad.BiliClient.source.model.SourceSubject;
+import com.RobinNotBad.BiliClient.source.net.SourceHttp;
 import com.RobinNotBad.BiliClient.source.net.UrlGuard;
 import com.RobinNotBad.BiliClient.source.rule.RuleLimits;
 import com.RobinNotBad.BiliClient.source.rule.WebFetch;
@@ -71,7 +72,7 @@ public final class MediaResolver {
             return outcome;
         }
 
-        HtmlVideoScanner.Result scanned;
+        Scanned scanned;
         try {
             scanned = scanPage(pageUrl, rule, name);
         } catch (SourceException e) {
@@ -80,28 +81,28 @@ public final class MediaResolver {
                     + " 原因=" + outcome.reason + " 页面=" + MediaUrls.summarize(pageUrl));
             return outcome;
         }
-        if (scanned.mediaUrl != null && !scanned.mediaUrl.isEmpty()) {
-            outcome.media = build(info, subject, channel, episode, scanned.mediaUrl, rule);
-            reportSuccess(name, outcome.media, "HTML:" + scanned.via);
+        if (scanned.result.mediaUrl != null && !scanned.result.mediaUrl.isEmpty()) {
+            outcome.media = build(info, subject, channel, episode, scanned.result.mediaUrl, rule);
+            reportSuccess(name, outcome.media, "HTML:" + scanned.result.via);
             return outcome;
         }
-        outcome.nestedUrls.addAll(scanned.nestedUrls);
+        outcome.nestedUrls.addAll(scanned.result.nestedUrls);
 
         //嵌套播放页：只在规则显式开启时跟进，最多一层。
         //上游允许两层，但每多一层就多一次整页请求（1~3s），用户感知是「点了一直转」，
         //所以这里收紧到一层：一层拿不到就交给网页嗅探，比串行等两层更快。
         int followed = 0;
-        for (String nested : scanned.nestedUrls) {
+        for (String nested : scanned.result.nestedUrls) {
             if (followed >= 1) break;
             followed++;
             try {
-                HtmlVideoScanner.Result inner = scanPage(nested, rule, name);
-                if (inner.mediaUrl != null && !inner.mediaUrl.isEmpty()) {
-                    outcome.media = build(info, subject, channel, episode, inner.mediaUrl, rule);
-                    reportSuccess(name, outcome.media, "嵌套页:" + inner.via);
+                Scanned inner = scanPage(nested, rule, name);
+                if (inner.result.mediaUrl != null && !inner.result.mediaUrl.isEmpty()) {
+                    outcome.media = build(info, subject, channel, episode, inner.result.mediaUrl, rule);
+                    reportSuccess(name, outcome.media, "嵌套页:" + inner.result.via);
                     return outcome;
                 }
-                for (String deeper : inner.nestedUrls) {
+                for (String deeper : inner.result.nestedUrls) {
                     if (!outcome.nestedUrls.contains(deeper)) outcome.nestedUrls.add(deeper);
                 }
             } catch (SourceException ignored) {
@@ -109,12 +110,33 @@ public final class MediaResolver {
             }
         }
 
-        outcome.needWebView = true;
-        outcome.reason = "页面里没有可直接播放的地址（多数站点要等脚本执行后才有流）";
+        //404/410 是「这一集确实没了」，开 WebView 只会白等 15 秒；其余（含 403/5xx）都值得再试
+        outcome.needWebView = scanned.code != 404 && scanned.code != 410;
+        //非 2xx 也允许走到这里（WebFetch 不再按状态码判死）：但既然没扫出地址，
+        //上屏原因要带上状态码，否则「页面里没有地址」会把 403 掩盖成「站点改版」
+        outcome.reason = scanned.httpOk()
+                ? "页面里没有可直接播放的地址（多数站点要等脚本执行后才有流）"
+                : "页面返回 HTTP " + scanned.code + "，且没有可直接播放的地址";
         Logu.w("third-resolve", "解析无结果 源=" + name
+                + " HTTP=" + scanned.code
                 + " 页面=" + MediaUrls.summarize(pageUrl)
                 + " 嵌套候选=" + outcome.nestedUrls.size() + " 需嗅探=" + outcome.needWebView);
         return outcome;
+    }
+
+    /** 一次播放页抓取的产物：扫描结果 + HTTP 状态码（用于区分「站点拒绝」与「页面里真的没有流」） */
+    private static final class Scanned {
+        final HtmlVideoScanner.Result result;
+        final int code;
+
+        Scanned(HtmlVideoScanner.Result result, int code) {
+            this.result = result;
+            this.code = code;
+        }
+
+        boolean httpOk() {
+            return code >= 200 && code < 300;
+        }
     }
 
     /**
@@ -131,7 +153,7 @@ public final class MediaResolver {
                 + " mime=" + media.mimeType);
     }
 
-    private static HtmlVideoScanner.Result scanPage(String url, MediaRule rule, String sourceName)
+    private static Scanned scanPage(String url, MediaRule rule, String sourceName)
             throws SourceException {
         Map<String, String> headers = new LinkedHashMap<>();
         String ua = rule.playPageUserAgent();
@@ -143,9 +165,9 @@ public final class MediaResolver {
             headers.put("Cookie", cookies.trim().replace('\n', ';'));
         //刻意拿原始文本而不是 jsoup 重新序列化后的 DOM：脚本里的 `\/`、未闭合标签
         //会在序列化时被改写，正则反而抓不到原样的地址
-        String html = WebFetch.get(url, headers, sourceName,
-                SourceException.Phase.RESOLVE, RuleLimits.RESOLVE_PAGE_TIMEOUT_MS).text();
-        return HtmlVideoScanner.scan(html, url, rule);
+        SourceHttp.Response response = WebFetch.get(url, headers, sourceName,
+                SourceException.Phase.RESOLVE, RuleLimits.RESOLVE_PAGE_TIMEOUT_MS);
+        return new Scanned(HtmlVideoScanner.scan(response.text(), url, rule), response.code);
     }
 
     /**
