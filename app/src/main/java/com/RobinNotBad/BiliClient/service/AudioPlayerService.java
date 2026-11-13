@@ -873,7 +873,9 @@ public class AudioPlayerService extends Service {
                 }
                 //懒加载还有下一页且本页已见底：先等页拉完再切，否则列表循环会把
                 //没加载出来的歌永远绕过去（绕着已加载区间打转，其余页再也不播）
-                if (queue.hasMore() && !queue.hasNext()) {
+                //mediaId<=0（本地缓存队列）根本没有"下一页"，不能进等待分支：
+                //进去之后补页必然失败，waitingForMore 永不复位，列表循环就停在最后一首
+                if (queue.getMediaId() > 0 && queue.hasMore() && !queue.hasNext()) {
                     diag("本页播完，等待懒加载下一页");
                     waitingForMore = true;
                     ensureMoreItems();
@@ -1106,8 +1108,13 @@ public class AudioPlayerService extends Service {
     private void ensureMoreItems() {
         final AudioQueue queue = AudioQueue.get();
         if (!queue.isActive() || !queue.hasMore() || queue.isLoadingMore()) return;
-        queue.setLoadingMore(true);
         final long mediaId = queue.getMediaId();
+        //本地缓存队列没有分页来源：直接收尾，别拿 -1 去请求收藏夹再白等 3 轮重试
+        if (mediaId <= 0) {
+            queue.setHasMore(false);
+            return;
+        }
+        queue.setLoadingMore(true);
         final String order = queue.getOrder();
         new Thread(() -> {
             int attempts = 0;

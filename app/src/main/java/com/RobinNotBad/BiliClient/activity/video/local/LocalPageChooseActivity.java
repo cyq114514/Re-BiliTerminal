@@ -12,9 +12,13 @@ import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
+import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
 import com.RobinNotBad.BiliClient.adapter.video.PageChooseAdapter;
 import com.RobinNotBad.BiliClient.api.PlayerApi;
+import com.RobinNotBad.BiliClient.model.AudioQueue;
 import com.RobinNotBad.BiliClient.model.PlayerData;
+import com.RobinNotBad.BiliClient.model.VideoCard;
+import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
@@ -51,8 +55,29 @@ public class LocalPageChooseActivity extends BaseActivity {
 
         PageChooseAdapter adapter = new PageChooseAdapter(this, pageList);
         adapter.setOnItemClickListener(position -> {
-            PlayerData playerData = new PlayerData(PlayerData.TYPE_LOCAL);
             String mediaPath = videoFileList.get(position);
+            //纯音频多P：把整组灌进听歌队列，从这一P 起播（1.3.5 反馈 R1）。
+            //以前进内置播放器，播完这一P 就停，用户以为"缓存不能自动接下一首"。
+            //只有整组都是音频才这么做：混着视频时整组塞进队列会把视频也当歌占位
+            if (mediaPath != null && mediaPath.endsWith("audio.m4a") && allAudio(videoFileList)) {
+                ArrayList<VideoCard> items = new ArrayList<>();
+                for (int i = 0; i < videoFileList.size(); i++) {
+                    VideoCard card = new VideoCard();
+                    card.title = i < pageList.size() ? pageList.get(i) : title;
+                    card.upName = "本地缓存";
+                    card.localPath = videoFileList.get(i);
+                    items.add(card);
+                }
+                AudioPlayerService.startQueue(this, items, -1, "",
+                        title == null ? "本地缓存" : title, position, 0);
+                if (AudioQueue.get().current() == null) {
+                    MsgUtil.showMsg("这些缓存无法加入播放队列");
+                    return;
+                }
+                startActivity(new Intent(this, AudioPlayerActivity.class));
+                return;
+            }
+            PlayerData playerData = new PlayerData(PlayerData.TYPE_LOCAL);
             playerData.videoUrl = mediaPath;
             playerData.danmakuUrl = danmakuFileList.get(position);
             playerData.title = pageList.get(position);
@@ -105,6 +130,15 @@ public class LocalPageChooseActivity extends BaseActivity {
 
         recyclerView.setLayoutManager(new CustomLinearManager(this));
         recyclerView.setAdapter(adapter);
+    }
+
+    /** 整组是否都是纯音频文件（混着视频的多P 不走听歌队列，仍进内置播放器） */
+    private static boolean allAudio(ArrayList<String> files) {
+        if (files == null || files.isEmpty()) return false;
+        for (String path : files) {
+            if (path == null || !path.endsWith("audio.m4a")) return false;
+        }
+        return true;
     }
 
     @Override

@@ -65,19 +65,36 @@ public class AudioQueue {
         //此前固定记 1，从第 2 页补拉会把列表页已加载的内容重复追加一遍
         this.loadedPage = Math.max(1,
                 (int) Math.ceil(items.size() / (double) com.RobinNotBad.BiliClient.api.FavoriteApi.FOLDER_PAGE_SIZE));
-        this.hasMore = true;
+        //只有收藏夹队列（mediaId>0）才可能还有下一页。本地缓存队列（mediaId=-1）的条目是一次性灌满的：
+        //若仍置 true，播完最后一首会进入"等待补页"分支，拿 mediaId=-1 去请求收藏夹必然失败，
+        //waitingForMore 永不复位，列表循环再也回不到第一首（1.3.5 反馈：缓存只能听一个）
+        this.hasMore = mediaId > 0;
         this.loadingMore = false;
         active = !items.isEmpty();
     }
 
-    /** 去重键：同一稿件的不同分P 是不同条目，所以必须把 cid 也算进去 */
+    /** 本地缓存条目：没有 aid，靠文件路径标识（听歌队列的 mediaId=-1 分支） */
+    private static boolean isLocalItem(VideoCard video) {
+        return video != null && video.localPath != null && !video.localPath.isEmpty();
+    }
+
+    /** 去重键：同一稿件的不同分P 是不同条目，所以必须把 cid 也算进去；本地条目按路径去重 */
     private static String keyOf(VideoCard video) {
+        if (isLocalItem(video)) return "local:" + video.localPath;
         return video.aid + ":" + Math.max(video.cid, 0);
     }
 
-    /** 去重追加：队列里已有同 aid+同 cid 的条目跳过 */
+    /**
+     * 去重追加：队列里已有同 aid+同 cid 的条目跳过。
+     *
+     * <p>有效性门槛必须放过本地条目：它们 aid=0，若照旧按 {@code aid<=0} 丢弃，
+     * 整个本地听歌队列会被过滤成空，用户看到的是「点听歌→没有正在播放的音频」
+     * （1.3.5 反馈 R1 的直接原因）。同时本地条目都用同一组 aid/cid=0，
+     * 也不能再拿 aid 当去重键，否则 14 个文件只会留下 1 条。
+     */
     private void addIfAbsent(VideoCard video) {
-        if (video == null || video.aid <= 0) return;
+        if (video == null) return;
+        if (!isLocalItem(video) && video.aid <= 0) return;
         if (!keySet.add(keyOf(video))) return;
         items.add(video);
     }

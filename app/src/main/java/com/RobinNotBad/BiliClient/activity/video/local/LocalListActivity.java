@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.activity.video.local;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -10,8 +11,12 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
+import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
 import com.RobinNotBad.BiliClient.adapter.video.LocalVideoAdapter;
+import com.RobinNotBad.BiliClient.model.AudioQueue;
 import com.RobinNotBad.BiliClient.model.LocalVideo;
+import com.RobinNotBad.BiliClient.model.VideoCard;
+import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -63,35 +68,7 @@ public class LocalListActivity extends InstanceActivity {
             if (lp instanceof android.view.ViewGroup.MarginLayoutParams)
                 ((android.view.ViewGroup.MarginLayoutParams) lp).setMarginEnd((int) (88 * getResources().getDisplayMetrics().density + 0.5f));
         }
-        localAudioBtn.setOnClickListener(v -> {
-            if (videoList.isEmpty()) {
-                MsgUtil.showMsg("还没有可听的缓存");
-                return;
-            }
-            java.util.ArrayList<com.RobinNotBad.BiliClient.model.VideoCard> items = new java.util.ArrayList<>();
-            for (com.RobinNotBad.BiliClient.model.LocalVideo localVideo : videoList) {
-                for (int i = 0; i < localVideo.videoFileList.size(); i++) {
-                    com.RobinNotBad.BiliClient.model.VideoCard card = new com.RobinNotBad.BiliClient.model.VideoCard();
-                    //单集标题=文件夹名；分P 标题=文件夹名·分P 名，与本地选集页口径一致
-                    boolean single = localVideo.videoFileList.size() == 1;
-                    card.title = single ? localVideo.title
-                            : localVideo.title + " · " + localVideo.pageList.get(i);
-                    card.upName = "本地缓存";
-                    card.cover = localVideo.cover;
-                    card.localPath = localVideo.videoFileList.get(i);
-                    items.add(card);
-                }
-            }
-            if (items.isEmpty()) {
-                MsgUtil.showMsg("还没有可听的缓存");
-                return;
-            }
-            //mediaId 用 -1：不与任何收藏夹冲突，续播记录天然隔离
-            com.RobinNotBad.BiliClient.service.AudioPlayerService.startQueue(
-                    this, items, -1, "", "本地缓存");
-            startActivity(new android.content.Intent(this,
-                    com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity.class));
-        });
+        localAudioBtn.setOnClickListener(v -> startAudioQueue(0));
 
         if (!FileUtil.checkStoragePermission()) {
             FileUtil.requestStoragePermission(this);
@@ -104,6 +81,9 @@ public class LocalListActivity extends InstanceActivity {
             scan(initialList, FileUtil.getVideoDownloadPath());
             videoList.addAll(initialList);
             adapter = new LocalVideoAdapter(this, videoList);
+            //点纯音频条目=从这条开始连播整个缓存（1.3.5 反馈 R1：此前点条目只播单曲，
+            //用户以为"缓存不能自动接下一首"；标题栏「听歌」保留为"从头听"）
+            adapter.setOnAudioItemClickListener(position -> startAudioQueue(audioIndexOf(position)));
 
             adapter.setOnLongClickListener(position -> {
                 long timestamp = System.currentTimeMillis();
@@ -200,6 +180,56 @@ public class LocalListActivity extends InstanceActivity {
                 }
             }
         }
+    }
+
+    /**
+     * 把缓存列表展开成音频队列条目：单集 1 条，多P 每 P 一条，顺序与列表一致。
+     *
+     * <p>只负责组装，不决定从哪首开始——听歌按钮传 0，点某条音频则传该条的展开下标。
+     */
+    private ArrayList<VideoCard> buildAudioItems() {
+        ArrayList<VideoCard> items = new ArrayList<>();
+        for (LocalVideo localVideo : videoList) {
+            for (int i = 0; i < localVideo.videoFileList.size(); i++) {
+                VideoCard card = new VideoCard();
+                //单集标题=文件夹名；分P 标题=文件夹名·分P 名，与本地选集页口径一致
+                boolean single = localVideo.videoFileList.size() == 1;
+                card.title = single ? localVideo.title
+                        : localVideo.title + " · " + localVideo.pageList.get(i);
+                card.upName = "本地缓存";
+                card.cover = localVideo.cover;
+                card.localPath = localVideo.videoFileList.get(i);
+                items.add(card);
+            }
+        }
+        return items;
+    }
+
+    /** 从展开后的第 startIndex 条起播，并打开全屏听歌页 */
+    private void startAudioQueue(int startIndex) {
+        ArrayList<VideoCard> items = buildAudioItems();
+        if (items.isEmpty()) {
+            MsgUtil.showMsg("还没有可听的缓存");
+            return;
+        }
+        if (startIndex < 0 || startIndex >= items.size()) startIndex = 0;
+        //mediaId 用 -1：不与任何收藏夹冲突，续播记录天然隔离；
+        //同时 AudioQueue 据此判定"没有下一页"，播完最后一首会正常回卷到第一首
+        AudioPlayerService.startQueue(this, items, -1, "", "本地缓存", startIndex, 0);
+        if (AudioQueue.get().current() == null) {
+            //队列被过滤空时不要打开听歌页——那里只会弹"没有正在播放的音频"，反而看不出原因
+            MsgUtil.showMsg("这些缓存无法加入播放队列");
+            return;
+        }
+        startActivity(new Intent(this, AudioPlayerActivity.class));
+    }
+
+    /** 第 videoIndex 个缓存文件夹在展开后的音频条目里的起始下标 */
+    private int audioIndexOf(int videoIndex) {
+        int index = 0;
+        for (int i = 0; i < videoIndex && i < videoList.size(); i++)
+            index += videoList.get(i).videoFileList.size();
+        return index;
     }
 
     private void checkEmpty() {

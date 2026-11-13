@@ -35,6 +35,17 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
     final Context context;
     final ArrayList<LocalVideo> localVideoList;
     OnItemLongClickListener longClickListener;
+    OnAudioItemClickListener audioClickListener;
+
+    /**
+     * 纯音频条目被点击：交给宿主的听歌队列，从这一条往下连播。
+     *
+     * <p>为什么单独开一个回调：内置播放器是单曲的，点缓存条目进去播完就停，
+     * 用户以为"缓存不能自动接下一首"（1.3.5 反馈）。音频没有画面，走队列页更合适。
+     */
+    public interface OnAudioItemClickListener {
+        void onAudioItemClick(int position);
+    }
 
     public LocalVideoAdapter(Context context, ArrayList<LocalVideo> localVideoList) {
         this.context = context;
@@ -43,6 +54,10 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
 
     public void setOnLongClickListener(OnItemLongClickListener listener) {
         this.longClickListener = listener;
+    }
+
+    public void setOnAudioItemClickListener(OnAudioItemClickListener listener) {
+        this.audioClickListener = listener;
     }
 
     @NonNull
@@ -70,6 +85,13 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
             ((LocalVideoHolder) holder).showLocalVideo(localVideo, context);
 
             holder.itemView.setOnClickListener(view -> {
+                //纯音频缓存条目：交给宿主的听歌队列，从这条开始连播（1.3.5 反馈 R1）
+                if (localVideo.videoFileList != null && localVideo.videoFileList.size() == 1
+                        && localVideo.videoFileList.get(0).endsWith("audio.m4a")
+                        && audioClickListener != null) {
+                    audioClickListener.onAudioItemClick(realPosition);
+                    return;
+                }
                 if (localVideo.videoFileList != null && localVideo.videoFileList.size() == 1) {
                     PlayerData playerData = new PlayerData(PlayerData.TYPE_LOCAL);
                     String mediaPath = localVideo.videoFileList.get(0);

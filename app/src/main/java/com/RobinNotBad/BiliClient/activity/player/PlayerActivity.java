@@ -2364,7 +2364,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 else
                     HistoryApi.reportHistory(fAid, fCid, progressSec);
             } catch (Exception e) {
-                MsgUtil.err("进度上报：", e);
+                //播放页不该因为一次后台上报失败就弹「网络错误」：播放流走 ijk，上报走 OkHttp，
+                //两者互不影响，用户看到的是"视频明明在放却说网络错误"（1.3.5 反馈 R4）
+                Logu.w("进度上报", "上报失败（不打扰用户）：" + e);
             }
         });
     }
@@ -2393,10 +2395,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                                 text_online.setText("");
                         });
                     } catch (Exception e) {
-                        runOnUiThread(() -> {
-                            MsgUtil.err(e);
-                            text_online.setVisibility(View.GONE);
-                        });
+                        //在看人数只是装饰信息，拉不到就隐藏，不弹「网络错误」（R4）
+                        Logu.w("在看人数", "拉取失败（不打扰用户）：" + e);
+                        runOnUiThread(() -> text_online.setVisibility(View.GONE));
                         this.cancel();
                     }
                 }
@@ -2424,7 +2425,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             subtitles = loaded;
             runOnUiThread(() -> btn_subtitle.setImageResource(R.mipmap.subtitle_on));
         } catch (Exception e) {
-            MsgUtil.err(e);
+            //措辞准确：这里失败只影响字幕，不代表网络不可用（R4）
+            Logu.w("字幕", "加载字幕内容失败：" + e);
+            MsgUtil.showMsg("字幕加载失败");
         }
     }
 
@@ -2532,8 +2535,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 });
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            MsgUtil.err(e);
+            //字幕列表拉不到：只提示字幕相关，不误导成"网络错误"（R4）
+            Logu.w("字幕", "获取字幕列表失败：" + e);
+            MsgUtil.showMsg("字幕获取失败");
         }
     }
 
@@ -2636,7 +2640,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 }
             });
         } catch (Exception e) {
-            runOnUiThread(() -> MsgUtil.err(e));
+            //弹幕拉取失败与播放无关，结果只是"这场没有弹幕"（R4）
+            Logu.w("旧版弹幕", "下载失败（不打扰用户）：" + e);
         }
     }
 
@@ -5721,10 +5726,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     }), 60);
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> {
-                    MsgUtil.err(e);
-                    MsgUtil.showMsg("切换失败");
-                });
+                //提示一次就够：再叠一条「网络错误」会让人以为整段播放都断了（R4）
+                Logu.e("切P", "切换失败：" + e);
+                runOnUiThread(() -> MsgUtil.showMsg("切换失败"));
             }
         });
     }
@@ -5824,10 +5828,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     });
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> {
-                    MsgUtil.err(e);
-                    MsgUtil.showMsg("清晰度切换失败");
-                });
+                //同上：只留一句准确的失败提示（R4）
+                Logu.e("清晰度", "切换失败：" + e);
+                runOnUiThread(() -> MsgUtil.showMsg("清晰度切换失败"));
             }
         });
     }
