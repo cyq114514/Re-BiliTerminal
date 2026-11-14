@@ -122,7 +122,11 @@ public class DanmakuFilters {
             }
 
             if (totalSizeInScreen < mMaximumSize || danmaku.isShown()
-                    || (mLastSkipped != null && (danmaku.time - mLastSkipped.time > context.mDanmakuFactory.MAX_DANMAKU_DURATION / 20))) {
+                    //防全拦豁免窗口从 MAX/20(≈300ms) 收紧到 MAX/4(≈1.5s)：
+                    //本工程 1.3.8 起弹幕走位置驱动 250ms tick 逐条投放（PlayerActivity#feedDanmaku），
+                    //密集段弹幕间隔 300~500ms，原豁免几乎每次命中，同屏上限被稀释
+                    //（真机实测上限设 3 仍在屏 6 条）。收紧后最坏每 1.5s 强制放行一条，屏不会空
+                    || (mLastSkipped != null && (danmaku.time - mLastSkipped.time > context.mDanmakuFactory.MAX_DANMAKU_DURATION / 4))) {
                 mLastSkipped = danmaku;
                 return false;
             }

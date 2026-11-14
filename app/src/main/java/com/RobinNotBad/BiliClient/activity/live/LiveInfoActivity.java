@@ -43,6 +43,12 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class LiveInfoActivity extends BaseActivity {
+    //沉浸式页面：顶栏不挂「渐隐黑」页头遮罩（BaseActivity 全局开关的排除项）
+    @Override
+    protected boolean titlebarFadeEnabled() {
+        return false;
+    }
+
     private long room_id;
     private LiveRoom room;
     private boolean desc_expand = false, tags_expand = false;

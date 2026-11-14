@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -25,6 +27,7 @@ import com.RobinNotBad.BiliClient.adapter.message.PrivateMsgAdapter;
 import com.RobinNotBad.BiliClient.api.ImageApi;
 import com.RobinNotBad.BiliClient.api.PrivateMsgApi;
 import com.RobinNotBad.BiliClient.model.PrivateMessage;
+import com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.ClickGuard;
@@ -49,6 +52,8 @@ public class PrivateMsgActivity extends BaseActivity {
     JSONArray emoteArray = new JSONArray();
     RecyclerView msgView;
     EditText contentEt;
+    //hint 跑马灯覆盖层（2026-11-14 反馈）：未输入且未聚焦时展示长文案滚动
+    MarqueeTextView hintMarquee;
     ImageButton sendBtn;
     View picBtn;
     View layout_input;
@@ -89,6 +94,17 @@ public class PrivateMsgActivity extends BaseActivity {
 
     boolean animVisible = true;
 
+    /** 未输入且未聚焦 → 显示跑马灯覆盖层；聚焦（用户要输入）或有文本 → 隐藏 */
+    private void updateHintMarquee() {
+        if (hintMarquee == null || contentEt == null) return;
+        boolean show = contentEt.getText().length() == 0 && !contentEt.hasFocus();
+        hintMarquee.setVisibility(show ? View.VISIBLE : View.GONE);
+        //覆盖层底是半透明的（#a0242424，与输入框一致以透出背景），下层 EditText 的原 hint
+        //会透出来跟滚动文案叠成重影——覆盖层显示期间把下层 hint 置空，隐藏时恢复
+        if (show) contentEt.setHint("");
+        else contentEt.setHint(R.string.hint_private_message);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -96,7 +112,36 @@ public class PrivateMsgActivity extends BaseActivity {
 
         msgView = findViewById(R.id.msg_view);
         contentEt = findViewById(R.id.msg_input_et);
+        //hint 跑马灯覆盖层（2026-11-14 反馈）：TextView 的 marquee 不作用于 hint，
+        //未输入且未聚焦时用覆盖层展示长文案滚动；applyTo 会设 focusable(true)，
+        //这里关掉并保持 clickable=false，触摸穿透到下层 EditText 处理聚焦与光标
+        hintMarquee = findViewById(R.id.hint_marquee);
+        hintMarquee.setFocusable(false);
+        hintMarquee.setClickable(false);
+        contentEt.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                updateHintMarquee();
+            }
+        });
+        contentEt.setOnFocusChangeListener((v, hasFocus) -> updateHintMarquee());
+        updateHintMarquee();
         sendBtn = findViewById(R.id.send_btn);
+        //发送按钮底色跟随主题强调色（用户反馈 2026-11-14）：background_privatemsg_send 是
+        //ShapeDrawable，ThemeApplier 不处理（见该 drawable 注释里的已知限制），绑定时直接改
+        //solid 色。mutate() 避免污染 drawable 共享缓存；从设置页换主题返回会重建本页，能吃到新色
+        android.graphics.drawable.GradientDrawable sendBg =
+                (android.graphics.drawable.GradientDrawable) sendBtn.getBackground().mutate();
+        sendBg.setColor(com.RobinNotBad.BiliClient.ui.theme.ThemeManager.getPrimary());
+        sendBtn.setBackground(sendBg);
         picBtn = findViewById(R.id.pic_btn);
         //动画目标用外层 box：2×2 功能面板展开时滚动，面板跟输入行一起藏、一起回
         layout_input = findViewById(R.id.layout_input_box);

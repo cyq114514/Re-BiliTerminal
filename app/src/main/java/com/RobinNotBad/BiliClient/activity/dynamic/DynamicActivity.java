@@ -301,6 +301,52 @@ public class DynamicActivity extends RefreshMainActivity {
         });
     }
 
+    // ---------- UP 红点已读持久化（用户反馈 2026-11-14）----------
+    //2026-11-07 的修复只清内存 has_update：切个页面再回动态页，重新拉接口时服务端仍报 true，
+    //红点复活。这里把"已读"落到本地：mid -> 消除时刻。portal 接口没有每 UP 最新动态 id，
+    //无法区分"消过红点"与"UP 真发了新内容"，v1 用 24h 过期兜底——消除后 24h 内不复活，
+    //过期自动失效，不会永久吞掉新动态提示。取舍记录见 docs/需求-私信反馈整理2-20261114.md R1。
+    private static final String KEY_UP_READ_MARKS = "dynamic_up_read_marks";
+    private static final long UP_READ_TTL_MS = 24L * 60 * 60 * 1000;
+
+    /** 记录（或刷新）一个 UP 的已读时刻；写入时顺手清掉过期项，串长度有上界 */
+    private static void markUpRead(long mid) {
+        if (mid <= 0) return;
+        long now = System.currentTimeMillis();
+        String prefix = mid + ":";
+        StringBuilder sb = new StringBuilder();
+        for (String entry : SharedPreferencesUtil.getString(KEY_UP_READ_MARKS, "").split(",")) {
+            int sep = entry.indexOf(':');
+            if (sep <= 0) continue;
+            long readAt;
+            try {
+                readAt = Long.parseLong(entry.substring(sep + 1));
+            } catch (NumberFormatException e) {
+                continue;
+            }
+            //未过期且不是同一个 mid（带冒号前缀比对，"12" 不会命中 "123:"）才保留
+            if (now - readAt < UP_READ_TTL_MS && !entry.startsWith(prefix)) {
+                sb.append(entry).append(',');
+            }
+        }
+        sb.append(mid).append(':').append(now);
+        SharedPreferencesUtil.putString(KEY_UP_READ_MARKS, sb.toString());
+    }
+
+    /** 该 UP 的已读标记是否存在且未过期（后台线程调用，SharedPreferences 本身线程安全） */
+    private static boolean isUpRead(long mid) {
+        String prefix = mid + ":";
+        for (String entry : SharedPreferencesUtil.getString(KEY_UP_READ_MARKS, "").split(",")) {
+            if (!entry.startsWith(prefix)) continue;
+            try {
+                return System.currentTimeMillis() - Long.parseLong(entry.substring(prefix.length())) < UP_READ_TTL_MS;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
     private void loadRecentUpList(boolean markRead) {
         CenterThreadPool.run(() -> {
             try {
@@ -308,7 +354,17 @@ public class DynamicActivity extends RefreshMainActivity {
                 //手动刷新=默认已读（用户反馈 2026-11-07）：清掉小红点标记。
                 //服务端 has_update 语义不动，只影响本页展示
                 if (markRead && loaded != null) {
-                    for (DynamicApi.UpInfo up : loaded) up.has_update = false;
+                    for (DynamicApi.UpInfo up : loaded) {
+                        up.has_update = false;
+                        //已读落到本地：切页/杀进程回来不再复活（用户反馈 2026-11-14）
+                        markUpRead(up.mid);
+                    }
+                } else if (loaded != null) {
+                    //本地已读未过期的 UP 不再亮红点；标记 24h 自动失效，
+                    //窗口外红点恢复（v1 取舍见 docs/需求-私信反馈整理2-20261114.md R1）
+                    for (DynamicApi.UpInfo up : loaded) {
+                        if (up.has_update && isUpRead(up.mid)) up.has_update = false;
+                    }
                 }
                 recentUpList = loaded;
                 runOnUiThread(() -> {

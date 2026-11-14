@@ -166,6 +166,37 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 顶栏渐隐黑（2026-11-14 反馈：私信页/下载页页头遮罩效果好，全局化） -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_titlebar_fade"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:text="顶栏渐隐黑" />
+
+                    <TextView
+                        android:id="@+id/switch_titlebar_fade_desc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="6dp"
+                        android:layout_marginTop="1dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.9"
+                        android:text="页面顶栏挂一层向下渐隐的黑遮罩，背景氛围从页头透出（私信页同款）。播放、看图、直播、听歌等沉浸页不受影响"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

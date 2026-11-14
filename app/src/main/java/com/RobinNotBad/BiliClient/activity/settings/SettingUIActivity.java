@@ -134,6 +134,15 @@ public class SettingUIActivity extends BaseActivity {
                 }
             });
 
+            //顶栏渐隐黑（2026-11-14 反馈：私信页页头遮罩效果好，全局化）：BaseActivity.setRound
+            //每次 onStart 都会按此开关重设顶栏背景，返回页面即生效，无需重启
+            SwitchMaterial titlebarFade = findViewById(R.id.switch_titlebar_fade);
+            titlebarFade.setChecked(SharedPreferencesUtil.getBoolean("titlebar_fade", true));
+            titlebarFade.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                SharedPreferencesUtil.putBoolean("titlebar_fade", isChecked);
+                MsgUtil.showMsg(isChecked ? "顶栏渐隐黑已开启\n返回页面即生效" : "顶栏渐隐黑已关闭\n返回页面即生效");
+            });
+
             bgSwitch = findViewById(R.id.switch_bg_image);
             bgSwitch.setChecked(BackgroundManager.isEnabled());
             bgSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {

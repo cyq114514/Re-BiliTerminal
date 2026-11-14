@@ -453,7 +453,27 @@ public class BaseActivity extends AppCompatActivity {
         Logu.d("debug", "set_exit");
     }
 
+    /**
+     * 顶栏是否挂「渐隐黑」页头遮罩（2026-11-14 反馈：私信页/下载页效果好，全局化）。
+     * 沉浸式页面（图片查看/直播/听歌）重写返回 false 排除；播放页直接继承 Activity 天然不受影响。
+     */
+    protected boolean titlebarFadeEnabled() {
+        return true;
+    }
+
     public void setRound() {
+        //顶栏渐隐黑全局化（2026-11-14 反馈）：私信页/下载页同款页头遮罩挂到所有普通页面。
+        //放判重之前每次 onStart 都设：设置页切换开关后返回页面立即生效，setBackground 同值
+        //重复调用开销可忽略。开关关闭时清掉背景，回到原先的透明顶栏
+        View topBar = findViewById(R.id.top);
+        if (topBar != null) {
+            if (titlebarFadeEnabled() && SharedPreferencesUtil.getBoolean("titlebar_fade", true)) {
+                topBar.setBackgroundResource(R.drawable.background_titlebar_fade);
+            } else {
+                topBar.setBackground(null);
+            }
+        }
+
         //圆屏适配
 
         TextView pagename = findViewById(R.id.pageName);

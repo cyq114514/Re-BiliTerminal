@@ -160,6 +160,32 @@
                 android:textSize="13sp"
                 android:inputType="textMultiLine" />
 
+            <!-- hint 跑马灯覆盖层（2026-11-14 反馈）：TextView 的 marquee 不作用于 hint，
+                 未输入且未聚焦时用这层展示长文案滚动，聚焦/有文本时由 Activity 切换隐藏。
+                 背景/内边距与输入框一致以完全盖住其 hint；clickable 保持 false 使触摸穿透
+                 到下层 EditText（聚焦、光标都由它处理） -->
+            <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                android:id="@+id/hint_marquee"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignStart="@id/msg_input_et"
+                android:layout_alignLeft="@id/msg_input_et"
+                android:layout_alignEnd="@id/msg_input_et"
+                android:layout_alignRight="@id/msg_input_et"
+                android:layout_alignTop="@id/msg_input_et"
+                android:layout_alignBottom="@id/msg_input_et"
+                android:layout_marginEnd="4dp"
+                android:layout_toStartOf="@id/more_btn"
+                android:background="@drawable/background_edittext_privatemsg"
+                android:gravity="center_vertical"
+                android:minHeight="38dp"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="6dp"
+                android:text="@string/hint_private_message_marquee"
+                android:textColor="@color/text_hint"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <!-- ➕：展开/收起上方 2×2 功能面板 -->
             <TextView
                 android:id="@+id/more_btn"

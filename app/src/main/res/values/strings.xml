@@ -189,6 +189,9 @@
     <string name="hint_search">搜点什么喵~</string>
     <string name="hint_search_space_video">搜索 TA 的稿件~</string>
     <string name="hint_private_message">爱国诚信友善……</string>
+    <!-- 私信输入框未输入时的跑马灯长文案（2026-11-14 反馈）：TextView 的 marquee 不作用于
+         hint，由覆盖层 MarqueeTextView 展示；文案须足够长才能溢出滚动 -->
+    <string name="hint_private_message_marquee">富强、民主、文明、和谐，自由、平等、公正、法治，爱国、诚信、友善。</string>
     <string name="hint_start_position">起始位置</string>
     <string name="hint_end_position">结束位置</string>
     <string name="hint_login_cookies">在这里输入登录信息</string>

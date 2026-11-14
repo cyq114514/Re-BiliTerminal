@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
 import com.bumptech.glide.Glide;
@@ -110,7 +111,10 @@ public class PrivateMsgAdapter extends RecyclerView.Adapter<PrivateMsgAdapter.Vi
             }
             if (msg.uid == selfUid) {
                 holder.root.setGravity(Gravity.END);
-                holder.textContentCard.setCardBackgroundColor(context.getResources().getColor(R.color.pink));
+                //自己发送的气泡跟随主题强调色（用户反馈 2026-11-14）：原来写死 R.color.pink(#FBFB8787)，
+                //与发送按钮的强调色 bili_pink(#FE679A) 都对不上。bind 期现取现用，异步 bind 也吃到当前主题
+                //（与 UI 一致性批次主题色跟随同口径）。默认主题下气泡由软粉变为强调色，与发送按钮统一
+                holder.textContentCard.setCardBackgroundColor(ThemeManager.getPrimary());
                 holder.textContentCard.setStrokeWidth(0);
             } else {
                 holder.root.setGravity(Gravity.START);

@@ -402,6 +402,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private String blockedWordsCache;
     /** 屏蔽词切分结果，随 blockedWordsCache 同生命周期 */
     private java.util.List<String> blockedWordsParsed;
+    /** 单次投放达到这个条数按"突发"记 W 级日志（正常 250ms tick 只有几条）：真机验收直接看突发是否被摊平 */
+    private static final int DANMAKU_FEED_BURST_LOG = 10;
 
     private int screen_width, screen_height;
     /** 取流响应的真实时长（毫秒）：换P/换清晰度取流成功后回填（F4），0=未取得 */
@@ -2908,18 +2910,34 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (batch.isEmpty()) return;
         long clock = safeDanmakuTime();
         if (clock < 0) clock = positionMs;
-        for (DanmakuElem e : batch) addDanmakuElem(view, e, clock);
-        Logu.v("弹幕投放", (warmup ? "补投 " : "投放 ") + batch.size()
-                + " 条 pos=" + positionMs + " 游标=" + feeder.cursor());
+        //错峰投放：一批弹幕按各自的原始 progress 间隔排进引擎时间轴，而不是全部挤在
+        //同一毫秒进场。正常 tick 窗口只有 250ms，错峰可忽略；tick 一旦被拖慢（线程调度、
+        //getCurrentPosition 等原生锁、GC），窗口拉宽到数秒——没有错峰时这批会全部从右缘
+        //同一瞬间涌出，就是反馈里"弹幕不是滚动过来，而是突然出现"的来源。warmup 补投
+        //窗口最宽 8s（PREHEAT_MS），同理受益。
+        long firstProgress = batch.get(0).progress;
+        for (DanmakuElem e : batch) {
+            //台账按 progress 升序，offset 理应非负；钳零防御乱序数据退回旧行为
+            long offset = Math.max(0, e.progress - firstProgress);
+            addDanmakuElem(view, e, clock + offset);
+        }
+        long spanMs = batch.get(batch.size() - 1).progress - firstProgress;
+        if (batch.size() >= DANMAKU_FEED_BURST_LOG) {
+            Logu.w("弹幕投放", (warmup ? "补投" : "投放") + "突发 " + batch.size()
+                    + " 条、批内跨度 " + spanMs + "ms，已按原始间隔错峰");
+        } else {
+            Logu.v("弹幕投放", (warmup ? "补投 " : "投放 ") + batch.size()
+                    + " 条 pos=" + positionMs + " 游标=" + feeder.cursor());
+        }
     }
 
     /**
      * 把一条台账弹幕投进引擎。
      *
-     * <p>{@code time} 用"引擎当前时钟 + 1ms"而不是原始的 {@code progress}：位置驱动的语义就是
-     * "现在该出现"，引擎只按 time 判断可见性，给一个 1ms 之后的时刻既不会跳帧也不会被判过期。
+     * <p>{@code timeMs} 是"这条弹幕应该在引擎时间轴的哪个时刻进场"：常规投放为引擎当前时钟
+     * （+错峰偏移），引擎只按 time 判断可见性，给一个恰好的时刻既不会跳帧也不会被判过期。
      */
-    private void addDanmakuElem(IDanmakuView view, DanmakuElem e, long clockMs) {
+    private void addDanmakuElem(IDanmakuView view, DanmakuElem e, long timeMs) {
         if (e == null || e.content == null || e.content.isEmpty()) return;
         int mode = e.mode;
         //高级弹幕(7)/代码弹幕(8)：DFM 没有对应的渲染实现，与旧链路一样直接丢弃
@@ -2934,7 +2952,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             //直接改 factor 会让在屏弹幕的位置当场跳变（加速瞬间整屏消失、减速时倒着退回去）。
             //每条弹幕投出时把当前时长拷一份，之后切倍速只影响新投的弹幕，新旧自然过渡。
             if (item.getDuration() > 0) item.setDuration(new Duration(item.getDuration()));
-            item.time = clockMs + 1;
+            item.time = timeMs + 1;
 
             String text = e.content;
             int color = e.color | 0xFF000000;
@@ -3036,6 +3054,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 .setMaximumLines(maxLinesPair)
                 .setDanmakuTransparency(SharedPreferencesUtil.getFloat("player_danmaku_transparency", 0.5f))
                 .preventOverlapping(overlap);
+        //同屏弹幕上限（2026-11-14 反馈：低性能设备弹幕滚动一卡一卡）：DFM 的数量过滤器在
+        //同屏滚动弹幕满员后暂扣新弹幕（带防连丢豁免），直接砍低性能设备的每帧绘制量。
+        //-1=引擎自动，0=不限制；解析失败回落 30。改完从下个视频生效（与其它弹幕设置同口径）
+        int maxVisibleInScreen = 30;
+        try {
+            maxVisibleInScreen = Integer.parseInt(
+                    SharedPreferencesUtil.getString("player_danmaku_max_visible", "30").trim());
+        } catch (NumberFormatException ignored) {
+        }
+        if (maxVisibleInScreen < -1) maxVisibleInScreen = -1;   //除 -1(自动)/0(不限) 外的负数无意义
+        mContext.setMaximumVisibleSizeInScreen(maxVisibleInScreen);
         //记下当前因子：建context时已经按设置值设过一次，变速时要用它算新旧比例
         float initFactor = SharedPreferencesUtil.getFloat("player_danmaku_speed", 1.0f);
         danmakuFactor = initFactor > 0f ? initFactor : 1f;

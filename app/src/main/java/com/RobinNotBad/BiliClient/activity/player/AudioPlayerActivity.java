@@ -37,6 +37,12 @@ import java.util.Locale;
 //收藏夹音频播放：全屏页
 //2026-11-05
 public class AudioPlayerActivity extends BaseActivity implements AudioPlayerService.Listener {
+    //沉浸式页面：顶栏不挂「渐隐黑」页头遮罩（BaseActivity 全局开关的排除项）
+    @Override
+    protected boolean titlebarFadeEnabled() {
+        return false;
+    }
+
 
     private ImageView cover;
     private TextView title, upName, tvPosition, tvDuration, tvQueueInfo;

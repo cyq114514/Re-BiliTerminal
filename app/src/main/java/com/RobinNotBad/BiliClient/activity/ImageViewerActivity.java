@@ -26,6 +26,12 @@ import com.github.chrisbanes.photoview.PhotoView;
 import java.util.ArrayList;
 
 public class ImageViewerActivity extends BaseActivity {
+    //沉浸式页面：顶栏不挂「渐隐黑」页头遮罩（BaseActivity 全局开关的排除项）
+    @Override
+    protected boolean titlebarFadeEnabled() {
+        return false;
+    }
+
 
     //简简单单的图片查看页面
     //2023-07-21

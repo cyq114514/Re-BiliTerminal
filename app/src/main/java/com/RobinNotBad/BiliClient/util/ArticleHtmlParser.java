@@ -78,9 +78,24 @@ public class ArticleHtmlParser {
      *
      * <p>合并而不是逐 {@code <p>} 成段，是有意的：{@code <p>} 之间需要用空行分隔才好看，
      * 而 {@code fromHtml} 已经会把块级标签转换成换行，逐段拆开反而会丢掉它们之间的间距。
+     *
+     * <p>例外是纯文本块：{@code x/article/view} 对一部分专栏（官方公告类居多）返回的
+     * 正文不是 HTML，而是零标签、段落用字面 {@code \n} 分隔的纯文本。这种块不能进合并
+     * 逻辑——{@code fromHtml} 会把字面 \n 折叠成空格（AOSP Html 的固定行为，
+     * "newlines count as spaces"），整篇就糊成一个段落。按行拆开逐行成段，
+     * 观感对齐 opus 路径（每段一个 item、自带段间距）。
      */
     private static void appendTextBlocks(List<OpusParagraph> out, String chunk) {
         if (chunk == null || chunk.isEmpty()) return;
+
+        //判定从保守：只要块里出现任何 '<' 就仍按 HTML 处理，原路径一字不动
+        if (chunk.indexOf('<') == -1) {
+            for (String line : chunk.split("\n")) {
+                appendHtml(out, line, OpusParagraph.TYPE_TEXT);
+            }
+            return;
+        }
+
         String rest = HR_TAG.matcher(chunk).replaceAll("");
 
         //标题：逐个取出单独成段（保持文档顺序）

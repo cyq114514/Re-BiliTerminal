@@ -141,6 +141,11 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
         sectionList.add(new SettingSection("switch", "显示直播弹幕发送者", "player_danmaku_showsender",
                 context.getString(R.string.desc_danmaku_showsender), "true"));
         sectionList.add(new SettingSection("input_int", "弹幕最大行数", "player_danmaku_maxline", "", "15"));
+        //同屏弹幕上限（2026-11-14 反馈：低性能设备弹幕滚动一卡一卡）：
+        //满员后新滚动弹幕暂不上屏，直接减少每帧绘制量。默认 30；-1=引擎自动，0=不限制
+        sectionList.add(new SettingSection("input_int", "同屏弹幕上限", "player_danmaku_max_visible",
+                "同屏滚动弹幕达到该数量后，新弹幕暂不上屏。低性能设备调小（如 20）可减少弹幕卡顿；-1=引擎自动，0=不限制。改完从下个视频生效",
+                "30"));
         sectionList.add(new SettingSection("input_float", "弹幕缩放倍率", "player_danmaku_size", "", "0.7"));
         sectionList.add(new SettingSection("input_float", "弹幕不透明度", "player_danmaku_transparency", "",
                 "0.5"));
