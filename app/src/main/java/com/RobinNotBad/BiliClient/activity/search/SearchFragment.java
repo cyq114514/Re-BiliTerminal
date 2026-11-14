@@ -57,12 +57,17 @@ public class SearchFragment extends Fragment {
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
+                //滚动状态边界转发：Activity 头部翻转的"一次手势一次机会"靠 DRAGGING/IDLE 解锁
+                if (requireActivity() instanceof SearchActivity) {
+                    ((SearchActivity) requireActivity()).onRecyclerViewScrollState(newState);
+                }
+
                 if (newState != RecyclerView.SCROLL_STATE_DRAGGING) return;
 
                 if (!recyclerView.canScrollVertically(-1)) {
                     if (requireActivity() instanceof SearchActivity) {
                         SearchActivity activity = (SearchActivity) requireActivity();  //不能向上滚动了就显示搜索栏
-                        activity.onScrolled(-114);
+                        activity.onScrolled(-114, true); //意图明确，强制展开且不走累计器/节流
                     }
                 } else if (listener != null && !recyclerView.canScrollVertically(1) && !swipeRefreshLayout.isRefreshing() && !bottom) {
                     goOnLoad();
