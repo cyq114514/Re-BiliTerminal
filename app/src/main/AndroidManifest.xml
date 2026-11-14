@@ -326,6 +326,11 @@
             android:label="文本显示"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.EchoCaveActivity"
+            android:exported="false"
+            android:label="回声洞"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.CopyTextActivity"
             android:exported="false"
             android:label="复制文本"

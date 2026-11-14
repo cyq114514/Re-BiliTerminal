@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.View;
 
 import com.RobinNotBad.BiliClient.R;
+import com.RobinNotBad.BiliClient.activity.EchoCaveActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.activity.settings.login.AccountSwitchActivity;
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity;
@@ -20,7 +21,7 @@ import com.google.android.material.card.MaterialCardView;
 
 public class SettingMainActivity extends InstanceActivity {
 
-    private int eggClick = 0;   //回声洞「重置进度」的二次确认计数（已读进度持久化在 egg_seen_count）
+    //回声洞已读进度持久化在 egg_seen_count，翻页与重置都在 EchoCaveActivity 里
 
     private int refreshTutorialClick = 0;
 
@@ -155,23 +156,11 @@ public class SettingMainActivity extends InstanceActivity {
                 startActivity(intent);
             });
 
-            //回声洞：长按逐条翻看用户投稿。看完的条不再重复出现（进度持久化，存已读条数
-            //而非下标，防跨版本数组变长错位）；全部看完后再长按给「重置进度」入口，
-            //沿用「清除教程进度」的二次确认节奏
-            String[] eggList = getResources().getStringArray(R.array.eggs);
+            //回声洞：长按打开翻页页——界面内左右滑动或按钮翻看用户投稿，看完的条不再重复
+            //出现（进度持久化，存已读条数而非下标，防跨版本数组变长错位）；
+            //「重置进度」入口常驻翻页页内，二次确认节奏沿用「清除教程进度」
             about.setOnLongClickListener(view -> {
-                int seen = SharedPreferencesUtil.getInt("egg_seen_count", 0);
-                if (seen > eggList.length) seen = eggList.length;   //跨版本条数变化时夹取
-                if (seen < eggList.length) {
-                    MsgUtil.showText("回声洞", eggList[seen]);
-                    eggClick = 0;   //重置确认态撤销
-                    SharedPreferencesUtil.putInt("egg_seen_count", seen + 1);
-                    if (seen + 1 >= eggList.length) MsgUtil.showMsg("回声洞已看完，长按可重置进度");
-                } else if (eggClick++ > 0) {
-                    eggClick = 0;
-                    SharedPreferencesUtil.putInt("egg_seen_count", 0);
-                    MsgUtil.showMsg("回声洞进度已重置");
-                } else MsgUtil.showMsg("再长按一次重置回声洞进度");
+                startActivity(new Intent(this, EchoCaveActivity.class));
                 return true;
             });
 
