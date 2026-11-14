@@ -1,8 +1,11 @@
 package com.RobinNotBad.BiliClient.util;
 
+import android.animation.AnimatorInflater;
 import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.os.Build;
+import android.view.View;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.BuildConfig;
@@ -25,6 +28,27 @@ public class ToolsUtil {
         final float fontScale = BiliTerminal.context.getResources()
                 .getDisplayMetrics().scaledDensity;
         return (int) (spValue * fontScale + 0.5f);
+    }
+
+    /**
+     * 给自绘卡片补上「按压缩放」反馈（0.9 倍 / 150ms，与 CardStyle 的卡片同一套）。
+     *
+     * <p><b>为什么必须走代码而不是 XML</b>：{@code android:stateListAnimator} 是 API 21 引入的属性，
+     * 本项目 minSdk=19，AAPT2 在 link 阶段会把它从 layout XML 里剥掉——实测 dump APK 后
+     * {@code cell_menu_grid} 与 {@code cell_episode_card} 里都没有该属性，而 styles.xml 的
+     * CardStyle 里保留了（style 不参与这层剥离）。所以布局里写了也等于没写。
+     *
+     * @param view 已经可点的卡片根视图
+     */
+    public static void applyPressScale(View view) {
+        if (view == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        try {
+            view.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
+                    view.getContext(), R.animator.press_scale));
+        } catch (Throwable t) {
+            //拿不到动画就维持无反馈，绝不影响点击；留一条日志便于真机排查
+            Logu.e("press-scale", "加载按压缩放失败：" + t);
+        }
     }
 
     public static String md5(String plainText) {

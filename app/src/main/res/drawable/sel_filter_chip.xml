@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 筛选/页签胶囊：
+     选中态保留"实心强调色"（这是全站唯一的强选中信号，不弱化）；
+     未选中态从 #15000000（8% 黑，压在氛围背景上几乎看不见边界）改成与卡片同一套
+     灰底 + 发丝描边，圆角统一到 @dimen/radius_chip。
+     注意：选中态是写死的 @color/bili_pink，ThemeApplier 不处理 StateListDrawable——
+     自定义主题下这里仍是默认粉。当前没有任何页面调用 setSelected()，所以看不到；
+     谁以后要加选中态，必须在调用方用 ThemeManager.getPrimary() 重建背景（见 DESIGN.md）。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_selected="true">
         <shape android:shape="rectangle">
-            <corners android:radius="14dp" />
+            <corners android:radius="@dimen/radius_chip" />
             <solid android:color="@color/bili_pink" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="14dp" />
-            <solid android:color="#15000000" />
+            <corners android:radius="@dimen/radius_chip" />
+            <solid android:color="@color/card_bg_new" />
+            <stroke
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
         </shape>
     </item>
 </selector>

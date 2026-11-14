@@ -14,6 +14,7 @@
 
         <TextView
             android:id="@+id/pageName"
+            android:textSize="14sp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
@@ -75,9 +76,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="账号"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/login"
                 android:layout_width="match_parent"
@@ -126,7 +127,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="查看登录信息"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/cookie_desription"
                         app:layout_constraintEnd_toStartOf="@+id/cookie_go"
                         app:layout_constraintStart_toStartOf="parent"
@@ -178,7 +179,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="账号切换"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/account_switch_desription"
                         app:layout_constraintEnd_toStartOf="@+id/account_switch_go"
                         app:layout_constraintStart_toStartOf="parent"
@@ -205,9 +206,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="播放"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/playerSetting"
                 android:layout_width="match_parent"
@@ -252,7 +253,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="选择播放器"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/playerSetting_desc"
                         app:layout_constraintEnd_toStartOf="@+id/playerSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/playerSetting_icon"
@@ -318,7 +319,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="内置播放器设置"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/terminalPlayerSetting_desc"
                         app:layout_constraintEnd_toStartOf="@+id/terminalPlayerSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/terminalPlayerSetting_icon"
@@ -345,9 +346,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="界面与外观"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/uiSetting"
                 android:layout_width="match_parent"
@@ -391,7 +392,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="界面设置"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/uiSetting_desription"
                         app:layout_constraintEnd_toStartOf="@+id/uiSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/uiSetting_icon"
@@ -456,7 +457,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="菜单设置"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/menuSetting_desription"
                         app:layout_constraintEnd_toStartOf="@+id/menuSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/menuSetting_icon"
@@ -483,9 +484,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="内容"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/infoSetting"
                 android:layout_width="match_parent"
@@ -530,7 +531,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="详情页设置"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/infoSetting_desription"
                         app:layout_constraintEnd_toStartOf="@+id/infoSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/infoSetting_icon"
@@ -597,7 +598,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="评论区设置"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/repliesSetting_desription"
                         app:layout_constraintEnd_toStartOf="@+id/repliesSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/repliesSetting_icon"
@@ -625,9 +626,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="推荐与搜索"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/recommendSearchSetting"
                 android:layout_width="match_parent"
@@ -672,7 +673,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="推荐与搜索"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/recommendSearchSetting_desc"
                         app:layout_constraintEnd_toStartOf="@+id/recommendSearchSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/recommendSearchSetting_icon"
@@ -699,9 +700,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="下载与存储"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/downloadStorageSetting"
                 android:layout_width="match_parent"
@@ -746,7 +747,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="下载与存储"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/downloadStorageSetting_desc"
                         app:layout_constraintEnd_toStartOf="@+id/downloadStorageSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/downloadStorageSetting_icon"
@@ -773,9 +774,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="隐私与安全"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/privacySecuritySetting"
                 android:layout_width="match_parent"
@@ -820,7 +821,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="隐私与安全"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/privacySecuritySetting_desc"
                         app:layout_constraintEnd_toStartOf="@+id/privacySecuritySetting_go"
                         app:layout_constraintStart_toEndOf="@+id/privacySecuritySetting_icon"
@@ -847,9 +848,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="通知与后台"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/notificationBackgroundSetting"
                 android:layout_width="match_parent"
@@ -894,7 +895,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="通知与后台"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/notificationBackgroundSetting_desc"
                         app:layout_constraintEnd_toStartOf="@+id/notificationBackgroundSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/notificationBackgroundSetting_icon"
@@ -921,9 +922,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginStart="4dp"
-                    android:alpha="0.55"
                     android:text="更多"
-                    android:textSize="12sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/prefSetting"
                 android:layout_width="match_parent"
@@ -968,7 +969,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="偏好设置"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/prefSetting_desription"
                         app:layout_constraintEnd_toStartOf="@+id/prefSetting_go"
                         app:layout_constraintStart_toEndOf="@+id/prefSetting_icon"
@@ -1034,7 +1035,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="实验室"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/laboratory_desription"
                         app:layout_constraintEnd_toStartOf="@+id/laboratory_go"
                         app:layout_constraintStart_toEndOf="@+id/laboratory_icon"
@@ -1099,7 +1100,7 @@
                         android:ellipsize="end"
                         android:lines="1"
                         android:text="关于"
-                        android:textSize="12sp"
+                        android:textSize="14sp"
                         app:layout_constraintBottom_toTopOf="@+id/about_desription"
                         app:layout_constraintEnd_toStartOf="@+id/about_go"
                         app:layout_constraintStart_toEndOf="@+id/about_icon"

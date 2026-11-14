@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 设置项开关的行底（SwitchCompatStyle 的 background）：圆角与描边收口到卡片 token。
+     原先 stroke 宽度引用 @dimen/card_stroke（=0dp），那圈 #70707070 描边其实画不出来。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="#cc262626" />
     <stroke
-        android:width="@dimen/card_stroke"
-        android:color="#70707070" />
-    <corners android:radius="@dimen/card_round" />
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
 </shape>

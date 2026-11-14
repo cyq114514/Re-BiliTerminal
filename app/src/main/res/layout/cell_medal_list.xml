@@ -67,7 +67,7 @@
             android:layout_marginTop="1dp"
             app:layout_constraintTop_toBottomOf="@id/medalName"
             android:layout_marginStart="6dp"
-            android:alpha="0.8"
+            android:alpha="0.7"
             android:text="亲密度: 0" />
 
         <TextView
@@ -82,7 +82,7 @@
             android:layout_marginStart="6dp"
             android:layout_marginEnd="4dp"
             app:layout_constraintEnd_toEndOf="parent"
-            android:alpha="0.6"
+            android:alpha="0.5"
             android:text="Lv.1" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>

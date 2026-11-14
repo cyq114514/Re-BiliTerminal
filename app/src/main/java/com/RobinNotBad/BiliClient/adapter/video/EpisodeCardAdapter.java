@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.model.Bangumi;
 
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import java.util.List;
 
 /**
@@ -71,6 +72,7 @@ public class EpisodeCardAdapter extends RecyclerView.Adapter<EpisodeCardAdapter.
             cardLp.width = maxCardW;
             view.setLayoutParams(cardLp);
         }
+        ToolsUtil.applyPressScale(view);
         return new EpisodeCardHolder(view);
     }
 

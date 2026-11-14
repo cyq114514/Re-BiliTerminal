@@ -33,7 +33,7 @@
             android:id="@+id/content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:alpha="0.95"
+            android:alpha="0.9"
             android:ellipsize="end"
             android:maxLines="3"
             android:text="春来早，瑞兽登高，祥风抬首云中道。\n似野鹤，彩鸢入霄，溪回谷转隐瑛瑶。"

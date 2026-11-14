@@ -51,7 +51,7 @@
                     android:id="@+id/text_extra"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:alpha="0.75"
+                    android:alpha="0.7"
                     android:text="11.4M"
                     android:textSize="11sp" />
             </LinearLayout>

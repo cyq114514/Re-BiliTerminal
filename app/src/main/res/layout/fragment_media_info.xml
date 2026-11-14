@@ -82,7 +82,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textSize="12sp"
-            android:alpha="0.8"
+            android:alpha="0.7"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_subtitle"
@@ -138,7 +138,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textSize="12sp"
-            android:alpha="0.8"
+            android:alpha="0.7"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_stats"
@@ -252,7 +252,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:textSize="11sp"
-            android:alpha="0.6"
+            android:alpha="0.5"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_staff"
             tools:text="备案号：xxxxxxxxx" />
@@ -281,7 +281,7 @@
                 android:id="@+id/episode_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:alpha="0.75"
+                android:alpha="0.7"
                 android:drawableEnd="@drawable/arrow_forward"
                 android:drawablePadding="2dp"
                 android:ellipsize="end"
@@ -363,6 +363,15 @@
                 android:text="追番"
                 android:textColor="@color/bili_pink"
                 app:strokeColor="@color/bili_pink" />
+
+            <!-- 番剧单集缓存：默认灰卡按钮，与「播放」同语言；强调色仍留给追番 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_cache"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="缓存" />
 
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>

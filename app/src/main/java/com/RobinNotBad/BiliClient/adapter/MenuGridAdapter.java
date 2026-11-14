@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.util.ClickGuard;
 
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -71,6 +72,7 @@ public class MenuGridAdapter extends RecyclerView.Adapter<MenuGridAdapter.MenuHo
     @Override
     public MenuHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_menu_grid, parent, false);
+        ToolsUtil.applyPressScale(view);
         return new MenuHolder(view);
     }
 

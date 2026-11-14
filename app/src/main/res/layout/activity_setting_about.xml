@@ -12,6 +12,7 @@
 
         <TextView
             android:id="@+id/pageName"
+            android:textSize="14sp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
@@ -68,7 +69,7 @@
                 android:layout_height="wrap_content"
                 android:layout_width="match_parent"
                 android:textSize="12sp"
-                android:alpha="0.85"
+                android:alpha="0.9"
                 android:layout_marginHorizontal="4dp"
                 android:layout_marginBottom="6dp"
                 android:text="@string/about_description"
@@ -275,7 +276,7 @@
                     android:layout_width="wrap_content"
                     android:textSize="11sp"
                     android:padding="3dp"
-                    android:alpha="0.85"
+                    android:alpha="0.9"
                     android:text="当前版本为测试版\n不代表最终正式版"
                     android:layout_gravity="center"
                     android:gravity="center" />

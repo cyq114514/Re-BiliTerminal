@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 私信发送按钮底：原为旧版粉 #fbfb8799（改造前的旧粉色），换成统一的强调色资源。
+     注意它仍是 XML 写死色：自定义主题下不跟随（ThemeApplier 只处理纯色 ColorDrawable 与
+     background_badge），这一限制见 docs/audit/UI视觉系统审查与升级方案-20261114.md §3 R1。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#fbfb8799" />
-    <corners android:radius="@dimen/card_round" />
+    <solid android:color="@color/bili_pink" />
+    <corners android:radius="@dimen/card_round_new" />
 </shape>

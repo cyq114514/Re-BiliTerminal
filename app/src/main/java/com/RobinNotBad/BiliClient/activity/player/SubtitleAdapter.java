@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder> {
     private SubtitleLink[] list;
@@ -48,6 +49,7 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_subtitle, parent, false);
+        ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
 

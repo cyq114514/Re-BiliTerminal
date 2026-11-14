@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 私信输入框底：与 background_edittext 同一套圆角/描边 token，
+     底色比普通输入框再实一档（#a0242424），因为私信页整屏是气泡，需要更清晰的输入区边界。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="#a0242424" />
     <stroke
-        android:width="2dp"
-        android:color="#dd262626" />
-    <corners android:radius="@dimen/card_round" />
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
 </shape>

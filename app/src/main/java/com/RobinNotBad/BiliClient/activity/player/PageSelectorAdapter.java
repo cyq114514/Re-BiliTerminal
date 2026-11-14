@@ -14,6 +14,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import java.util.ArrayList;
 
 public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapter.Holder> {
@@ -46,6 +47,7 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_page_item, parent, false);
+        ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
 

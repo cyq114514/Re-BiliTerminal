@@ -4,10 +4,13 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
+import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.adapter.video.DownloadAdapter;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
@@ -17,11 +20,13 @@ import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
+import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -39,6 +44,9 @@ public class DownloadListActivity extends RefreshListActivity {
     private float lastPercent = -1;
     private String lastState = null;
     private long lastDownloadingId = -1;
+    //批量删除
+    private TextView btnBatch;
+    private boolean managing;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -47,6 +55,13 @@ public class DownloadListActivity extends RefreshListActivity {
         setPageName("下载列表");
         setRefreshing(false);
         weakRef = new WeakReference<>(this);
+
+        //顶栏「批量」入口：布局里默认 GONE（activity_simple_refresh 是共用顶栏），只在本页显形
+        btnBatch = findViewById(R.id.btn_batch);
+        if (btnBatch != null) {
+            btnBatch.setVisibility(View.VISIBLE);
+            btnBatch.setOnClickListener(v -> toggleManage());
+        }
 
         CenterThreadPool.run(() -> {
             if (destroyed) return;
@@ -141,6 +156,116 @@ public class DownloadListActivity extends RefreshListActivity {
         }
     }
 
+    //------------------------------------------------------------ 批量删除
+
+    /**
+     * 「批量」按钮的三态：
+     * 未进入 → 进入批量模式；已进入且没选 → 退出；已进入且有选中 → 二次确认后批量删除。
+     * 只用一个顶栏按钮，避免在小屏/手表上再挤一个「删除」入口。
+     */
+    private void toggleManage() {
+        if (adapter == null) {
+            MsgUtil.showMsg("列表还没加载好");
+            return;
+        }
+        if (!managing) {
+            if (sections == null || sections.isEmpty()) {
+                MsgUtil.showMsg("没有可删除的下载");
+                return;
+            }
+            managing = true;
+            adapter.setSelectionMode(true);
+            updateBatchButton(0);
+            MsgUtil.showMsg("点选要删除的下载，选完点「删除」");
+            return;
+        }
+        final int count = adapter.getSelectedCount();
+        if (count == 0) {
+            exitManage();
+            return;
+        }
+        new AdaptiveDialog.Builder(this)
+                .setTitle("批量删除")
+                .setMessage("将删除选中的 " + count + " 个下载及其本地文件，此操作不可恢复。")
+                .setPositiveButton("删除", (dialog, which) -> {
+                    //先取选中快照再退出管理模式（退出会清空选中集合）
+                    final List<Long> ids = adapter.getSelectedIds();
+                    exitManage();
+                    CenterThreadPool.run(() -> deleteSectionsByIds(ids));
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void exitManage() {
+        managing = false;
+        if (adapter != null) adapter.setSelectionMode(false);
+        updateBatchButton(0);
+    }
+
+    private void updateBatchButton(int count) {
+        if (btnBatch == null) return;
+        if (!managing) btnBatch.setText("批量");
+        else if (count == 0) btnBatch.setText("取消");
+        else btnBatch.setText("删除(" + count + ")");
+    }
+
+    /**
+     * 批量删除：把单条删除的既有动作（停服务 → 按类型删文件夹 → 删记录）循环一遍，
+     * 只把「每删一条就刷一次列表」提到最后统一做一次。单条的 {@link #deleteSection} 不变，
+     * 长按删除仍走原链路。
+     */
+    private void deleteSectionsByIds(List<Long> ids) {
+        try {
+            List<DownloadSection> targets = new ArrayList<>();
+            if (sections != null) {
+                for (DownloadSection s : sections) {
+                    if (ids.contains(s.id)) targets.add(s);
+                }
+            }
+            if (targets.isEmpty()) return;
+
+            //有正在下载的项：先停服务再删，避免删到一半后台还在往里写文件
+            boolean hasDownloading = false;
+            for (DownloadSection s : targets) {
+                if ("downloading".equals(s.state) && DownloadService.started) {
+                    hasDownloading = true;
+                    break;
+                }
+            }
+            if (hasDownloading) {
+                stopService(new Intent(DownloadListActivity.this, DownloadService.class));
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ignored) {
+                }
+            }
+
+            int ok = 0;
+            for (DownloadSection s : targets) {
+                try {
+                    //同 deleteSection 的类型校验：脏数据下 getPath 会回退到相册目录
+                    if (s.type != null && s.type.contains("video")) {
+                        File folder = s.getPath();
+                        if (folder != null && folder.exists()) {
+                            FileUtil.deleteFolder(folder);
+                        }
+                    }
+                    DownloadService.deleteSection(s.id);
+                    ok++;
+                } catch (Exception e) {
+                    Logu.e("download", "批量删除失败：" + s.id + " " + e);
+                }
+            }
+
+            refreshList(false);
+            final int deleted = ok;
+            runOnUiThread(() -> MsgUtil.showMsg("已删除 " + deleted + " 项"));
+        } catch (Exception e) {
+            MsgUtil.err(e);
+        }
+    }
+
     @SuppressLint("NotifyDataSetChanged")
     public void refreshList(boolean fromOutside) {
         if (this.isDestroyed() || !created)
@@ -177,6 +302,9 @@ public class DownloadListActivity extends RefreshListActivity {
 
             if (firstRefresh) {
                 adapter = new DownloadAdapter(DownloadListActivity.this, sections);
+                //勾选数量变化 → 顶栏按钮文字在「取消」与「删除(N)」之间切换
+                adapter.setOnSelectionChangedListener(count ->
+                        runOnUiThread(() -> updateBatchButton(count)));
                 adapter.setOnClickListener(new OnItemClickListener() {
                     @Override
                     public void onItemClick(int position) {

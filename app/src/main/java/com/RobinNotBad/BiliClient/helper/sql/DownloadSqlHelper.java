@@ -10,7 +10,7 @@ import com.RobinNotBad.BiliClient.util.MsgUtil;
 
 public class DownloadSqlHelper extends SQLiteOpenHelper {
     public DownloadSqlHelper(@Nullable Context context) {
-        super(context, "download.db", null, 4);
+        super(context, "download.db", null, 5);
     }
 
     @Override
@@ -24,8 +24,11 @@ public class DownloadSqlHelper extends SQLiteOpenHelper {
                 "title TEXT," +
                 "child TEXT," +
                 "cover TEXT," +
-                "download_type TEXT DEFAULT 'video'," + // 下载类型：video(完整视频), audio_only(仅音频)
-                "audio_url TEXT)"); // 音频流URL
+                "download_type TEXT DEFAULT 'video'," + // 下载类型：video / audio_only / video_dash / video_pgc
+                "audio_url TEXT," + // 音频流URL
+                "epid BIGINT DEFAULT 0," + // 番剧剧集 id（pgc/player/web/v2/playurl 按集定位）
+                "season_id BIGINT DEFAULT 0," +
+                "season_type INTEGER DEFAULT 0)"); // 国创/电视剧等分区取流必须带真实值
     }
 
     @Override
@@ -41,6 +44,22 @@ public class DownloadSqlHelper extends SQLiteOpenHelper {
                 } catch (Throwable e) {
                     db.execSQL("drop table if exists download");
                     onCreate(db);
+                }
+            }
+            //v4 → v5（番剧缓存）：三列逐条独立 ALTER，某列已存在只跳过这一列，
+            //绝不 drop table —— 用户几十条历史下载记录比一次表结构修正重要得多。
+            if (oldVersion < 5) {
+                try {
+                    db.execSQL("ALTER TABLE download ADD COLUMN epid BIGINT DEFAULT 0");
+                } catch (Throwable ignored) {
+                }
+                try {
+                    db.execSQL("ALTER TABLE download ADD COLUMN season_id BIGINT DEFAULT 0");
+                } catch (Throwable ignored) {
+                }
+                try {
+                    db.execSQL("ALTER TABLE download ADD COLUMN season_type INTEGER DEFAULT 0");
+                } catch (Throwable ignored) {
                 }
             }
         } catch (Throwable e) {

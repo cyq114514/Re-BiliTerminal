@@ -9,8 +9,7 @@
     android:orientation="vertical"
     android:paddingHorizontal="6dp"
     android:paddingTop="8dp"
-    android:paddingBottom="4dp"
-    android:stateListAnimator="@animator/press_scale">
+    android:paddingBottom="4dp">
 
     <FrameLayout
         android:layout_width="wrap_content"

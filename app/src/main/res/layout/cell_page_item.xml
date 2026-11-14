@@ -4,6 +4,8 @@
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="3dp"
     android:background="@drawable/background_card_borderless"
+    android:clickable="true"
+    android:focusable="true"
     android:orientation="vertical"
     android:paddingHorizontal="10dp"
     android:paddingVertical="6dp">

@@ -209,6 +209,16 @@ public class DownloadService extends Service {
                                 urls_video.add(data.videoUrl);
                             urls_audio = null;
                         }
+                    } else if ("video_pgc".equals(section.downloadType)) {
+                        //番剧缓存：pgc/player/web/v2/playurl（PiliPlus 同款），返回 durl 分段 mp4，
+                        //音视频已混合，不需要 remux。落盘仍走 type=video_single 的既有分支。
+                        //注意 getBangumi 目前只暴露 durl 第 1 段的 CDN 候选列表（与在线播放同口径），
+                        //多分段番剧可能只下到第一段，见变更记录「已知限制」。
+                        PlayerApi.getBangumi(data);
+                        urls_video = new ArrayList<>(data.videoUrls);
+                        if (urls_video.isEmpty() && data.videoUrl != null && !data.videoUrl.isEmpty())
+                            urls_video.add(data.videoUrl);
+                        urls_audio = null;
                     } else {
                         PlayerApi.getVideo(data, true);
                         urls_video = new ArrayList<>(data.videoUrls);
@@ -938,6 +948,47 @@ public class DownloadService extends Service {
         } catch (Exception e) {
             MsgUtil.err(e);
         }
+    }
+
+    /**
+     * 番剧单集缓存入库：与 UGC 共用同一张表、同一个 worker、同一种 {@code type=video_single} 落盘，
+     * 只在 {@code download_type} 上区分取流接口（pgc/player/web/v2/playurl）。
+     *
+     * <p>{@code epid}/{@code season_id}/{@code season_type} 必须落库：PGC 按集定位，
+     * 且国创/电视剧等分区用错 season_type 服务端会按错误的剧集类型取流。
+     * 播放地址不落库（几小时就过期），worker 每次下载前现取。
+     */
+    public static void startDownloadBangumi(String title, long aid, long cid, long epid,
+                                            long seasonId, int seasonType, String cover, int qn) {
+        CenterThreadPool.run(() -> {
+            Cursor cursor = null;
+            try {
+                SQLiteDatabase database = getDownloadDbHelper().getWritableDatabase();
+                cursor = database.rawQuery("select * from download where aid=? and cid=?",
+                        new String[]{String.valueOf(aid), String.valueOf(cid)});
+                if (cursor != null && cursor.getCount() > 0) {
+                    MsgUtil.showMsg("该集已在下载队列中");
+                    return;
+                }
+
+                database.execSQL(
+                        "insert into download(type,state,aid,cid,qn,title,child,cover,download_type,audio_url,epid,season_id,season_type) values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        new Object[]{"video_single", "none", aid, cid, qn, title, "", GlideUtil.url(cover),
+                                "video_pgc", "", epid, seasonId, seasonType});
+
+                File path = FileUtil.getVideoDownloadPath(title, null);
+                path.mkdirs();
+                File sign = new File(path, ".DOWNLOADING");
+                if (!sign.exists()) sign.createNewFile();
+
+                MsgUtil.showMsg("已添加番剧缓存");
+                start(-1);
+            } catch (Exception e) {
+                MsgUtil.err(e);
+            } finally {
+                if (cursor != null) cursor.close();
+            }
+        });
     }
 
     public static void startDownload(String title, long aid, long cid, String cover, int qn, String downloadType,

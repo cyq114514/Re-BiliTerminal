@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 私信页的「辅助按钮」底（表情 / 图片 / 换行 / 收起 / ➕）：
+     与卡片同一套语言（半透明灰底 + 0.5dp 发丝描边 + 10dp 圆角），
+     不复用 background_privatemsg_send —— 那是发送按钮的强调色实底，
+     全是粉块会把输入区压成一片亮色（2026-11-14 反馈：按钮没有配色分级）。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/card_bg_new" />
+    <stroke
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
+</shape>

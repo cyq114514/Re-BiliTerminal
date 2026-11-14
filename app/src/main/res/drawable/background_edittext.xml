@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 输入框底：圆角与描边收口到卡片同一套 token（10dp + 0.5dp #363636）。
+     此前是 6dp 圆角 + 2dp #cc262626 粗描边（旧版语言），与 1.3.3 起统一的搜索框
+     （background_searchbar）并存，同一应用里"搜索框精致、登录/发评论框粗糙"。
+     底色保持 #80242424 不变：它比搜索框的 #99121212 浅一档，是输入框语义，不与卡片底合并。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="#80242424" />
     <stroke
-        android:width="2dp"
-        android:color="#cc262626" />
-    <corners android:radius="@dimen/card_round" />
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
 </shape>

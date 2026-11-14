@@ -11,7 +11,7 @@
     android:layout_margin="3dp"
     android:clickable="true"
     android:focusable="true"
-    app:cardCornerRadius="12dp"
+    app:cardCornerRadius="@dimen/card_round_new"
     app:cardElevation="0dp">
 
     <LinearLayout

@@ -20,6 +20,7 @@
 
         <TextView
             android:id="@+id/pageName"
+            android:textSize="14sp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
@@ -72,10 +73,10 @@
                 <TextView
                     android:id="@+id/emote_btn"
                     android:layout_width="0dp"
-                    android:layout_height="42dp"
+                    android:layout_height="40dp"
                     android:layout_margin="2dp"
                     android:layout_weight="1"
-                    android:background="@drawable/background_privatemsg_send"
+                    android:background="@drawable/background_privatemsg_aux"
                     android:contentDescription="表情"
                     android:drawablePadding="6dp"
                     android:gravity="center"
@@ -87,10 +88,10 @@
                 <TextView
                     android:id="@+id/pic_btn"
                     android:layout_width="0dp"
-                    android:layout_height="42dp"
+                    android:layout_height="40dp"
                     android:layout_margin="2dp"
                     android:layout_weight="1"
-                    android:background="@drawable/background_privatemsg_send"
+                    android:background="@drawable/background_privatemsg_aux"
                     android:contentDescription="图片"
                     android:drawablePadding="6dp"
                     android:gravity="center"
@@ -110,10 +111,10 @@
                 <TextView
                     android:id="@+id/newline_btn"
                     android:layout_width="0dp"
-                    android:layout_height="42dp"
+                    android:layout_height="40dp"
                     android:layout_margin="2dp"
                     android:layout_weight="1"
-                    android:background="@drawable/background_privatemsg_send"
+                    android:background="@drawable/background_privatemsg_aux"
                     android:contentDescription="换行"
                     android:gravity="center"
                     android:text="↵ 换行"
@@ -123,10 +124,10 @@
                 <TextView
                     android:id="@+id/collapse_btn"
                     android:layout_width="0dp"
-                    android:layout_height="42dp"
+                    android:layout_height="40dp"
                     android:layout_margin="2dp"
                     android:layout_weight="1"
-                    android:background="@drawable/background_privatemsg_send"
+                    android:background="@drawable/background_privatemsg_aux"
                     android:contentDescription="收起"
                     android:gravity="center"
                     android:text="收起"
@@ -166,13 +167,14 @@
                 android:layout_height="44dp"
                 android:layout_marginEnd="4dp"
                 android:layout_toStartOf="@id/send_btn"
-                android:background="@drawable/background_privatemsg_send"
+                android:background="@drawable/background_privatemsg_aux"
                 android:contentDescription="更多功能"
                 android:gravity="center"
                 android:text="+"
                 android:textColor="@color/textwhite"
                 android:textSize="20sp" />
 
+            <!-- 发送是主操作：保留强调色实底，其余按钮一律灰卡（DESIGN.md：强调色留给最重要的按钮） -->
             <ImageButton
                 android:id="@+id/send_btn"
                 android:layout_width="44dp"

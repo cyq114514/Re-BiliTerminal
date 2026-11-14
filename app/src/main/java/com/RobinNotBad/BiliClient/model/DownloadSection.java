@@ -18,8 +18,13 @@ public class DownloadSection {
     public String child;
     public String name_short;
     public String state;
-    public String downloadType; // 下载类型：video, audio_only
+    public String downloadType; // 下载类型：video / audio_only / video_dash / video_pgc
     public String audioUrl; // 音频流URL
+    //番剧（PGC）身份：pgc/player/web/v2/playurl 按 ep_id 定位剧集，
+    //season_type 用错分区会让服务端按错误的剧集类型取流，所以三者都要落库。
+    public long epid;
+    public long seasonId;
+    public int seasonType;
 
     public DownloadSection() {
     }
@@ -50,6 +55,15 @@ public class DownloadSection {
         if (audioUrl == null) {
             audioUrl = "";
         }
+
+        //按列名取而不是按下标：老库是逐级 ALTER 上来的，列顺序不保证；
+        //列不存在（老版本进程还没重启）就留 0，UGC 下载完全不受影响。
+        int epidIndex = cursor.getColumnIndex("epid");
+        if (epidIndex != -1) epid = cursor.getLong(epidIndex);
+        int seasonIdIndex = cursor.getColumnIndex("season_id");
+        if (seasonIdIndex != -1) seasonId = cursor.getLong(seasonIdIndex);
+        int seasonTypeIndex = cursor.getColumnIndex("season_type");
+        if (seasonTypeIndex != -1) seasonType = cursor.getInt(seasonTypeIndex);
 
         StringBuilder sBuilder = new StringBuilder();
         sBuilder.append(title.substring(0, Math.min(8, title.length())));
@@ -89,6 +103,13 @@ public class DownloadSection {
 
     public PlayerData toPlayerData() {
         PlayerData data = new PlayerData();
+        //番剧下载条目必须带番剧身份，否则 DownloadService 会走 UGC 的 x/player/playurl
+        if ("video_pgc".equals(downloadType)) {
+            data.type = PlayerData.TYPE_BANGUMI;
+            data.epid = epid;
+            data.seasonId = seasonId;
+            data.seasonType = seasonType;
+        }
         data.aid = aid;
         data.cid = cid;
         data.title = title;

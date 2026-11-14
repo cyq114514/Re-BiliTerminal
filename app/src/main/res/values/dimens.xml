@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="activity_padding_horizontal">6dp</dimen>
-    <dimen name="list_margin_vertical">2dp</dimen>
+    <!-- 卡片垂直间距：2dp 在暗底上两张卡几乎糊成一片（1.3.7 视觉审查 V1），
+         提到 4dp——仍在既有 2/4/6/8 主序列内，不引入新数值 -->
+    <dimen name="list_margin_vertical">4dp</dimen>
     <dimen name="linearlayout_divider">4dp</dimen>
     <dimen name="grid_spacing">6dp</dimen>
     <dimen name="card_round">6dp</dimen>
@@ -12,6 +14,9 @@
     <dimen name="card_round_new">10dp</dimen>
     <dimen name="card_stroke_new">0.5dp</dimen>
     <dimen name="badge_round">3dp</dimen>
+    <!-- 胶囊 chip 圆角：此前在 BangumiActivity / SearchActivity / FavoriteVideoListActivity
+         与 6 个 drawable 里各写 14dp，收成一个 token（值不变，只是不再逐处硬编码） -->
+    <dimen name="radius_chip">14dp</dimen>
     <dimen name="badge_padding_horizontal">4dp</dimen>
     <dimen name="badge_padding_vertical">1dp</dimen>
     <dimen name="menu_button_label_spacing">6dp</dimen>

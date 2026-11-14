@@ -31,6 +31,7 @@ import com.RobinNotBad.BiliClient.api.HistoryApi;
 import com.RobinNotBad.BiliClient.api.PlayerApi;
 import com.RobinNotBad.BiliClient.model.Bangumi;
 import com.RobinNotBad.BiliClient.model.PlayerData;
+import com.RobinNotBad.BiliClient.service.DownloadService;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import androidx.lifecycle.MutableLiveData;
 
@@ -144,6 +145,7 @@ public class BangumiInfoFragment extends Fragment {
         ImageView imageMediaCover = rootView.findViewById(R.id.image_media_cover);
         Button playButton = rootView.findViewById(R.id.btn_play);
         Button followButton = rootView.findViewById(R.id.btn_follow);
+        Button cacheButton = rootView.findViewById(R.id.btn_cache);
         //初始状态用 SharedPreferences 缓存判断（追番列表加载时已缓存 media_id/season_id）
         long sid = bangumi.info != null ? bangumi.info.season_id : 0;
         followButton.setText(SharedPreferencesUtil.getBoolean("bangumi_follow_" + sid, false) ? "已追番" : "追番");
@@ -298,6 +300,7 @@ public class BangumiInfoFragment extends Fragment {
             episodeStatus.setText("敬请期待");
             seasonTabsRecyclerView.setVisibility(View.GONE);
             playButton.setVisibility(View.GONE);
+            cacheButton.setVisibility(View.GONE);
             rootView.findViewById(R.id.episodes).setVisibility(View.GONE);    //未上线的番剧Activity activity = getActivity();
             Activity activity = getActivity();
             if (activity instanceof VideoInfoActivity) {
@@ -336,6 +339,9 @@ public class BangumiInfoFragment extends Fragment {
             startActivity(intent);
             return true;
         });
+
+        //缓存当前选中的一集（与播放按钮共用 getCurrentEpisode，不会出现"播的和存的是两集"）
+        cacheButton.setOnClickListener(v -> showCacheDialog());
 
         onFinishLoad();
 
@@ -682,6 +688,46 @@ public class BangumiInfoFragment extends Fragment {
             if (tab != null && tab.seasonType != 0) return tab.seasonType;
         }
         return bangumi.info != null ? bangumi.info.type : 0;
+    }
+
+    /**
+     * 番剧单集缓存：先选清晰度再写下载队列，取流与落盘都由 DownloadService 完成。
+     *
+     * <p>清晰度用 B 站通用 qn 档（服务端会给不高于请求的最高可用档），不预先取流探测——
+     * 探测要发一次带 Cookie 的 playurl 请求，且会员专享集探测本身就会失败。
+     */
+    private void showCacheDialog() {
+        if (!isAdded() || getActivity() == null || getActivity().isDestroyed()) return;
+        Bangumi.Episode episode = getCurrentEpisode();
+        if (episode == null) {
+            MsgUtil.showMsg("请先选择一集");
+            return;
+        }
+
+        final String[] labels = {"1080P（可能需要大会员）", "720P", "480P", "360P"};
+        final int[] qns = {80, 64, 32, 16};
+        final int[] picked = {1}; //默认 720P，兼容性最好
+
+        String epName = (episode.title_long != null && !episode.title_long.isEmpty())
+                ? episode.title_long : episode.title;
+        String seasonTitle = (bangumi != null && bangumi.info != null && bangumi.info.title != null)
+                ? bangumi.info.title : "番剧";
+        final String title = seasonTitle + " - " + (epName == null ? "" : epName);
+        final String cover = (episode.cover != null && !episode.cover.isEmpty())
+                ? episode.cover
+                : (bangumi != null && bangumi.info != null ? bangumi.info.cover : "");
+
+        new AdaptiveDialog.Builder(requireContext())
+                .setTitle("缓存本集")
+                .setMessage(title + "\n会员专享内容需要登录有权限的账号；下载队列在「下载列表」里查看。")
+                .setSingleChoiceItems(labels, picked[0], (dialog, which) -> picked[0] = which)
+                .setPositiveButton("开始缓存", (dialog, which) -> {
+                    PlayerData data = episode.toPlayerData();
+                    DownloadService.startDownloadBangumi(title, data.aid, data.cid, data.epid,
+                            currentSeasonId, currentSeasonType(), cover, qns[picked[0]]);
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void playEpisode(Bangumi.Episode episode) {
