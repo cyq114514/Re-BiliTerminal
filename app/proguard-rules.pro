@@ -26,6 +26,11 @@
 -keep class com.netease.hearttouch.brotlij.** {*;}
 -keep class master.flame.danmaku.** {*;}
 
+# Conscrypt（老设备崩溃上报 TLS 回移，见 NetWorkUtil.applyCrashUploadTls）：
+# JNI 静态注册的回调方法与反射入口不能被混淆/裁剪
+-keep class org.conscrypt.** { *; }
+-dontwarn org.conscrypt.**
+
 -keepattributes *Annotation*
 -keepclassmembers class * {
     @org.greenrobot.eventbus.Subscribe <methods>;

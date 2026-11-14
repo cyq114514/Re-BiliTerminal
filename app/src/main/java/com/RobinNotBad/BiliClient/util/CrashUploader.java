@@ -42,8 +42,11 @@ import okhttp3.Response;
  */
 public final class CrashUploader {
 
-    /** 自建收集服务（Supabase 表 crash_reports）。publishable key 只能插入、读不到数据。 */
-    private static final String DIRECT_ENDPOINT =
+    /**
+     * 自建收集服务（Supabase 表 crash_reports）。publishable key 只能插入、读不到数据。
+     * 包级可见：androidTest 的 TLS 回移验证要用（docs/decisions-tls-backport.md）。
+     */
+    static final String DIRECT_ENDPOINT =
             "https://yiplvonquoxpfrcayozg.supabase.co/rest/v1/crash_reports";
 
     /**
@@ -51,7 +54,7 @@ public final class CrashUploader {
      * 实测部分网络直连 supabase.co 会被重置/拒连（类头注释「上报失败是常态」的来源），
      * netlify 域名可达性好得多，所以先走反代、失败再回落直连。
      */
-    private static final String PROXY_ENDPOINT =
+    static final String PROXY_ENDPOINT =
             "https://re-biliterminal.netlify.app/.netlify/functions/crash";
     private static final String API_KEY = "sb_publishable_c4ZISmj36Nn0stegNoAszA_SlWp-3Xr";
 
@@ -171,8 +174,8 @@ public final class CrashUploader {
     /**
      * 尝试上传（调用方必须是后台线程）。成功则删掉对应的待发文件。
      */
-    public static boolean tryUpload(JSONObject report, File pending) {
-        if (upload(report)) {
+    public static boolean tryUpload(Context context, JSONObject report, File pending) {
+        if (upload(context, report)) {
             CrashTrace.log("上报: 成功");
             //同时打一行 logcat：CrashTrace 只写偏好，连电脑排查时看 logcat 更快
             Logu.e("crash", "上报成功");
@@ -202,7 +205,7 @@ public final class CrashUploader {
                 file.delete();
                 continue;
             }
-            if (upload(report)) {
+            if (upload(context, report)) {
                 //noinspection ResultOfMethodCallIgnored
                 file.delete();
                 clearFail(file);
@@ -274,7 +277,7 @@ public final class CrashUploader {
      */
     public static boolean submit(Context context, JSONObject report) {
         File pending = enqueue(context, report);
-        if (upload(report)) {
+        if (upload(context, report)) {
             if (pending != null && pending.exists()) {
                 //noinspection ResultOfMethodCallIgnored
                 pending.delete();
@@ -320,20 +323,23 @@ public final class CrashUploader {
 
     // ---------------------------------------------------------------- 内部实现
 
-    private static boolean upload(JSONObject report) {
+    private static boolean upload(Context context, JSONObject report) {
         //先反代后直连：反代没连上/5xx 才付出第二次请求的代价；
-        //4xx 是服务端明确拒绝（字段/表约束），两条路结果一致，不必再试直连
-        if (post(PROXY_ENDPOINT, report)) return true;
+        //4xx（400/401/403/422…）是服务端明确拒绝（字段/表约束），两条路结果一致，不必再试直连。
+        //404 除外：反代 404 是「函数缺失/路径错」（2026-11-14 实测 netlify 函数就挂了，curl 直测 404），
+        //不是表约束拒绝——按老逻辑短路会让直连永远不被尝试，所有设备的上报一起全灭
+        if (post(context, PROXY_ENDPOINT, report)) return true;
         int proxyCode = lastHttpCode;
-        if (proxyCode >= 400 && proxyCode < 500) return false;
-        boolean ok = post(DIRECT_ENDPOINT, report);
+        if (proxyCode >= 400 && proxyCode < 500 && proxyCode != 404) return false;
+        boolean ok = post(context, DIRECT_ENDPOINT, report);
         if (!ok) {
             CrashTrace.log("上报: 反代与直连均失败（反代 HTTP " + proxyCode + "）");
         }
         return ok;
     }
 
-    private static boolean post(String endpoint, JSONObject report) {
+    /** 包级可见：androidTest 的 TLS 回移验证直接驱动这条生产链路 */
+    static boolean post(Context context, String endpoint, JSONObject report) {
         try {
             lastHttpCode = -1;
             Request request = new Request.Builder()
@@ -343,7 +349,7 @@ public final class CrashUploader {
                     .addHeader("Prefer", "return=minimal")
                     .post(RequestBody.create(JSON_TYPE, report.toString()))
                     .build();
-            try (Response response = client().newCall(request).execute()) {
+            try (Response response = client(context).newCall(request).execute()) {
                 lastHttpCode = response.code();
                 if (!response.isSuccessful()) {
                     //以前只知道"失败"，分不清断网和有响应被拒：4xx 是服务端拒绝（字段/表约束），
@@ -399,7 +405,7 @@ public final class CrashUploader {
         }
     }
 
-    private static synchronized OkHttpClient client() {
+    private static synchronized OkHttpClient client(Context context) {
         if (client == null) {
             OkHttpClient.Builder builder = new OkHttpClient.Builder()
                     .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -407,14 +413,15 @@ public final class CrashUploader {
                     .writeTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     //失败就是失败，不在崩溃路径上自动重试
                     .retryOnConnectionFailure(false);
-            //老设备必须套上 TLS1.1/1.2 兼容（与全站 NetWorkUtil 同一套）：
-            //Android 4.4/5.x 默认只谈 TLSv1.0，上传域名要求 TLS1.2，
-            //裸 client 会 100% SSLHandshakeException("tlsv1 alert protocol version")，
-            //表现为老设备崩溃报告一条都传不上来（实测 4.4 用户连续补发 5 次全失败）
+            //老设备 TLS 回移（Conscrypt + 补根，仅 API≤22 生效）：兼容工厂只解决「启用 TLS1.2」，
+            //但米兔手表类 ROM 的系统 OpenSSL 拿不出任何 TLS1.2+AEAD 套件，
+            //两端点照样秒拒（sslv3 alert handshake failure，实测连续失败 20 次丢现场）。
+            //依据与证据见 docs/decisions-tls-backport.md
             try {
-                NetWorkUtil.setOkHttpSsl(builder);
+                NetWorkUtil.applyCrashUploadTls(
+                        context == null ? null : context.getApplicationContext(), builder);
             } catch (Throwable t) {
-                Logu.e("crash", "TLS 兼容初始化失败（按系统默认继续）: " + t);
+                Logu.e("crash", "TLS 回移初始化失败（按系统默认继续）: " + t);
             }
             client = builder.build();
         }

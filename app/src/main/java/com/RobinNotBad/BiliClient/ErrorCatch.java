@@ -156,7 +156,7 @@ public class ErrorCatch implements Thread.UncaughtExceptionHandler {
         if (upload && pending != null) {
             final File pendingFile = pending;
             Thread uploader = new Thread(
-                    () -> CrashUploader.tryUpload(report, pendingFile), "crash-upload");
+                    () -> CrashUploader.tryUpload(context, report, pendingFile), "crash-upload");
             uploader.setDaemon(true);
             uploader.start();
             try {

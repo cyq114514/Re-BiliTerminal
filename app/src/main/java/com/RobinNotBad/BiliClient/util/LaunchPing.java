@@ -40,7 +40,7 @@ public final class LaunchPing {
 
             JSONObject report = CrashUploader.buildEvent(context, "launch", "", "", "main", "", "");
             //tryUpload 不做入队，避免污染崩溃待发队列
-            boolean ok = CrashUploader.tryUpload(report, null);
+            boolean ok = CrashUploader.tryUpload(context, report, null);
             CrashTrace.log("活跃统计: " + (ok ? "已上报 " : "上报失败 ") + today
                     + " HTTP " + CrashUploader.lastHttpCode());
             Logu.e("crash", "活跃统计 " + (ok ? "成功" : "失败") + " HTTP " + CrashUploader.lastHttpCode());

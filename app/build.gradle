@@ -29,18 +29,21 @@ android {
         minSdk 19
         //noinspection ExpiredTargetSdkVersion
         targetSdk 26
-        versionCode 20261116
-        versionName "1.3.6"
+        versionCode 20261118
+        versionName "1.3.7"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
         }
 
         multiDexEnabled true
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             //noinspection ChromeOsAbiSupport
-            abiFilters 'armeabi-v7a','x86'
+            //release 只留 armeabi-v7a：真实老设备全是 v7a。x86 仅为模拟器保留，挪到 debug 变体——
+            //砍掉 release 的 x86（原始 7.7MB .so）抵消 Conscrypt v7a 的增量，净体积下降
+            abiFilters 'armeabi-v7a'
         }
 
         resConfigs 'zh'
@@ -101,6 +104,12 @@ android {
         debug {
             buildConfigField "boolean", "BETA", String.valueOf(betaVer > 0)
             signingConfig signingConfigs.debug
+            ndk {
+                //模拟器（x86 镜像）装调试包用；release 不带 x86（见 defaultConfig 注释）。
+                //-PemuArm64 追加 arm64-v8a：Apple Silicon 模拟器（只有 arm64 镜像）跑仪器化测试用——
+                //ijkplayer 等无 arm64 预编译库，此模式下播放相关功能会崩，仅用于 TLS 验证
+                abiFilters(*(['armeabi-v7a', 'x86'] + (project.hasProperty('emuArm64') ? ['arm64-v8a'] : [])))
+            }
         }
     }
 
@@ -126,6 +135,11 @@ dependencies {
     implementation 'com.google.android.material:material:1.9.0'
     //noinspection GradleDependency
     implementation 'com.squareup.okhttp3:okhttp:3.12.13'
+    //老设备（API≤22）崩溃上报通道的 TLS 回移：内嵌 BoringSSL（Conscrypt）补 TLS1.2 AEAD/1.3。
+    //版本锁死 2.5.2：2.6.x 起改用 NDK 27 构建，放弃 Android 4.x（API 19/20）。
+    //依据与证据见 docs/decisions-tls-backport.md
+    //noinspection GradleDependency
+    implementation 'org.conscrypt:conscrypt-android:2.5.2'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'com.github.bumptech.glide:glide:4.13.2'
     implementation 'com.github.bumptech.glide:okhttp3-integration:4.13.2'
@@ -153,5 +167,9 @@ dependencies {
     //此前的 org.brotli:dec 与 brotli4j 为 0 引用死依赖，已移除
     implementation 'com.google.protobuf:protobuf-javalite:3.21.12'
     implementation 'com.google.code.gson:gson:2.8.9'
+    //TLS 回移的仪器化验证（Apple Silicon 上唯一可行的模拟器验证通道，见 androidTest/TlsBackportInstrumentedTest）
+    androidTestImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:core:1.5.0'
     //崩溃上报已改为自建服务（Supabase REST + OkHttp），不再依赖任何闭源 SDK
 }

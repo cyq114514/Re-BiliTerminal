@@ -8,6 +8,9 @@ import android.os.Build;
 
 import androidx.annotation.NonNull;
 
+import com.RobinNotBad.BiliClient.R;
+
+import org.conscrypt.Conscrypt;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -20,8 +23,13 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
+import java.security.KeyStore;
+import java.security.Provider;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -31,7 +39,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.zip.Inflater;
 
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Dns;
@@ -150,6 +160,105 @@ public class NetWorkUtil {
             throw new RuntimeException(e);
         }
         return okhttpBuilder;
+    }
+
+    /**
+     * 崩溃上报通道专用的老设备 TLS 回移（API≤22）：内嵌 Conscrypt（BoringSSL），
+     * 让拿不出 TLS1.2+AEAD 套件的裁剪 ROM 也能与反代/直连两端点完成握手。
+     *
+     * <p>为什么只在 CrashUploader 用、不放进 {@link #setOkHttpSsl}：
+     * B 站 API 在这些设备上当前是通的，不动全局栈、不扩大回归面（docs/decisions-tls-backport.md）。
+     *
+     * <p>三个关键点：
+     * <ul>
+     * <li>provider 用显式实例传给 SSLContext.getInstance，不做全局 insertProviderAt——
+     *     进程级 JCA 默认序不变，Glide、全局 client 等其它路径零影响；</li>
+     * <li>证书校验走「系统根 + 内置补根」合并 KeyStore（见 {@link #mergedTrustManager}）：
+     *     Conscrypt 只换 socket 不换信任库，4.4 系统库缺 DigiCert Global Root G2
+     *     （\*.netlify.app 证书链的根，Android 5.0 才入库），不补会改死在 Trust anchor；</li>
+     * <li>不再套 {@link SSLSocketFactoryCompat}：它按系统 socket 的协议表 setEnabledProtocols，
+     *     会把 Conscrypt 的 TLS1.3 限回去。</li>
+     * </ul>
+     *
+     * <p>任何初始化失败都回落 {@link #setOkHttpSsl}（TLS1.1/1.2 开关 + 系统信任）：
+     * 上报失败是常态，但通道初始化必须是可诊断的降级，不能抛异常。
+     */
+    public static void applyCrashUploadTls(Context context, OkHttpClient.Builder builder) {
+        applyCrashUploadTls(context, builder, false);
+    }
+
+    /**
+     * {@code bypassSdkGate=true} 仅供仪器化测试在 API24+ 模拟器上强制验证同一份接线
+     * （Apple Silicon 模拟器只有 arm64 镜像、装不了 ≤22 的复现环境，见 androidTest）。
+     *
+     * @return true = Conscrypt 工厂已装上；false = 走了回落或未生效
+     */
+    static boolean applyCrashUploadTls(Context context, OkHttpClient.Builder builder,
+                                       boolean bypassSdkGate) {
+        if (Build.VERSION.SDK_INT > 22 && !bypassSdkGate) return false;   //5.0+ 系统栈够用
+        try {
+            Provider provider = Conscrypt.newProvider();
+            SSLContext sslContext = SSLContext.getInstance("TLS", provider);
+            final X509TrustManager trustManager = mergedTrustManager(context);
+            sslContext.init(null, new TrustManager[]{trustManager}, null);
+            builder.sslSocketFactory(sslContext.getSocketFactory(), trustManager);
+            //socket 工厂类名进追踪日志：验收时凭它证明 Conscrypt 真的生效了
+            CrashTrace.log("上报: TLS 栈已切换 Conscrypt（"
+                    + sslContext.getSocketFactory().getClass().getName() + "）");
+            return true;
+        } catch (Throwable t) {
+            CrashTrace.log("上报: Conscrypt 初始化失败，回落兼容工厂 " + t);
+            Logu.e("crash", "Conscrypt 初始化失败，回落兼容工厂 " + t);
+            try {
+                setOkHttpSsl(builder);
+            } catch (Throwable ignored) {
+            }
+            return false;
+        }
+    }
+
+    /**
+     * 系统 AndroidCAStore 全量根 + 内置 PEM 合并成一颗 TrustManager，
+     * 校验逻辑完全交给平台 PKIX（TrustManagerFactory），不手写任何验证路径。
+     *
+     * <p>内置两枚根（官方源下载、SHA-256 指纹核对后入库）：
+     * <ul>
+     * <li>DigiCert Global Root G2——\*.netlify.app 的根，Android 5.0 才进系统库，4.4 缺；</li>
+     * <li>ISRG Root X1——Let's Encrypt 站点通用保险，以后换反代平台时兜底。</li>
+     * </ul>
+     */
+    private static X509TrustManager mergedTrustManager(Context context) throws Exception {
+        KeyStore merged = KeyStore.getInstance(KeyStore.getDefaultType());
+        merged.load(null, null);
+        //1) 系统全部根证书原样保留：这些设备还会访问其它 https 站点，不能收窄信任面
+        KeyStore system = KeyStore.getInstance("AndroidCAStore");
+        system.load(null, null);
+        Enumeration<String> aliases = system.aliases();
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            Certificate cert = system.getCertificate(alias);
+            if (cert != null) merged.setCertificateEntry("sys_" + alias, cert);
+        }
+        //2) 内置补根
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        int[] bundledRoots = {R.raw.digicert_global_root_g2, R.raw.isrg_root_x1};
+        for (int rawId : bundledRoots) {
+            InputStream in = context.getResources().openRawResource(rawId);
+            try {
+                for (Certificate cert : factory.generateCertificates(in)) {
+                    merged.setCertificateEntry("bundled_" + rawId + "_" + merged.size(), cert);
+                }
+            } finally {
+                try {
+                    in.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+        javax.net.ssl.TrustManagerFactory tmf = javax.net.ssl.TrustManagerFactory.getInstance(
+                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init(merged);
+        return (X509TrustManager) tmf.getTrustManagers()[0];
     }
 
     public static JSONObject getJson(String url) throws IOException, JSONException {
