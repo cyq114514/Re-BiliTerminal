@@ -782,6 +782,18 @@ public class SearchActivity extends InstanceActivity {
                 return;
             }
         }
+        //2026-11-15 投稿彩蛋×2：CLANNAD/利兹与青鸟（署名投稿）。Clannad 不区分大小写，
+        //统一转小写后判断；命中即展示并阻断搜索（与撅/纳西妲同口径，避免拿彩蛋词去搜出垃圾结果）
+        if (str.contains("你滴勋宗")) {
+            if (str.toLowerCase().contains("clannad")) {
+                MsgUtil.showText("特殊彩蛋", getString(R.string.egg_nidixunzong_clannad));
+                return;
+            }
+            if (str.contains("利兹与青鸟")) {
+                MsgUtil.showText("特殊彩蛋", getString(R.string.egg_nidixunzong_lizqingniao));
+                return;
+            }
+        }
         for (String s : specialList) {
             if (str.contains(s)) {
                 MsgUtil.showText("特殊彩蛋", getString(R.string.egg_warmwords_warmworld));

@@ -2979,26 +2979,58 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
     }
 
-    /** 弹幕屏蔽词命中判定；每次调用读一次存档（与旧链路"每次装载读一次"的开销同量级）*/
-    private boolean isBlockedDanmaku(String content) {
-        if (content == null || content.isEmpty()) return false;
+    /**
+     * 弹幕屏蔽匹配的文本归一化（2026-11-15 反馈：屏蔽「78」拦不住长串 78）：
+     * NFKC 折叠全角/半角（７８→78）→ 剥变体选择符与键帽包裹符（7️⃣→7）→
+     * 去所有空白（7 8→78）→ 转小写。关键词与弹幕两侧同规则，contains 语义不放宽。
+     */
+    private static String normalizeDanmakuText(String s) {
+        if (s == null) return "";
+        String n;
+        try {
+            n = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFKC);
+        } catch (Throwable t) {
+            n = s;   //归一化失败按原文匹配，不影响播放
+        }
+        StringBuilder sb = new StringBuilder(n.length());
+        for (int i = 0; i < n.length(); i++) {
+            char c = n.charAt(i);
+            if (c == '\uFE0E' || c == '\uFE0F' || c == '\u20E3') continue;   //变体选择符/键帽包裹
+            if (Character.isWhitespace(c) || c == '\u200B' || c == '\u00A0') continue;
+            sb.append(Character.toLowerCase(c));
+        }
+        return sb.toString();
+    }
+
+    /** 读取并拆分+归一化屏蔽词；raw 缓存口径与旧 isBlockedDanmaku 相同 */
+    private java.util.List<String> getBlockedWords() {
         String raw = blockedWordsCache;
         if (raw == null) {
             raw = SharedPreferencesUtil.getString("danmaku_blocked_words", "");
             blockedWordsCache = raw == null ? "" : raw;
             blockedWordsParsed = null;
         }
-        if (raw.trim().isEmpty()) return false;
+        if (raw.trim().isEmpty()) return java.util.Collections.emptyList();
         java.util.List<String> words = blockedWordsParsed;
         if (words == null) {
             words = new ArrayList<>();
             for (String w : raw.split("[,，、;；\\s]+")) {
-                if (!w.trim().isEmpty()) words.add(w.trim());
+                String nw = normalizeDanmakuText(w);
+                if (!nw.isEmpty()) words.add(nw);
             }
             blockedWordsParsed = words;
         }
+        return words;
+    }
+
+    /** 弹幕屏蔽词命中判定；每次调用读一次存档（与旧链路"每次装载读一次"的开销同量级）*/
+    private boolean isBlockedDanmaku(String content) {
+        if (content == null || content.isEmpty()) return false;
+        java.util.List<String> words = getBlockedWords();
+        if (words.isEmpty()) return false;
+        String n = normalizeDanmakuText(content);
         for (int i = 0; i < words.size(); i++) {
-            if (content.contains(words.get(i))) return true;
+            if (n.contains(words.get(i))) return true;
         }
         return false;
     }
@@ -3240,18 +3272,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     /**
      * 弹幕屏蔽词（1.3.3 反馈：能不能加入弹幕屏蔽词）：设置里逗号/空白分隔的关键词，
-     * 弹幕文本含任一关键词即整条摘除。只作用于批量装载的弹幕（prepared 回调里调用，
+     * 弹幕文本含任一关键词即整条摘除（两侧先经 normalizeDanmakuText 归一化，
+     * 全角/键帽表情/夹空格都能命中）。只作用于批量装载的弹幕（prepared 回调里调用，
      * 此时引擎未开始渲染，从集合移除是安全的）；自己发送的弹幕不走这里。
      * 每次装载读一次存档，设置改完下个视频生效；过滤异常一律吞掉，不影响装载。
      */
     private void filterBlockedDanmaku(BaseDanmakuParser parser) {
         try {
-            String raw = SharedPreferencesUtil.getString("danmaku_blocked_words", "");
-            if (raw == null || raw.trim().isEmpty()) return;
-            java.util.List<String> words = new ArrayList<>();
-            for (String w : raw.split("[,，、;；\\s]+")) {
-                if (!w.trim().isEmpty()) words.add(w.trim());
-            }
+            //批量装载以设置页最新值为准：置空缓存强制重读一次存档
+            blockedWordsCache = null;
+            java.util.List<String> words = getBlockedWords();
             if (words.isEmpty()) return;
             IDanmakus danmakus = parser.getDanmakus();
             java.util.List<BaseDanmaku> blocked = new ArrayList<>();
@@ -3259,8 +3289,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             while (it.hasNext()) {
                 BaseDanmaku d = it.next();
                 if (d == null || d.text == null) continue;
+                String n = normalizeDanmakuText(d.text.toString());
                 for (String w : words) {
-                    if (d.text.toString().contains(w)) {
+                    if (n.contains(w)) {
                         blocked.add(d);
                         break;
                     }

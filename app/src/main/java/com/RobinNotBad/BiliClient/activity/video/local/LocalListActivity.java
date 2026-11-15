@@ -2,10 +2,15 @@ package com.RobinNotBad.BiliClient.activity.video.local;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.view.View;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -13,8 +18,10 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
 import com.RobinNotBad.BiliClient.adapter.video.LocalVideoAdapter;
+import com.RobinNotBad.BiliClient.api.PlayerApi;
 import com.RobinNotBad.BiliClient.model.AudioQueue;
 import com.RobinNotBad.BiliClient.model.LocalVideo;
+import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
@@ -40,6 +47,11 @@ public class LocalListActivity extends InstanceActivity {
 
     private boolean started;
 
+    //本地视频播放（2026-11-15 反馈：内置播放器播放本地视频）：SAF 选任意视频文件，
+    //解析真实路径后走 TYPE_LOCAL 播放链，与缓存视频同一套内置播放器；不落缓存列表
+    private final ActivityResultLauncher<String> pickVideoLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), this::playPickedVideo);
+
     @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,12 +73,17 @@ public class LocalListActivity extends InstanceActivity {
         //按缓存文件夹顺序灌进音频队列，复用收藏夹「听全部」的全屏听歌页与服务
         View localAudioBtn = findViewById(R.id.local_audio_btn);
         localAudioBtn.setVisibility(View.VISIBLE);
-        //听歌按钮占宽，标题右留白同步让位（与 RefreshMainActivity 同一套逻辑）
+        //本地视频播放入口（2026-11-15 反馈）：SAF 挑一个视频文件直接播
+        View localVideoBtn = findViewById(R.id.local_video_btn);
+        localVideoBtn.setVisibility(View.VISIBLE);
+        localVideoBtn.setOnClickListener(v -> pickVideoLauncher.launch("video/*"));
+
+        //刷新+听歌+视频三颗 chip 占宽，标题右留白同步让位（与 RefreshMainActivity 同一套逻辑）
         View pageTitle = findViewById(R.id.pageName);
         if (pageTitle != null) {
             android.view.ViewGroup.LayoutParams lp = pageTitle.getLayoutParams();
             if (lp instanceof android.view.ViewGroup.MarginLayoutParams)
-                ((android.view.ViewGroup.MarginLayoutParams) lp).setMarginEnd((int) (88 * getResources().getDisplayMetrics().density + 0.5f));
+                ((android.view.ViewGroup.MarginLayoutParams) lp).setMarginEnd((int) (140 * getResources().getDisplayMetrics().density + 0.5f));
         }
         localAudioBtn.setOnClickListener(v -> startAudioQueue(0));
 
@@ -206,6 +223,56 @@ public class LocalListActivity extends InstanceActivity {
     }
 
     /** 从展开后的第 startIndex 条起播，并打开全屏听歌页 */
+    /**
+     * SAF 选中的视频 → 播放。本应用 targetSdk26 + 页内已申请存储权限，
+     * MediaProvider 对 legacy 应用仍会下发 _data 真实路径，内置播放器直接吃路径；
+     * 个别云盘/第三方文档给不出 _data，此时提示换来源，不硬塞一个假路径给播放器。
+     */
+    private void playPickedVideo(Uri uri) {
+        if (uri == null) return;
+        CenterThreadPool.run(() -> {
+            try {
+                String path = null;
+                String name = null;
+                Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+                if (cursor != null) {
+                    try {
+                        if (cursor.moveToFirst()) {
+                            int dataIdx = cursor.getColumnIndex("_data");
+                            if (dataIdx >= 0) path = cursor.getString(dataIdx);
+                            int nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                            if (nameIdx >= 0) name = cursor.getString(nameIdx);
+                        }
+                    } finally {
+                        cursor.close();
+                    }
+                }
+                if (path == null || path.isEmpty()) {
+                    runOnUiThread(() -> MsgUtil.showMsg("该来源不支持直接播放，请从相册或本机文件里选"));
+                    return;
+                }
+                if (name == null || name.isEmpty()) {
+                    int cut = path.lastIndexOf('/');
+                    name = cut >= 0 ? path.substring(cut + 1) : path;
+                }
+                final String mediaPath = path;
+                final String title = name;
+                runOnUiThread(() -> {
+                    try {
+                        PlayerData playerData = new PlayerData(PlayerData.TYPE_LOCAL);
+                        playerData.videoUrl = mediaPath;
+                        playerData.title = title;
+                        startActivity(PlayerApi.jumpToPlayer(playerData));
+                    } catch (Exception e) {
+                        MsgUtil.showMsg("播放失败: " + e.getClass().getSimpleName());
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> MsgUtil.showMsg("播放失败: " + e.getClass().getSimpleName()));
+            }
+        });
+    }
+
     private void startAudioQueue(int startIndex) {
         ArrayList<VideoCard> items = buildAudioItems();
         if (items.isEmpty()) {

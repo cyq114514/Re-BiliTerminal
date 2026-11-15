@@ -55,6 +55,30 @@
             app:drawableTint="@color/text_gray"
             app:drawableTintMode="src_in" />
 
+        <!-- 本地视频播放入口：只在本地缓存页点亮。SAF 选任意视频文件，
+             解析真实路径后走 TYPE_LOCAL 播放链（与缓存视频同一套内置播放器） -->
+        <TextView
+            android:id="@+id/local_video_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="6dp"
+            android:layout_toStartOf="@id/local_audio_btn"
+            android:layout_toLeftOf="@id/local_audio_btn"
+            android:background="@drawable/sel_refresh_chip"
+            android:drawablePadding="6dp"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:singleLine="true"
+            android:text="视频"
+            android:textColor="@color/text_gray"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:drawableStartCompat="@drawable/icon_play_16"
+            app:drawableTint="@color/text_gray"
+            app:drawableTintMode="src_in" />
+
         <TextView
             android:id="@+id/btn_refresh"
             android:layout_width="wrap_content"
