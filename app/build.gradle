@@ -128,6 +128,17 @@ android {
     buildFeatures {
         viewBinding false
     }
+
+    // JVM 单元测试：纯逻辑直接跑 JUnit；依赖 Android 框架（SharedPreferences/SQLite/Cursor）的
+    // 用例用 Robolectric 在 JVM 上提供真实实现，不需要真机/模拟器，也不进 Release APK。
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            // 测试里仍会触达少量 Android 静态方法（Log 等）。默认让未 Mock 的桩方法返回默认值，
+            // 避免为了一个日志调用去 Shadow 整个类；真实断言不依赖这些返回值。
+            returnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -175,5 +186,13 @@ dependencies {
     androidTestImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test:core:1.5.0'
+
+    // ===== JVM 单元测试（testImplementation 只进 test classpath，不会进入 APK）=====
+    testImplementation 'junit:junit:4.13.2'
+    // Robolectric 在 JVM 上提供 Android 框架真实实现（SharedPreferences/SQLite/Cursor/Log）。
+    // 选 4.18：旧版在 Linux aarch64 上没有原生 SQLite runtime（本机 ARM64/PRoot 的数据库测试会直接失败）；
+    // 4.18 与 AGP 8.10 / JDK 17 兼容，仅测试使用，不影响 minSdk 19 与 release 体积。
+    testImplementation 'org.robolectric:robolectric:4.18'
+    testImplementation 'androidx.test:core:1.5.0'
     //崩溃上报已改为自建服务（Supabase REST + OkHttp），不再依赖任何闭源 SDK
 }
