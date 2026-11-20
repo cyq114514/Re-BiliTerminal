@@ -1,9 +1,7 @@
 name: CI
 
-# push 到 main 时编译自检；推 v* 标签时构建 release 包并附加到对应 Release
-permissions:
-  # github.token 默认只读，向 Release 上传资产需要 contents 写权限
-  contents: write
+# push 到 main / PR 时编译自检；推 v* 标签时构建 release 包并附加到对应 Release。
+# 权限最小化：默认只读；发布需要的 contents: write 只挂在 tag 专用的 release job 上。
 
 on:
   push:
@@ -11,21 +9,45 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+    # PR 只跳过纯文档变更；push/tag 不加 paths 过滤，避免影响发版判断
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'site/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # tag 发布不取消，避免两条发布链互相覆盖；分支/PR 连推时取消旧任务
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
+    name: 编译自检（Debug）
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 配置 JDK 17
+      - name: 配置 JDK 17（含 Gradle 缓存）
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
 
+      - name: 校验 runner 预装 Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -n "$ANDROID_HOME" || { echo "::error::ANDROID_HOME 未设置"; exit 1; }
+          test -d "$ANDROID_HOME/platforms/android-33" || { echo "::error::缺少 platforms/android-33（compileSdk 33）"; exit 1; }
+          ls "$ANDROID_HOME/build-tools" | sort -V | tail -1
+
+      # 此时没有任何 secrets：debug 包不含凭据（发布 job 才注入）
       - name: 编译自检（Debug 包）
         run: ./gradlew :app:assembleDebug --stacktrace
 
@@ -35,13 +57,49 @@ jobs:
           name: Re-BiliTerminal-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 7
 
-      # ===== 以下仅 tag 推送时执行 =====
-      # 只写 tag 发版构建：push/PR 的 debug 包不带凭据，避免凭据随 artifact 外泄。
+  release:
+    name: 发布（tag）
+    # 只有 tag 推送才进入发布链；普通 PR / main push 永远不会拿到写权限与 secrets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17（含 Gradle 缓存）
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: 校验 runner 预装 Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -n "$ANDROID_HOME" || { echo "::error::ANDROID_HOME 未设置"; exit 1; }
+          test -d "$ANDROID_HOME/platforms/android-33" || { echo "::error::缺少 platforms/android-33（compileSdk 33）"; exit 1; }
+          ls "$ANDROID_HOME/build-tools" | sort -V | tail -1
+
+      # 新 tag 建议统一为 v<versionName>；历史 -fix/fix1 命名只告警、不阻断发布
+      - name: 校验 tag 与 versionName 一致
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          GRADLE_VERSION=$(grep -m1 -E '^[[:space:]]*versionName[[:space:]]' app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=$GITHUB_REF_NAME  versionName=$GRADLE_VERSION"
+          if [ "$TAG_VERSION" != "$GRADLE_VERSION" ]; then
+            echo "::warning::tag（$GITHUB_REF_NAME）与 versionName（$GRADLE_VERSION）不一致；新 tag 建议统一为 v<versionName>，发布继续。"
+          fi
+
+      # ===== 以下仅在 tag 发布 job 内执行，secrets 只出现在本 job =====
       # 三组 secret 各自独立：缺签名密钥 → 出未签名包；缺反代凭据 → Bangumi 只能直连；
       # 缺弹弹play 凭据 → 第三方番剧没有弹幕（其余功能不受影响）。
       - name: 写入构建配置（签名 + Bangumi 反代 + 弹弹play 凭据）
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -53,12 +111,17 @@ jobs:
         run: |
           {
             echo "sdk.dir=$ANDROID_HOME"
-            if [ -n "$KEYSTORE_B64" ]; then
+            # 签名 4 键"全有或全无"：任一缺失都按未签名处理，避免"看起来签了名其实失败"
+            if [ -n "$KEYSTORE_B64" ] && [ -n "$KEY_PASSWORD" ] && [ -n "$ALIAS_NAME" ] && [ -n "$ALIAS_PASSWORD" ]; then
               echo "$KEYSTORE_B64" | base64 -d > "$HOME/release.jks"
               echo "KEY_PATH=$HOME/release.jks"
               echo "KEY_PASSWORD=$KEY_PASSWORD"
               echo "ALIAS_NAME=$ALIAS_NAME"
               echo "ALIAS_PASSWORD=$ALIAS_PASSWORD"
+            else
+              if [ -n "$KEYSTORE_B64" ]; then
+                echo "::warning::签名配置不完整（KEYSTORE_B64 存在但 4 键未齐），本次按未签名构建"
+              fi
             fi
             # 整行写入（含 "Basic " 前缀）；Base64 只含 A-Za-z0-9+/=，不会被 Properties 解析破坏
             if [ -n "$BGM_PROXY_AUTH" ]; then
@@ -83,13 +146,11 @@ jobs:
           sed -E 's/(KEY_PASSWORD|ALIAS_PASSWORD|BGM_PROXY_AUTH|DANDAN_APP_ID|DANDAN_APP_SECRET)=.*/\1=***/' local.properties
 
       - name: 构建 Release 包
-        if: startsWith(github.ref, 'refs/tags/v')
         run: ./gradlew :app:assembleRelease --stacktrace
 
       # release 独有的资源收缩会把"只被 getIdentifier 动态引用"的资源判成不可达并裁掉
       # （历史上裁掉过 6 张教程插图），这里对最终 APK 做一次冒烟断言，防止再无声回归
       - name: release 资源冒烟（教程插图不可被裁）
-        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
           AAPT2=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)
@@ -98,15 +159,14 @@ jobs:
           [ "$N" -ge 6 ] || { echo "::error::release 包缺少教程插图（$N/6），检查 res/raw/keep.xml"; exit 1; }
 
       - name: 上传 Release 包
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: Re-BiliTerminal-release
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+          retention-days: 7
 
       - name: 附加到 GitHub Release（不存在则自动创建）
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -125,16 +185,23 @@ jobs:
               --title "Re：哔哩终端 ${TAG}" --generate-notes
           fi
 
-          #生成应用内更新元数据（客户端 UpdateManager 主通道的数据源）：
-          #客户端经 releases/latest/download/update.json 获取 versionCode/sha256/更新说明，
-          #该直链在 github.com 域下，可被用户设置的镜像前缀整体代理
-          VERSION_CODE=$(grep -E 'versionCode[[:space:]]+[0-9]+' app/build.gradle | grep -oE '[0-9]+' | head -1)
+          # versionCode 以**已构建 APK** 为准（与包体强一致）；解析失败才回退 build.gradle，并显式告警
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)
+          VERSION_CODE=$("$AAPT2" dump badging "/tmp/$NAME" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+          if [ -z "$VERSION_CODE" ]; then
+            VERSION_CODE=$(grep -m1 -E '^[[:space:]]*versionCode[[:space:]]' app/build.gradle | grep -oE '[0-9]+' | head -1)
+            echo "::warning::无法从 APK 解析 versionCode，回退 build.gradle 值 $VERSION_CODE"
+          fi
           VERSION_CODE=${VERSION_CODE:-0}
           SHA256=$(sha256sum "/tmp/$NAME" | awk '{print $1}')
           SIZE=$(stat -c%s "/tmp/$NAME")
-          BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.body' 2>/dev/null || echo "")
-          #客户端 API 兜底通道从 release 说明里的元数据注释解析 versionCode/sha256：
-          #剥离旧注释后追加最新值（幂等，重复发布同一 tag 不会叠加多份）
+          # 取不到原 Release 说明时直接失败：不能静默把 notes 替换成空壳
+          if ! BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.body' 2>/dev/null); then
+            echo "::error::无法读取 Release $TAG 的说明（gh api 失败），中止更新 update.json"
+            exit 1
+          fi
+          # 客户端 API 兜底通道从 release 说明里的元数据注释解析 versionCode/sha256：
+          # 剥离旧注释后追加最新值（幂等，重复发布同一 tag 不会叠加多份）
           CLEAN_BODY=$(printf '%s' "$BODY" | sed -e 's/<!--ReBiliTerminal-update[^>]*-->//g')
           META_COMMENT="<!--ReBiliTerminal-update versionCode=${VERSION_CODE} sha256=${SHA256}-->"
           if [ -n "$CLEAN_BODY" ]; then
@@ -144,7 +211,7 @@ jobs:
             NEW_BODY="$META_COMMENT"
           fi
           gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes "$NEW_BODY"
-          #versionCode 缺失时（tag 非常规/构建文件被改）取 0 而不是让 tonumber 失败断掉整个发布链
+          #versionCode 缺失时取 0 而不是让 tonumber 失败断掉整个发布链
           jq -n --arg versionCode "$VERSION_CODE" --arg versionName "${TAG#v}" \
                 --arg sha256 "$SHA256" --arg fileName "$NAME" --argjson size "$SIZE" \
                 --arg notes "$CLEAN_BODY" \
