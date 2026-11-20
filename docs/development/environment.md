@@ -72,10 +72,12 @@ ALIAS_PASSWORD=******
 |---|---|
 | `push` → `main` | checkout → JDK 17 → `:app:assembleDebug` → 上传 debug artifact（不发版、不注入凭据） |
 | `push` → tag `v*` | 同上的 debug 构建后，写 `local.properties` → `:app:assembleRelease` → 资源冒烟（教程插图 ≥6）→ 上传 release artifact → 创建/覆盖 GitHub Release → 写 update 元数据 → 生成并上传 `update.json` |
-| `pull_request` → `main` | 同 `push main`：只跑 debug 构建并上传 artifact；不注入 secrets、不碰 Release |
+| `pull_request` → `main` | 同 `push main`：只跑 debug 构建并上传 artifact；不注入 secrets、不碰 Release；纯 docs/`*.md`/`site/**` 变更按 `paths-ignore` 跳过 |
 | `workflow_dispatch` | 按所选 ref：非 tag 仅 debug；tag 走完整发布链 |
 
-- **权限**：workflow 级 `permissions: contents: write`（`ci.yml:4-6`）——写权限对 PR 构建同样生效，属已知风险（见仓库治理审查记录，未在本次修改）。
+- **权限**：顶层默认 `permissions: contents: read`；只有 tag-only 的 `release` job 单独申请 `contents: write`。PR 构建与 main push 都不持有写 token，也不接触 secrets。
+- **并发/超时/缓存/保留期**：`concurrency` 按 ref 分组（tag 发布不取消，分支/PR 连推取消旧任务）；`build` 超时 30 分钟、`release` 45 分钟；`setup-java` 启用 Gradle 缓存；artifact 保留 7 天。
+- **PR 过滤**：仅 `pull_request` 忽略 `docs/**`、`**.md`、`site/**`（纯文档 PR 不跑构建）；`push`/`tag` 不做路径过滤，避免影响发版判断。
 - **release secrets 共 7 个**：`KEYSTORE_B64`（base64 解码为 `$HOME/release.jks`）、`KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`（签名，4 键"有则用、缺则出 unsigned"）；`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头，缺则境内番剧库不可用）；`DANDAN_APP_ID`、`DANDAN_APP_SECRET`（弹弹play 弹幕签名，缺则第三方番剧无弹幕）。缺失只在 CI 打 `::warning`，不失败（`ci.yml:43-83`）。
 - **Release 资产命名**：签名成功为 `Re-BiliTerminal-<tag>-release.apk`；未签名为 `Re-BiliTerminal-<tag>-release-unsigned.apk`（`ci.yml:114-120`）。
 - **`update.json` 字段**：`versionCode`、`versionName`、`sha256`、`size`、`fileName`、`notes`、`htmlUrl`；versionCode 由 `app/build.gradle` 的 `grep` 取得（`ci.yml:131`），客户端 `UpdateManager` 主通道读取 `releases/latest/download/update.json`。

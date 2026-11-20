@@ -22,7 +22,7 @@
 | `./scripts/project-info.sh` | 输出关键工程信息 JSON（版本/分支/tag/SDK/AGP/Gradle），供脚本或 Agent 读取 | 0 |
 | `./scripts/validate-ci.sh` | 静态检查 workflow：permissions/concurrency/timeout/缓存/retention/tag 收口等 | 0 无 FAIL｜1 有 FAIL |
 
-> `validate-ci.sh` 在 CI 改造前**预期 FAIL 4 项**（concurrency、timeout-minutes、Gradle 缓存、artifact retention），这是待修复清单，不是脚本故障；修好后应转为 PASS。
+> `validate-ci.sh` 当前对仓库 workflow 通过（FAIL 0；WARN 为未 pin action SHA、未显式安装 Android SDK）。修改 workflow 后请重跑；环境有 PyYAML 时会额外做一次 YAML 语法解析。
 > 脚本不联网、不写文件、不读 secrets；缺少依赖时给出提示而非自动安装。
 
 ## 2. 构建

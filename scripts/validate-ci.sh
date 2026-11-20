@@ -42,6 +42,15 @@ for f in "${files[@]}"; do
 
     # 1. 基本结构
     if grep -qE '^name:' "$f"; then ok "有 name"; else no "缺少 name"; fi
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' >/dev/null 2>&1; then
+        if python3 -c "import sys,yaml; list(yaml.safe_load_all(open(sys.argv[1], encoding='utf-8')))" "$f" >/dev/null 2>&1; then
+            ok "YAML 语法解析通过（PyYAML）"
+        else
+            bad "YAML 语法解析失败（PyYAML），GitHub 会拒绝该 workflow"
+        fi
+    else
+        info "未安装 PyYAML，跳过 YAML 语法解析（只做文本断言）"
+    fi
     if grep -qE '^on:' "$f"; then ok "有 on 触发块"; else bad "缺少 on 触发块"; fi
     if grep -qE '^[[:space:]]+push:' "$f"; then ok "监听 push"; else info "未监听 push"; fi
     if grep -qE '^[[:space:]]+pull_request:' "$f"; then ok "监听 pull_request"; else no "未监听 pull_request（PR 无自动检查）"; fi
@@ -96,10 +105,12 @@ for f in "${files[@]}"; do
     # 7. 发布产物与更新机制
     if grep -q 'update\.json' "$f"; then ok "包含 update.json 生成/上传逻辑"; else info "未发现 update.json 逻辑"; fi
     if grep -qE 'mipmap/tutorial_' "$f"; then ok "包含 release 资源冒烟（教程插图）"; else info "未发现资源冒烟断言"; fi
-    if grep -qE "grep -E 'versionCode" "$f"; then
+    if grep -q 'dump badging' "$f"; then
+        ok "versionCode 从已构建 APK 读取（aapt2 dump badging）"
+    elif grep -qE "grep -E 'versionCode" "$f"; then
         no "versionCode 通过 grep build.gradle 取得（脆弱；建议从已构建 APK 的 aapt2 badging 读取）"
     else
-        ok "versionCode 未依赖 grep build.gradle"
+        ok "未发现脆弱的 versionCode 解析"
     fi
 
     # 8. 触发面
@@ -116,5 +127,5 @@ if [ "$fail" -gt 0 ]; then
     echo "CI 配置存在必须修复项（基线清单见 docs/development/environment.md）。" >&2
     exit 1
 fi
-echo "CI 配置静态检查通过（YAML 语法未由解析器验证）。"
+echo "CI 配置静态检查通过。"
 exit 0
