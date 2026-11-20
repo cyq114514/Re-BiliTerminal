@@ -82,7 +82,7 @@ ALIAS_PASSWORD=******
 - **release secrets 共 7 个**：`KEYSTORE_B64`（base64 解码为 `$HOME/release.jks`）、`KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`（签名，4 键"有则用、缺则出 unsigned"）；`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头，缺则境内番剧库不可用）；`DANDAN_APP_ID`、`DANDAN_APP_SECRET`（弹弹play 弹幕签名，缺则第三方番剧无弹幕）。缺失只在 CI 打 `::warning`，不失败（`ci.yml:43-83`）。
 - **Release 资产命名**：签名成功为 `Re-BiliTerminal-<tag>-release.apk`；未签名为 `Re-BiliTerminal-<tag>-release-unsigned.apk`（`ci.yml:114-120`）。
 - **`update.json` 字段**：`versionCode`、`versionName`、`sha256`、`size`、`fileName`、`notes`、`htmlUrl`；versionCode 由 `app/build.gradle` 的 `grep` 取得（`ci.yml:131`），客户端 `UpdateManager` 主通道读取 `releases/latest/download/update.json`。
-- 真实运行记录/耗时/失败史：本机无 gh、无 GitHub 登录，**未核实**（核实方法：网页 Actions，或登录后 `gh run list`）。
+- **真实运行记录（2026-11-21，PR #1）**：run 44782040134 成功——build job 2m23s（其中 Gradle 构建 1m22s；首次无缓存，结束后缓存已保存）；release job 因非 tag 正确跳过；debug artifact 16.7MB、保留 7 天。首跑 run 44781850513 曾失败：runner（ubuntu-26.04）不再预装 platform-33，已把「校验预装」改为「缺失时用 sdkmanager 安装」。
 
 ## 6. 常见问题
 
