@@ -76,6 +76,7 @@ ALIAS_PASSWORD=******
 | `workflow_dispatch` | 按所选 ref：非 tag 仅 debug；tag 走完整发布链 |
 
 - **权限**：顶层默认 `permissions: contents: read`；只有 tag-only 的 `release` job 单独申请 `contents: write`。PR 构建与 main push 都不持有写 token，也不接触 secrets。
+- **Android SDK 准备**：job 内检查 `platforms/android-33` 与 `build-tools`；runner 未预装时用自带的 `sdkmanager` 安装（首次约 1~2 分钟），找不到 `sdkmanager` 则告警并依赖 AGP 自动下载。真实 CI 首跑发现 `ubuntu-26.04` 镜像不再预装 platform-33，此步骤是必要的。
 - **并发/超时/缓存/保留期**：`concurrency` 按 ref 分组（tag 发布不取消，分支/PR 连推取消旧任务）；`build` 超时 30 分钟、`release` 45 分钟；`setup-java` 启用 Gradle 缓存；artifact 保留 7 天。
 - **PR 过滤**：仅 `pull_request` 忽略 `docs/**`、`**.md`、`site/**`（纯文档 PR 不跑构建）；`push`/`tag` 不做路径过滤，避免影响发版判断。
 - **release secrets 共 7 个**：`KEYSTORE_B64`（base64 解码为 `$HOME/release.jks`）、`KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`（签名，4 键"有则用、缺则出 unsigned"）；`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头，缺则境内番剧库不可用）；`DANDAN_APP_ID`、`DANDAN_APP_SECRET`（弹弹play 弹幕签名，缺则第三方番剧无弹幕）。缺失只在 CI 打 `::warning`，不失败（`ci.yml:43-83`）。
