@@ -1,0 +1,24 @@
+# 仓库文件归类（2026-11-21 工程治理新增）
+# 目的：让 diff、merge 与语言统计正确识别二进制，避免把大文件当文本处理；
+# 统一脚本行尾，避免跨平台提交产生整文件 diff。
+# 注意：这里**不**声明 `* text=auto`，以免一次性改写历史文件的行尾。
+
+# 脚本行尾
+*.sh    text eol=lf
+*.bat   text eol=crlf
+gradlew text eol=lf
+
+# 二进制：资源、预编译库与发布产物
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.webp    binary
+*.gif     binary
+*.ico     binary
+*.so      binary
+*.jar     binary
+*.zip     binary
+*.apk     binary
+*.jks     binary
+*.keystore binary
+*.p12     binary
