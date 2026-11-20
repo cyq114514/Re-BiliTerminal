@@ -39,8 +39,12 @@
 
 ## 7. 测试
 
-- `src/androidTest/` 只有 TLS 回移测试，且**会向线上 Supabase 写测试数据并真实联网**；不要在没有说明的情况下运行。
-- 不要为通过检查而删除/跳过测试。
+- `src/test/` 是 **JVM 单元测试**（JUnit4 + Robolectric，`testImplementation`）：不需要设备/模拟器，由 CI 的 `unit-test` job 执行；本地命令、ARM64 override、`sdk=33`/`conscryptMode=OFF` 的由来见 [`docs/development/testing.md`](../docs/development/testing.md)。
+- 测试依赖只能放 `testImplementation`（不会进入 APK）；不要为了跑测试把它们改成 `implementation`。
+- 覆盖对象是纯逻辑/状态机/数据库迁移/安全校验；**不要为了通过测试改业务行为，也不要放宽** `UrlGuard`/`RuleLimits`/`SafeRegex`/HLS 代理的校验或登录/Cookie 白名单。
+- `src/androidTest/` 只有 TLS 回移测试，且**会向线上 Supabase 写测试数据并真实联网**；不要在没有说明的情况下运行，且**不纳入 CI**（本地 `NOT RUN`）。
+- 不要为通过检查而删除/跳过测试（`@Ignore` 也在禁止范围）；测试体系不变量由 `scripts/check-tests.sh` 检查，新增/改测试后跑一次。
+- 测试代码规范（命名、隔离、负向用例、失败消息）与 Robolectric 用法入口：[`docs/development/testing.md`](../docs/development/testing.md) §2/§3。
 
 ## 8. 构建红线（app 级）
 

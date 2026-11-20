@@ -9,9 +9,9 @@
 2. **定向探索**：只读必要代码。先用 `../architecture/module-map.md` 定位模块，再读对应 `../modules/*.md` 的「先读」清单；用符号名/调用链搜索，不要从 6,544 行的播放页第一行开始读。
 3. **制定计划**：复杂任务先列预计修改的文件、原因、依赖、风险、验证方式；写进任务模板或提交说明。
 4. **实施最小修改**：不夹带格式化、重命名、无关业务改动；一次只做一件事。
-5. **自主验证**：按改动范围执行 `commands.md` 里的检查（静态 → 编译 → 产物核验；Release 等价验证只能 CI）。
+5. **自主验证**：按改动范围执行 `commands.md` 里的检查（静态 → 编译 → JVM 单测 → 产物核验；Release 等价验证只能 CI）。改/加测试时同时跑 `scripts/check-tests.sh`。
 6. **检查 Diff**：意外删除、无关改动、敏感信息、依赖/构建配置变化、文档一致性。
-7. **交付报告**：完成内容、修改文件、验证结果（含未执行项）、风险、下一步。
+7. **交付报告**：完成内容、修改文件、验证结果（含未执行项与**真实测试/CI 状态**）、风险、下一步。CI 状态只能来自真实 Actions 结果；未推送/未运行写 `NOT RUN`，失败写 `FAIL` 并附失败 job 与日志。**推送/PR 后要等 CI 跑完并读取失败日志**，不得用本地编译或本地单测代替 CI 结论。
 
 ## 2. 计划与范围（复杂任务）
 
@@ -38,7 +38,8 @@
 | 纯文档 | `git diff --check` + 链接检查（目标文件存在） | 不需要构建 |
 | 资源/布局 | Debug 构建 + 视觉检查 | 资源裁剪风险需 CI release 验证 |
 | Java 业务 | Debug 构建 + 模块回归清单（能跑则跑） | 无真机时回归标 NOT RUN |
-| 构建配置/CI | Debug 构建 + `git diff` 审阅；CI 配置只能真实运行验证 | 未 push 时标 PARTIAL |
+| 测试代码/测试体系 | 本地 `:app:testDebugUnitTest` + `./scripts/check-tests.sh`；推送后以真实 CI `unit-test` 结果为准 | 命令见 `commands.md` §4，策略见 [`testing.md`](testing.md) |
+| 构建配置/CI | Debug 构建 + `git diff` 审阅；CI 配置只能真实运行验证 | 未 push 时标 PARTIAL，静态检查见 [`ci.md`](ci.md) |
 | 发布相关 | 全部交给 CI，本地不改 | 版本/签名/update 机制禁改 |
 
 未执行/无法执行必须写 `NOT RUN`/`BLOCKED`/`PARTIAL` 并说明原因；**不得用"配置看起来对"冒充验证通过**。
@@ -68,14 +69,16 @@
 
 ## 8. CI 反馈闭环（现状）
 
-目标流程：改代码 → 提交工作分支 → Actions 自动构建 → 读取结果/日志 → 修复 → 复跑 → 人审合并。
+目标流程：改代码/测试 → 提交 → 推送或开 PR → Actions 跑日常 job（`checks` / `build` / `unit-test`）→ 读取结果与失败日志 → 修复 → 复跑 → 人审合并；只有推 tag `v*` 才进入 `release`（发布链行为不变）。job 结构、超时、失败分类与报告位置见 [`ci.md`](ci.md)，测试分层与未覆盖风险见 [`testing.md`](testing.md)。
 
 当前现状（如实）：
 
-- 本地可闭环到 **Debug 编译**；
-- Actions 的结果读取需要 GitHub 登录或 `gh`，本机**没有**（无 gh、无凭据）→ 只能人工在网页看日志后贴回；
-- 因此 CI 闭环验证在补齐凭据前只能标 **PARTIAL/BLOCKED**；
-- Release 发布链的最终验证只能在真实发版时完成。
+- 本地可闭环到 **Debug 编译 + JVM 单测**（命令已具备；具体通过/失败以每次真实运行结果为准，未执行写 `NOT RUN`）；ARM64/PRoot 需 aapt2 override，见 `environment.md` §3.1/§4；
+- Actions 结果读取需要 GitHub 登录或 `gh`，本机**没有**（无 gh、无凭据）→ 只能请用户在网页查看并把失败日志/链接贴回；
+- 因此**未推送或未看到真实 Actions 结果前，CI 状态只能写 `NOT RUN`**；无法读取结果时写 `PARTIAL`/`BLOCKED` 并说明原因，**不得用本地编译/本地单测冒充 CI 通过**，也不得伪造 Actions 结果；
+- 推送后必须等 CI 跑完：失败先按 `ci.md` §3 归类（规范/编译/单测/环境），再修对应问题；不允许用 `continue-on-error`、删除或跳过测试让门禁变绿；
+- 通过 `unit-test` 的 Job Summary 与 `unit-test-results` artifact 获取真实测试报告（总数/失败用例/堆栈），交付报告中的测试结论以它为准；
+- Release 发布链的最终验证只能在真实 tag 发版时完成。
 
 ## 9. 文档维护
 

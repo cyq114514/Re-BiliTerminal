@@ -29,7 +29,8 @@ app/                        唯一业务模块（全部 UI/网络/播放/下载�
     ui/                      theme（主题/强调色）+ widget（自绘控件）
     util/ helper/ event/     工具类、Glide/MediaSession/SQL、EventBus 事件
   src/main/res/              布局与资源（颜色/圆角/字号 token 规则见 DESIGN.md）
-  src/androidTest/           唯一测试：TLS 回移仪器化测试（需设备，会真实联网）
+  src/test/                  JVM 单元测试（JUnit4 + Robolectric，无需设备）
+  src/androidTest/           TLS 回移仪器化测试（需设备，会真实联网，**不纳入 CI**）
   libs/                      10 个预编译 .so（不可重建）
 ijkplayer-java/              第三方播放器 Java 封装（原样，勿改）
 DanmakuFlameMaster/          弹幕引擎（**已 fork**：6 个上游文件 + 1 个 Bili* 类被本项目改过）
@@ -50,7 +51,8 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 | 网络 / API / 登录态 / 反代 | `docs/modules/network.md` |
 | 下载 / 缓存 / 音频 | `docs/modules/download.md` |
 | 设置 / 主题 / 持久化 | `docs/modules/settings.md`；界面同时读 `DESIGN.md` |
-| 构建 / 发布 / CI | `docs/development/environment.md`、`.github/workflows/ci.yml` |
+| 构建 / 发布 / CI | `docs/development/environment.md`、`docs/development/ci.md`、`.github/workflows/ci.yml` |
+| 写/改测试、看 CI 结果 | `docs/development/testing.md`、`docs/development/ci.md` |
 | 改包结构 / 找模块归属 | `docs/architecture/module-map.md`、`dependency-map.md` |
 
 **三级**（只在追历史/排查根因时）：`docs/更新日志.md`（2,500+ 行，按版本检索，不要通读）、`docs/audit/**`（历史审计，**不代表当前状态**）、`docs/decisions-*.md`。
@@ -70,14 +72,20 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 | 级别 | 命令/方式 | 说明 |
 |---|---|---|
 | 静态 | `git diff --check` + 人工审 diff | 每次必做 |
-| 仓库自检 | `./scripts/check-env.sh`、`check-repo.sh`、`project-info.sh`、`validate-ci.sh`、`check-links.sh` | 5 个只读脚本，详见 `docs/development/commands.md` §1.1 |
+| 仓库自检 | `./scripts/check-env.sh`、`check-repo.sh`、`project-info.sh`、`validate-ci.sh`、`check-links.sh`、`check-tests.sh` | 6 个只读脚本，详见 `docs/development/commands.md` §1.1 |
 | 文档链接 | `./scripts/check-links.sh` | 改文档后运行；出现失效链接即失败 |
 | 编译 | `./gradlew :app:assembleDebug` | 本机可行（ARM64 需 aapt2 override） |
+| JVM 单元测试（本地） | `./gradlew :app:testDebugUnitTest --stacktrace` | ARM64/PRoot 需 aapt2 override；首次会下载 Robolectric `android-all`；未跑写 NOT RUN |
+| JVM 单元测试（CI） | Actions `unit-test` job（Job Summary + `unit-test-results` artifact） | **只能以真实 Actions 结果为准**；不得用本地编译/本地测试代替 |
 | Release 等价 | CI tag 构建（R8 + `shrinkResources` + 资源冒烟） | 本地**无法**等价验证 |
-| 仪器化 | `./gradlew -PemuArm64 connectedDebugAndroidTest` | 需设备/模拟器；CI 当前不跑 |
+| 仪器化 | `./gradlew -PemuArm64 connectedDebugAndroidTest` | 需设备/模拟器；**不纳入 CI**；本机 NOT RUN |
 | 真机回归 | 按模块文档的回归清单 | 第二阶段；本机 NOT RUN |
 
 未执行写 `NOT RUN`；无法执行写 `BLOCKED` / `PARTIAL` 并说明原因（如无 gh/无设备/无凭据）。
+
+- **测试/CI 的硬规则（Agent）**：必须等**真实 CI 结果**才能声称「CI 通过」；不得只凭本地编译或本地单测通过就写 CI 通过，不得伪造 Actions 结果、运行链接或日志。
+- 本机没有 `gh`/CI 凭据时：CI 状态写 `NOT RUN` / `BLOCKED`，如实告知用户并请其贴回 Actions 链接与失败日志；**不得假装验证过**。
+- 改动尚未推送时：CI 状态一律 `NOT RUN`（本地单元测试 PASS 也不等于 CI PASS）。未执行的命令/验证同样写 `NOT RUN`。
 
 ## 7. Git 规则
 
@@ -86,6 +94,8 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 - 提交沿用 Conventional Commits，并在正文写清**根因与修法**（本仓库惯例）。
 - 提交前看完整 diff；不 `git add .`（工作区可能有被 ignore 的构建产物）。
 - **不擅自** push 正式分支、合并 PR、创建 tag/Release；远程推送与发版需要明确授权。
+- 授权例外（谨慎）：**只有当本轮任务说明或用户明确授权了推送**（例如明确允许把已完成改动推送到 `main`），且仓库规则/分支保护允许时，才可 push；不得凭「任务看起来完成」自行推断授权。用户授权推送代码**不等于**授权创建 tag / 发 Release。
+- 推送后仍要等真实 CI 结果再声明状态；未运行写 `NOT RUN`，失败写 `FAIL` 并附失败 job 与日志位置。
 
 ## 8. 其他 Agent 工具
 

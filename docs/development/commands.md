@@ -22,9 +22,13 @@
 | `./scripts/project-info.sh` | 输出关键工程信息 JSON（版本/分支/tag/SDK/AGP/Gradle），供脚本或 Agent 读取 | 0 |
 | `./scripts/validate-ci.sh` | 静态检查 workflow：permissions/concurrency/timeout/缓存/retention/tag 收口等 | 0 无 FAIL｜1 有 FAIL |
 | `./scripts/check-links.sh` | 检查已跟踪 Markdown 的相对链接（跳过外部/锚点/查询串；代码围栏内示例不查） | 0 全部有效｜1 有失效链接 |
+| `./scripts/check-tests.sh` | 测试体系不变量：CI 是否真的跑测试、是否 `continue-on-error`、测试依赖是否误进 release、是否访问真实 B 站/凭据、是否 `@Ignore` 吞用例、Audio Focus 红线 | 0 通过（允许 WARN）｜1 有 FAIL |
 
-> `validate-ci.sh` 当前对仓库 workflow 通过（FAIL 0；仅 1 个 WARN：6 个 action 使用浮动 major tag、未 pin 到 commit SHA）。修改 workflow 后请重跑；环境有 PyYAML 时会额外做一次 YAML 语法解析。
-> 脚本不联网、不写文件、不读 secrets；缺少依赖时给出提示而非自动安装。
+> 以上 6 个脚本均为只读：不联网、不编译、不运行测试、不写文件、不读 secrets；缺少依赖时给出提示而非自动安装。
+> `validate-ci.sh` 当前对仓库 workflow 通过（FAIL 0；1 个 WARN：多个 action 使用浮动 major tag、未 pin 到 commit SHA，本次检查为 11 处——数量随 workflow 增减，以脚本实际输出为准）。修改 workflow 后请重跑；环境有 PyYAML 时会额外做一次 YAML 语法解析。
+> 另外两个脚本**不属于本机自检**，只在 CI 或排查 CI 时使用：
+> - `./scripts/ci-prepare-sdk.sh`：CI job 内准备 Android SDK（`platform 33` + build-tools）。依赖 `ANDROID_HOME`，找不到 `sdkmanager` 时只告警（软失败）；会调用 `sdkmanager` 安装组件，**不是只读脚本**，不要拿它在本地替代 §2 的构建前置。
+> - `python3 scripts/summarize-tests.py [results_dir]`：汇总 Gradle JUnit XML 到控制台与 GitHub Step Summary；默认目录 `app/build/test-results/testDebugUnitTest`。**没有 XML 时以退出码 2 明确报 NOT RUN**（编译失败/未执行），不会把「没跑」误报成 PASS。
 
 ## 2. 构建
 
@@ -55,10 +59,26 @@ app/build/outputs/apk/release/app-release*.apk
 
 ## 4. 测试
 
+JVM 单元测试（JUnit4 + Robolectric，无需设备）是本次新增的日常门禁。测试清单与未覆盖风险见 [`testing.md`](testing.md)，CI job 结构与失败分类见 [`ci.md`](ci.md)。
+
 | 命令 | 用途 | 级别 | 备注 |
 |---|---|---|---|
-| `./gradlew -PemuArm64 connectedDebugAndroidTest` | 唯一仪器化测试（TLS 回移，2 个用例：强制 Conscrypt 握手 + 仅内置补根验 netlify 链） | D | 需 arm64 设备/模拟器；**测试会向线上 Supabase 写数据并真实联网** |
-| 单元测试 | —— | — | 仓库**没有** `src/test`，不要臆造 `./gradlew test` 有内容 |
+| `./gradlew :app:testDebugUnitTest --stacktrace` | 全量 JVM 单元测试（与 CI `unit-test` job 同一任务） | B | 首次运行会下载 Robolectric `android-all`（几十 MB）；本机 ARM64/PRoot 会因 aapt2 架构失败，需下一行的 override |
+| `./gradlew :app:testDebugUnitTest --stacktrace -Pandroid.aapt2FromMavenOverride=/usr/lib/android-sdk/build-tools/debian/aapt2` | ARM64/PRoot 跑 JVM 单测 | B | 该参数只为本机环境服务，CI x86_64 不需要；本机实际结果以交付报告为准，未跑写 NOT RUN |
+| `./gradlew :app:testDebugUnitTest --tests 'com.RobinNotBad.BiliClient.util.PlayerProgressRulesTest'` | 只跑单个测试类（`--tests` 可重复或写通配） | B | 定位失败用例时用，避免全量重跑 |
+| `./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace` | 单测 + Debug 编译（提交前推荐一起跑） | B | 一次 Gradle 调用完成两项验证 |
+| `./gradlew -PemuArm64 connectedDebugAndroidTest` | 仪器化测试（TLS 回移，2 个用例：强制 Conscrypt 握手 + 仅内置补根验 netlify 链） | D | 需 arm64 设备/模拟器；**会向线上 Supabase 写数据并真实联网**；**不纳入 CI**，本地 NOT RUN |
+
+报告位置：
+
+```text
+app/build/test-results/testDebugUnitTest/TEST-*.xml   # 机读结果（CI 汇总用）
+app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
+```
+
+> 失败先看 HTML 中的失败用例与堆栈；XML 里的 `<failure message="...">` 是 CI Job Summary 的来源。
+> 测试依赖（JUnit/Robolectric/`androidx.test:core`）均为 `testImplementation`，不会进入 APK；`app/src/test/resources/robolectric.properties` 固定 `sdk=33`、`conscryptMode=OFF`（原因见 testing.md §2.3）。
+> 新增/改动测试后还应跑 `./scripts/check-tests.sh`（见 §1.1）。
 
 ## 5. 设备与日志（第二阶段）
 
@@ -81,3 +101,4 @@ app/build/outputs/apk/release/app-release*.apk
 
 - `PASS`：实际执行且符合预期；`FAIL`：执行且失败；`PARTIAL`：部分执行；`BLOCKED`：环境/权限不允许；`NOT RUN`：未执行。
 - 报告里必须写清命令、退出码与关键输出，不得只写"已验证"。
+- 测试结果的完整分类与失败归类见 [`ci.md`](ci.md) §3、登记要求见 [`testing.md`](testing.md) §8。**未推送的改动、没有真实 Actions 结果时，CI 状态一律写 `NOT RUN`**；本地测试通过不能写成「CI 通过」。
