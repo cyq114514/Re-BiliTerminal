@@ -13,6 +13,18 @@
 | `git log --oneline -10` | 近期提交风格与上下文 | A | 提交正文惯例：根因 + 修法 |
 | `git log --follow -- <path>` | 判断文件是原样引入还是本项目改过 | A | 见 `architecture/module-map.md` 的边界判定 |
 
+### 1.1 仓库自检脚本（`scripts/`，均为只读）
+
+| 命令 | 用途 | 退出码 |
+|---|---|---|
+| `./scripts/check-env.sh` | 检查 git/JDK/SDK/aapt2 架构/Gradle wrapper/磁盘；给出 ARM64 override 提示 | 0 可用（允许 WARN）｜1 有 FAIL |
+| `./scripts/check-repo.sh` | 工作区、敏感文件是否入库、凭据泄露、docs 索引、版本与 tag 关系 | 同上 |
+| `./scripts/project-info.sh` | 输出关键工程信息 JSON（版本/分支/tag/SDK/AGP/Gradle），供脚本或 Agent 读取 | 0 |
+| `./scripts/validate-ci.sh` | 静态检查 workflow：permissions/concurrency/timeout/缓存/retention/tag 收口等 | 0 无 FAIL｜1 有 FAIL |
+
+> `validate-ci.sh` 在 CI 改造前**预期 FAIL 4 项**（concurrency、timeout-minutes、Gradle 缓存、artifact retention），这是待修复清单，不是脚本故障；修好后应转为 PASS。
+> 脚本不联网、不写文件、不读 secrets；缺少依赖时给出提示而非自动安装。
+
 ## 2. 构建
 
 | 命令 | 用途 | 级别 | 前置/备注 |

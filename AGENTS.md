@@ -70,6 +70,7 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 | 级别 | 命令/方式 | 说明 |
 |---|---|---|
 | 静态 | `git diff --check` + 人工审 diff | 每次必做 |
+| 仓库自检 | `./scripts/check-env.sh`、`./scripts/check-repo.sh`、`./scripts/validate-ci.sh` | 只读检查，详见 `docs/development/commands.md` §1.1 |
 | 编译 | `./gradlew :app:assembleDebug` | 本机可行（ARM64 需 aapt2 override） |
 | Release 等价 | CI tag 构建（R8 + `shrinkResources` + 资源冒烟） | 本地**无法**等价验证 |
 | 仪器化 | `./gradlew -PemuArm64 connectedDebugAndroidTest` | 需设备/模拟器；CI 当前不跑 |
