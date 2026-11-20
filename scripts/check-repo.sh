@@ -22,9 +22,26 @@ bad()  { printf '[FAIL] %s\n' "$*"; fail=$((fail + 1)); }
 echo "== 仓库规范检查：$ROOT =="
 
 # 1. 工作区
-dirty=$(git status --porcelain 2>/dev/null)
+# CI 的 checkout 在部分 Git 配置下会把 `eol=crlf` 的文件落成 LF，表现为「仅行尾差异」的
+# modified。这不是真实改动，不应在每次 CI 都制造噪音；这里把「只有 CR/LF 差异」的项过滤掉，
+# 真正的代码/内容改动仍然会被报出来。
+dirty_raw=$(git status --porcelain 2>/dev/null)
+dirty=""
+eol_only=0
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    status=${line:0:2}
+    path=${line:3}
+    if [ "$status" = " M" ] && git diff --quiet --ignore-cr-at-eol -- "$path" 2>/dev/null; then
+        eol_only=$((eol_only + 1))
+        continue
+    fi
+    dirty="${dirty}${line}"$'\n'
+done <<< "$dirty_raw"
+dirty=${dirty%$'\n'}
 if [ -z "$dirty" ]; then
     ok "工作区干净"
+    [ "$eol_only" -gt 0 ] && info "已忽略 $eol_only 个仅行尾差异（CI checkout 的 eol=crlf 归一化）"
 else
     changed=$(printf '%s\n' "$dirty" | wc -l | tr -d ' ')
     no "工作区有 $changed 个未提交改动（提交前先确认 diff；不要 git add .）"
