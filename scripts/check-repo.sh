@@ -50,7 +50,7 @@ else
 fi
 
 # 3. 凭据泄露扫描（当前工作区，git grep 只扫已跟踪文件）
-leaks=$(git grep -n -I -E 'biliterminal123|-----BEGIN [A-Z ]*PRIVATE KEY-----' -- . 2>/dev/null || true)
+leaks=$(git grep -n -I -E 'biliterminal123|-----BEGIN [A-Z ]*PRIVATE KEY-----' -- . ':!scripts/check-repo.sh' 2>/dev/null || true)
 if [ -n "$leaks" ]; then
     bad "发现疑似凭据/私钥（当前工作区）："
     printf '%s\n' "$leaks" | head -10 | sed 's/^/       /'
