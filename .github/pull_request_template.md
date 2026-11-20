@@ -43,7 +43,7 @@
 ## 7. 文档变化
 
 - [ ] 不需要（普通 Bug 修复）
-- [ ] 已同步：`docs/architecture/**`、`docs/modules/**`、`docs/update…`（列出）
+- [ ] 已同步：`docs/architecture/**`、`docs/modules/**`、`docs/更新日志.md`（列出）
 
 ## 8. 敏感配置与发布
 

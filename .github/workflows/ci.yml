@@ -46,9 +46,11 @@ jobs:
           test -n "$ANDROID_HOME" || { echo "::error::ANDROID_HOME 未设置"; exit 1; }
           SDKMANAGER=$(find "$ANDROID_HOME" -maxdepth 5 -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)
           if [ -z "$SDKMANAGER" ]; then
-            # 没有 cmdline-tools 时依赖 AGP 自动下载（hosted runner 已带许可）；这里只告警
-            echo "::warning::未找到 sdkmanager，跳过显式安装（依赖 AGP 自动下载 SDK 组件）"
-          elif [ ! -d "$ANDROID_HOME/platforms/android-33" ]; then
+            # 没有 cmdline-tools 时依赖 AGP 自动下载（hosted runner 已带许可）；软失败，不阻断
+            echo "::warning::未找到 sdkmanager，跳过显式安装与断言（依赖 AGP 自动下载 SDK 组件）"
+            exit 0
+          fi
+          if [ ! -d "$ANDROID_HOME/platforms/android-33" ]; then
             echo "platform 33 缺失，使用 sdkmanager 安装（首次约 1~2 分钟）"
             yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
             "$SDKMANAGER" --install "platforms;android-33" "build-tools;33.0.3" >/dev/null
@@ -94,9 +96,11 @@ jobs:
           test -n "$ANDROID_HOME" || { echo "::error::ANDROID_HOME 未设置"; exit 1; }
           SDKMANAGER=$(find "$ANDROID_HOME" -maxdepth 5 -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)
           if [ -z "$SDKMANAGER" ]; then
-            # 没有 cmdline-tools 时依赖 AGP 自动下载（hosted runner 已带许可）；这里只告警
-            echo "::warning::未找到 sdkmanager，跳过显式安装（依赖 AGP 自动下载 SDK 组件）"
-          elif [ ! -d "$ANDROID_HOME/platforms/android-33" ]; then
+            # 没有 cmdline-tools 时依赖 AGP 自动下载（hosted runner 已带许可）；软失败，不阻断
+            echo "::warning::未找到 sdkmanager，跳过显式安装与断言（依赖 AGP 自动下载 SDK 组件）"
+            exit 0
+          fi
+          if [ ! -d "$ANDROID_HOME/platforms/android-33" ]; then
             echo "platform 33 缺失，使用 sdkmanager 安装（首次约 1~2 分钟）"
             yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
             "$SDKMANAGER" --install "platforms;android-33" "build-tools;33.0.3" >/dev/null
