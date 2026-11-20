@@ -21,6 +21,7 @@
 | `./scripts/check-repo.sh` | 工作区、敏感文件是否入库、凭据泄露、docs 索引、版本与 tag 关系 | 同上 |
 | `./scripts/project-info.sh` | 输出关键工程信息 JSON（版本/分支/tag/SDK/AGP/Gradle），供脚本或 Agent 读取 | 0 |
 | `./scripts/validate-ci.sh` | 静态检查 workflow：permissions/concurrency/timeout/缓存/retention/tag 收口等 | 0 无 FAIL｜1 有 FAIL |
+| `./scripts/check-links.sh` | 检查已跟踪 Markdown 的相对链接（跳过外部/锚点/查询串；代码围栏内示例不查） | 0 全部有效｜1 有失效链接 |
 
 > `validate-ci.sh` 当前对仓库 workflow 通过（FAIL 0；WARN 为未 pin action SHA、未显式安装 Android SDK）。修改 workflow 后请重跑；环境有 PyYAML 时会额外做一次 YAML 语法解析。
 > 脚本不联网、不写文件、不读 secrets；缺少依赖时给出提示而非自动安装。
