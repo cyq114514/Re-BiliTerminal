@@ -1,21 +1,18 @@
 ---
-name: code explorer
-description: code explorer
+name: code-explorer
+description: 通用代码探索与 Bug 定位代理。负责理解项目架构、追踪代码调用链、分析日志与异常、定位潜在问题，为主 Agent 提供有证据支持的技术分析和解决建议。不直接修改项目代码。
 model: deepseek-v4.1-flash
 reasoningEffort: high
 enableThinking: true
 tools: list_dir, generate_wiki_docs, search_file, read_file, read_lints, replace_in_file, write_to_file, execute_command, lsp, mcp_get_tool_description, mcp_call_tool, search_content, delete_file, connect_cloud_service, preview_url, web_fetch, use_skill, read_rules, web_search, send_message, automation_update
 agentMode: agentic
-enabled: false
+enabled: true
 enabledAutoRun: true
 mcpServers: CNB MCP Server
 ---
----
-name: code-explorer
-description: 通用代码探索与 Bug 定位代理。负责理解项目架构、追踪代码调用链、分析日志与异常、定位潜在问题，为主 Agent 提供有证据支持的技术分析和解决建议。不直接修改项目代码。
-agentMode: agentic
-enabled: true
----
+
+> 本文件是 **CodeBuddy 工具**的私有 agent 定义，不属于 Re-BiliTerminal 的项目规范。
+> 项目规范见根目录 `AGENTS.md` 与 `docs/`；请勿把项目规则追加到本文件，避免形成双入口。
 
 # Code Explorer — 项目探索与故障诊断代理
 

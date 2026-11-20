@@ -1,0 +1,71 @@
+name: 工程任务
+description: 仓库治理、构建/CI、文档、重构等非功能改动
+labels: [ engineering ]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标与背景
+      description: 要解决什么问题、为什么现在做（工程债/构建失败/文档缺失/CI 风险）
+      placeholder: 例：CI 每次重新下载依赖，耗时且不稳定；希望加 Gradle 缓存
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: 当前状态
+      description: 现状、证据（文件路径/命令输出/日志），不要写推测
+      placeholder: |
+        - 现状：
+        - 证据：
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 允许修改范围
+      description: 预期涉及的文件/模块/工作流
+      placeholder: 例：仅 .github/workflows/ci.yml 与 docs/development/**
+    validations:
+      required: true
+
+  - type: textarea
+    id: forbidden
+    attributes:
+      label: 禁止修改范围
+      description: 默认红线之外，本任务额外禁止的事项
+      value: |
+        - applicationId / versionCode / versionName / 签名配置 / Release 资产命名 / update.json 机制
+        - 业务代码（除非本任务明确要求）
+        - 第三方模块与 app/libs/*.so
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      description: 可检验的结果，避免"优化一下"
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verify
+    attributes:
+      label: 验证要求
+      description: 哪些能在本地验证、哪些必须 CI/真机；未执行如何标注
+      placeholder: |
+        - 本地：./scripts/check-repo.sh、./gradlew :app:assembleDebug
+        - CI：需 push 后观察 Actions（未 push 则标 BLOCKED）
+        - 真机：NOT RUN
+
+  - type: textarea
+    id: risk
+    attributes:
+      label: 风险与回滚
+      description: 可能的破坏面与回滚方式
+      placeholder: |
+        - 风险：
+        - 回滚：
