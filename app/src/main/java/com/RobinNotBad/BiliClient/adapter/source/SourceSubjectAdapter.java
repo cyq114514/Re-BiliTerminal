@@ -10,10 +10,9 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.RobinNotBad.BiliClient.source.model.SourceSubject;
 import com.RobinNotBad.BiliClient.util.ClickGuard;
+import com.RobinNotBad.BiliClient.util.GlideUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,14 +118,10 @@ public class SourceSubjectAdapter extends RecyclerView.Adapter<RecyclerView.View
 
         String image = subject.coverUrl == null || subject.coverUrl.isEmpty()
                 ? fallbackCover : subject.coverUrl;
-        //直接走 Glide：站点封面是原始 URL，GlideUtil.url() 会拼上 B 站 CDN 后缀（必然 404）
-        Glide.with(real.cover)
-                .load(image)
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                .placeholder(R.mipmap.placeholder)
-                .error(R.mipmap.placeholder)
-                .centerCrop()
-                .into(real.cover);
+        //站点封面是原始 URL，GlideUtil.url() 会拼上 B 站 CDN 后缀（外站必然 404）；
+        //但也不能直接 Glide.with(View)：页面退出后延迟 bind 会抛 destroyed activity
+        //（线上 9359/9360 两条）。requestRaw = 原始 URL + 统一判活。
+        GlideUtil.requestRaw(real.cover, image, R.mipmap.placeholder);
 
         real.itemView.setOnClickListener(view -> ClickGuard.protect(view, () -> {
             if (listener != null) listener.onItemClick(subject);

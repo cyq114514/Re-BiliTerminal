@@ -15,9 +15,6 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.model.ElectricUser;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.request.RequestOptions;
 
 import java.util.List;
 
@@ -44,14 +41,10 @@ public class ElectricUserAdapter extends RecyclerView.Adapter<ElectricUserAdapte
 
         holder.userName.setText(user.uname);
 
-        Glide.with(context)
-                .asDrawable()
-                .load(GlideUtil.url(user.avatar))
-                .transition(GlideUtil.getTransitionOptions())
-                .placeholder(R.mipmap.akari)
-                .apply(RequestOptions.circleCropTransform())
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                .into(holder.userAvatar);
+        //走统一入口：Glide.with(Activity context) 在页面 finishing/destroyed 后仍被
+        //RecyclerView 的延迟布局任务 bind 时会抛 "You cannot start a load for a destroyed activity"
+        //（线上 9912）。requestRound 内含 skipIfHostDead 判活 + url()/circleCrop/transition。
+        GlideUtil.requestRound(holder.userAvatar, user.avatar, R.mipmap.akari);
 
         if (user.message != null && !user.message.isEmpty()) {
             holder.userMessage.setVisibility(View.VISIBLE);

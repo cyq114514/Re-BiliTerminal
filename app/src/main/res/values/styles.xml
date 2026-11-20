@@ -2,8 +2,21 @@
 
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 新版卡片：10dp 圆角、#262626@30% 底、#363636 发丝描边，按压缩放替代 ripple（移植自 Re-WearBili） -->
-    <style name="CardStyle" parent="Widget.MaterialComponents.CardView">
+    <!--
+        新版卡片：10dp 圆角、#262626@30% 底、#363636 发丝描边，按压缩放替代 ripple（移植自 Re-WearBili）。
+
+        公共项统一下沉到 CardStyle.Base；CardStyle 本身只负责「按 API 分级挂按压缩放」：
+        - API 19/20（values/）：无 stateListAnimator；
+        - API 21/22（values-v21/）：显式 @null —— Android 5.x 的 View 构造里
+          AnimatorInflater.loadStateListAnimator → StateListAnimator.clone → AnimatorSet.clone，
+          <set> 型 selector 会命中 AnimatedSet 共享 Node.mTmpClone 的平台竞态 NPE
+          （AppCompat 崩溃栈见 notes/platform.md §1，AOSP 5.1 AnimatorSet.java:699）；
+        - API 23+（values-v23/）：恢复 @animator/press_scale。
+
+        注意：同名 style 在 values-* 之间是「整份替换」而不是逐 item 合并，所以
+        values-v21 / values-v23 里的 CardStyle 只写差异项，公共项必须由这里的 Base 提供。
+    -->
+    <style name="CardStyle.Base" parent="Widget.MaterialComponents.CardView">
         <item name="cardBackgroundColor">@color/card_bg_new</item>
         <item name="cardCornerRadius">@dimen/card_round_new</item>
         <item name="strokeColor">@color/card_border_new</item>
@@ -12,18 +25,19 @@
         <!-- 不要投影：暗底上 MaterialCardView 的 elevation 只会在卡片四周糊一圈脏黑边，
              和"半透明卡片透出背景"叠在一起就是用户说的"中间亮、四周很暗" -->
         <item name="cardElevation">0dp</item>
-        <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>
 
-    <!-- 新版按钮：与卡片同语言 -->
-    <style name="ButtonStyle" parent="Widget.MaterialComponents.Button">
+    <!-- 默认实现：普通继承 Base，不挂 animator（API 19/20 落到这里；21/22、23+ 分别被 v21/v23 覆盖） -->
+    <style name="CardStyle" parent="CardStyle.Base" />
+
+    <!-- 新版按钮：与卡片同语言，公共项同样下沉；按压缩放也按 API 分级 -->
+    <style name="ButtonStyle.Base" parent="Widget.MaterialComponents.Button">
         <item name="backgroundTint">@color/card_bg_new</item>
         <item name="cornerRadius">@dimen/card_round_new</item>
         <item name="strokeColor">@color/card_border_new</item>
         <item name="strokeWidth">@dimen/card_stroke_new</item>
-        <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
         <item name="android:textColor">@color/textwhite</item>
         <item name="android:insetTop">2dp</item>
         <item name="android:insetBottom">2dp</item>
@@ -32,6 +46,8 @@
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>
+
+    <style name="ButtonStyle" parent="ButtonStyle.Base" />
 
     <!-- 旧版卡片/按钮：关闭"新版美学设计"时由 ThemeOverlay.BiliClient.Classic 挂回 -->
     <style name="CardStyleClassic" parent="Widget.MaterialComponents.CardView">

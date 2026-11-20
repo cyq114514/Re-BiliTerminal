@@ -28,18 +28,36 @@ public final class PickImageUtil {
      * <p>只用于 {@code String} 输入的契约（GetContent / GetMultipleContents）。
      */
     public static void launchSafe(ActivityResultLauncher<String> launcher) {
-        if (launcher == null) return;
+        launchSafe(launcher, "image/*", true);
+    }
+
+    /**
+     * 通用 mime 版本：给“本地视频”等入口用。
+     *
+     * <p>返回 false 表示设备没有可处理者/launcher 已失效，调用方可以继续降级
+     * （ACTION_OPEN_DOCUMENT、MediaStore.ACTION_PICK 或内置入口）。
+     */
+    public static boolean launchSafe(ActivityResultLauncher<String> launcher, String mime) {
+        return launchSafe(launcher, mime, false);
+    }
+
+    private static boolean launchSafe(ActivityResultLauncher<String> launcher, String mime, boolean showMessage) {
+        if (launcher == null) return false;
         try {
-            launcher.launch("image/*");
+            launcher.launch(mime);
+            return true;
         } catch (ActivityNotFoundException e) {
-            CrashTrace.log("选图: 无可用文件选择器 " + e.getClass().getSimpleName());
-            MsgUtil.showMsg("此设备没有可用的文件选择器\n无法选择图片");
+            CrashTrace.log("选择器: 无可用处理者 " + mime);
+            if (showMessage) MsgUtil.showMsg("此设备没有可用的文件选择器\n无法选择图片");
+            return false;
         } catch (IllegalStateException e) {
             //页面已经不在（launcher 已注销）：提示没有意义，只留痕
-            CrashTrace.log("选图: launcher 已失效 " + e.getClass().getSimpleName());
+            CrashTrace.log("选择器: launcher 已失效 " + e.getClass().getSimpleName());
+            return false;
         } catch (Exception e) {
-            CrashTrace.log("选图: 拉起失败 " + e.getClass().getSimpleName());
-            MsgUtil.showMsg("打开图片选择器失败");
+            CrashTrace.log("选择器: 拉起失败 " + e.getClass().getSimpleName());
+            if (showMessage) MsgUtil.showMsg("打开图片选择器失败");
+            return false;
         }
     }
 }

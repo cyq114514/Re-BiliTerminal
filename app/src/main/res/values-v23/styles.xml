@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    API 23+：恢复按压缩放（0.9 倍 / 150ms，与 Re-WearBili 的 clickVfx 同款）。
+
+    API 21/22 已在 values-v21 里把 android:stateListAnimator 置 @null：5.x 上
+    <set> 型 stateListAnimator 会命中 AnimatorSet.clone 的平台竞态 NPE
+    （SettingMainActivity 实机崩溃，见 notes/platform.md §1）。
+    同名 style 是整份替换，公共项由 values/styles.xml 的 *.Base 提供。
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="CardStyle" parent="CardStyle.Base">
+        <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
+    </style>
+
+    <style name="ButtonStyle" parent="ButtonStyle.Base">
+        <item name="android:stateListAnimator" tools:targetApi="lollipop">@animator/press_scale</item>
+    </style>
+</resources>

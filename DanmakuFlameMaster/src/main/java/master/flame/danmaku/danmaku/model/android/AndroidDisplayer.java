@@ -33,6 +33,7 @@ import java.util.Map;
 import master.flame.danmaku.danmaku.model.AbsDisplayer;
 import master.flame.danmaku.danmaku.model.AlphaValue;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
+import master.flame.danmaku.danmaku.model.IDrawingCache;
 import master.flame.danmaku.danmaku.renderer.IRenderer;
 
 public class AndroidDisplayer extends AbsDisplayer<Canvas, Typeface> {
@@ -278,10 +279,16 @@ public class AndroidDisplayer extends AbsDisplayer<Canvas, Typeface> {
             // drawing cache
             boolean cacheDrawn = false;
             int result = IRenderer.CACHE_RENDERING;
-            if (danmaku.hasDrawingCache()) {
-                DrawingCacheHolder holder = ((DrawingCache) danmaku.cache).get();
-                if (holder != null) {
-                    cacheDrawn = holder.draw(canvas, left, top, alphaPaint);
+            //只读一次 cache，并在 cacheLock 内取 holder + 绘制：DFM 的 Cache-Building 线程
+            //会在清理/重建时把 cache 置空并 destroy（CacheManagingDrawTask），
+            //两次独立读取之间没有 happens-before，就是线上 NPE 的来源。
+            synchronized (danmaku.cacheLock) {
+                IDrawingCache<?> cache = danmaku.cache;
+                if (cache instanceof DrawingCache) {
+                    DrawingCacheHolder holder = ((DrawingCache) cache).get();
+                    if (holder != null) {
+                        cacheDrawn = holder.draw(canvas, left, top, alphaPaint);
+                    }
                 }
             }
             if (!cacheDrawn) {

@@ -50,6 +50,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
@@ -122,7 +124,7 @@ public class AudioPlayerService extends Service {
      * 当前播放实例：无极调音面板要实时改音量，原实现里播放器只是 prepareAndPlay 的局部变量，
      * 外部拿不到（用户反馈 2026-11-07：听歌页也要能长按调出无极调音）
      */
-    private IjkMediaPlayer currentPlayer;
+    private volatile IjkMediaPlayer currentPlayer;
     //支持多个 UI 同时监听（全屏页 + 队列页）
     private static final List<Listener> sListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     /**
@@ -139,7 +141,26 @@ public class AudioPlayerService extends Service {
         sListeners.remove(listener);
     }
 
-    private IjkMediaPlayer player;
+    private volatile IjkMediaPlayer player;
+    /**
+     * 播放器生命周期专用单线程：native stop/release 内部要停解码/消息线程并 join，
+     * 低端手表上可能秒级阻塞——此前在服务主线程同步调用是退出/切歌 ANR 的直接来源
+     * （视频页已由 PlayerActivity 的 PLAYER_OPS 修复，服务层此前未跟随）。
+     * 单线程 FIFO 保证「旧实例 release 完成」先于后续操作，且不占主线程。
+     */
+    private static final ExecutorService AUDIO_OPS = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "audio-player-ops");
+        t.setDaemon(true);
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
+    /** diag 文件写盘专用线程：主线程只 Log.e + 入队，避免切歌路径同步 FileWriter */
+    private static final ExecutorService DIAG_OPS = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "audio-diag-writer");
+        t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
     private MediaSessionHelper mediaSessionHelper;
     private NotificationManager notifyManager;
     private Handler mainHandler;
@@ -1297,14 +1318,20 @@ public class AudioPlayerService extends Service {
         prepared = false;
         playing = false;
         if (mp == null) return;
-        try {
-            mp.stop();
-        } catch (Throwable ignored) {
-        }
-        try {
-            mp.release();
-        } catch (Throwable ignored) {
-        }
+        if (currentPlayer == mp) currentPlayer = null;
+        //只摘引用，native stop/release 交给 AUDIO_OPS：主线程不再等待解码线程 join。
+        //旧实例与新实例可能短暂重叠，所有回调都用 thisPlayer/player 守卫（见 prepareAndPlay），
+        //不会把旧实例的完成/错误推给新歌；听歌没有 Surface 单实例约束。
+        AUDIO_OPS.execute(() -> {
+            try {
+                mp.stop();
+            } catch (Throwable ignored) {
+            }
+            try {
+                mp.release();
+            } catch (Throwable ignored) {
+            }
+        });
     }
 
     // ==================== 通知 / MediaSession ====================
@@ -1340,12 +1367,23 @@ public class AudioPlayerService extends Service {
                 + "  " + formatTime(positionMs) + " / " + formatTime(durationMs);
     }
 
-    /** 通知内容快照：内容没变就不重建、不重发（暂停挂后台时每 2 秒一次纯属浪费） */
+    /**
+     * 通知内容快照：内容没变就不重建、不重发（暂停挂后台时每 2 秒一次纯属浪费）。
+     *
+     * <p>位置只按 10 秒量化：此前直接把 {@link #notificationText}（含毫秒级进度）放进快照，
+     * 播放中每 2 秒必变，等于每 2 秒一次 NotificationManager.notify() binder + 完整通知重建，
+     * 后台听歌时是持续的主线程背压（ANR 放大器）。
+     */
     private String notificationSnapshot() {
         VideoCard item = AudioQueue.get().current();
+        String title = item != null && item.title != null ? item.title : "音频播放";
+        String up = item != null && item.upName != null ? item.upName : "";
+        int positionBucket = positionMs / 10000;
         return (playing ? 1 : 0) + "|"
-                + (item != null && item.title != null ? item.title : "音频播放") + "|"
-                + notificationText(item);
+                + title + "|"
+                + AudioQueue.get().positionText() + "|"
+                + up + "|"
+                + positionBucket + "/" + durationMs;
     }
 
     /**
@@ -1538,15 +1576,21 @@ public class AudioPlayerService extends Service {
         }
     }
 
-    /** 诊断日志：同时写 logcat 和文件（logcat 会被新进程冲掉，文件可 adb pull） */
+    /** 诊断日志：logcat 立即写；文件写盘入 DIAG_OPS 单线程，避免主线程同步 FileWriter（ANR 放大器） */
     private void diag(String message) {
         Log.e(TAG, message);
+        final String line = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date())
+                + " " + message + "\n";
+        final Context appContext = getApplicationContext();
+        DIAG_OPS.execute(() -> writeDiagLine(appContext, line));
+    }
+
+    private static void writeDiagLine(Context context, String line) {
         try {
-            File file = new File(getExternalFilesDir(null), "audio-debug.log");
+            File file = new File(context.getExternalFilesDir(null), "audio-debug.log");
             if (file.length() > 512 * 1024) file.delete();
             FileWriter writer = new FileWriter(file, true);
-            writer.write(new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date())
-                    + " " + message + "\n");
+            writer.write(line);
             writer.close();
         } catch (Throwable ignored) {
         }

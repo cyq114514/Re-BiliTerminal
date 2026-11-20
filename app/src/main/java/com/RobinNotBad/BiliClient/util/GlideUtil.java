@@ -102,6 +102,25 @@ public class GlideUtil {
                 .into(view);
     }
 
+    /**
+     * 原始 URL 加载：与 {@link #request} 同一道宿主判活，但<b>不做 B 站 CDN 后缀拼接</b>。
+     *
+     * <p>第三方源 / Bangumi 的封面是外站原图，走 {@link #url(String)} 会被拼上
+     * {@code @0e_..q_..w.webp}，B 站 CDN 参数在外站必然 404（表现是永远占位图）。
+     * 这里直接用调用方给的原始地址，同时补上此前绕过的 destroyed/activity 判活。
+     */
+    public static void requestRaw(ImageView view, String rawUrl, int placeholder) {
+        if (skipIfHostDead(view)) return;
+        Glide.with(view).asDrawable().load(rawUrl)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .format(DecodeFormat.PREFER_RGB_565)
+                .transition(GlideUtil.getTransitionOptions())
+                .placeholder(placeholder)
+                .error(placeholder)
+                .centerCrop()
+                .into(view);
+    }
+
     //封面 RequestOptions 按模式缓存：每次绑定都 new 太浪费（Glide 官方建议复用）。
     //volatile + synchronized 双检：万一未来从池线程调用也不会读到半初始化状态
     private static volatile RequestOptions coverOptionsNew;

@@ -38,10 +38,15 @@ public class ToolsUtil {
      * {@code cell_menu_grid} 与 {@code cell_episode_card} 里都没有该属性，而 styles.xml 的
      * CardStyle 里保留了（style 不参与这层剥离）。所以布局里写了也等于没写。
      *
+     * <p><b>为什么 API&lt;23 直接放弃</b>：Android 5.x 上加载「selector item 是 &lt;set&gt;」的
+     * stateListAnimator 会命中 AnimatorSet.clone 共享 Node.mTmpClone 的平台竞态 NPE
+     * （1.3.9 的 Android 5.1 SettingMainActivity 闪退，见 notes/platform.md §1）。
+     * 样式侧已在 values-v21 把 CardStyle/ButtonStyle 的 animator 关掉，代码侧同样从 23 起才启用。
+     *
      * @param view 已经可点的卡片根视图
      */
     public static void applyPressScale(View view) {
-        if (view == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        if (view == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
         try {
             view.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
                     view.getContext(), R.animator.press_scale));

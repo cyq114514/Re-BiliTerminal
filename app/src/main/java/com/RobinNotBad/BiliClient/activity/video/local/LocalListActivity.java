@@ -1,10 +1,12 @@
 package com.RobinNotBad.BiliClient.activity.video.local;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.View;
 import android.widget.TextView;
@@ -27,6 +29,7 @@ import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.PickImageUtil;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -52,6 +55,18 @@ public class LocalListActivity extends InstanceActivity {
     private final ActivityResultLauncher<String> pickVideoLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), this::playPickedVideo);
 
+    /**
+     * 降级入口：GetContent 在无 DocumentsUI 的精简 ROM 上会同步抛 ActivityNotFoundException
+     * （线上 Z8A/8.1 一条）。这里用 StartActivityForResult 接 ACTION_OPEN_DOCUMENT /
+     * MediaStore.ACTION_PICK 的回退结果，同一个 playPickedVideo 处理 uri。
+     */
+    private final ActivityResultLauncher<Intent> fallbackVideoLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                    playPickedVideo(result.getData().getData());
+                }
+            });
+
     @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,7 +91,23 @@ public class LocalListActivity extends InstanceActivity {
         //本地视频播放入口（2026-11-15 反馈）：SAF 挑一个视频文件直接播
         View localVideoBtn = findViewById(R.id.local_video_btn);
         localVideoBtn.setVisibility(View.VISIBLE);
-        localVideoBtn.setOnClickListener(v -> pickVideoLauncher.launch("video/*"));
+        localVideoBtn.setOnClickListener(v -> {
+            //先走统一安全入口；无处理者时继续降级，而不是让 ActivityNotFoundException 杀掉进程
+            if (PickImageUtil.launchSafe(pickVideoLauncher, "video/*")) return;
+            Intent open = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("video/*");
+            if (open.resolveActivity(getPackageManager()) != null) {
+                fallbackVideoLauncher.launch(open);
+                return;
+            }
+            Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
+            if (pick.resolveActivity(getPackageManager()) != null) {
+                fallbackVideoLauncher.launch(pick);
+                return;
+            }
+            MsgUtil.showMsg("此设备没有视频文件选择器\n可先用文件管理器打开，或从缓存列表播放");
+        });
 
         //刷新+听歌+视频三颗 chip 占宽，标题右留白同步让位（与 RefreshMainActivity 同一套逻辑）
         View pageTitle = findViewById(R.id.pageName);

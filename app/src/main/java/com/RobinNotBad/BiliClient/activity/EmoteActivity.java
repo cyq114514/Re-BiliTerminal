@@ -31,6 +31,7 @@ import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
 import com.google.android.material.tabs.TabLayout;
 
@@ -104,6 +105,9 @@ public class EmoteActivity extends BaseActivity {
 
                     CenterThreadPool.run(() -> {
                         for (int i = 0; i < count; i++) {
+                            //退出表情页后后台循环还会继续：Glide.with(Activity) 会抛
+                            //"You cannot start a load for a destroyed activity"，直接结束循环
+                            if (isFinishing() || isDestroyed()) break;
                             int finalI = i;
                             Objects.requireNonNull(packages);
 
@@ -124,6 +128,9 @@ public class EmoteActivity extends BaseActivity {
                                 e.printStackTrace();
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
+                            } catch (IllegalArgumentException e) {
+                                //检查与真正发起请求之间页面被销毁的窄窗口：退出路径，不再继续
+                                break;
                             }
                         }
                     });
@@ -288,10 +295,13 @@ public class EmoteActivity extends BaseActivity {
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             Emote emote = emotePackage.emotes.get(position);
             if (holder instanceof Holder) {
-                Glide.with(context).asDrawable()
-                        .transition(GlideUtil.getTransitionOptions())
-                        .load(GlideUtil.url(emote.url))
-                        .into(((Holder) holder).itemView);
+                //页面退出后仍可能被延迟 bind：先判活，避免 Glide.with(Activity) 抛 IAE
+                if (ToolsUtil.isHostAlive(context)) {
+                    Glide.with(context).asDrawable()
+                            .transition(GlideUtil.getTransitionOptions())
+                            .load(GlideUtil.url(emote.url))
+                            .into(((Holder) holder).itemView);
+                }
                 ((Holder) holder).itemView.setOnClickListener((view) -> {
                     if (listener != null) {
                         listener.onClickEmote(emote);

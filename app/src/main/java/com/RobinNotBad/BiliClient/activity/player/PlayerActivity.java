@@ -4317,7 +4317,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             @Override
             public void showVolumePanel() {
-                showVolumePanel();
+                //必须显式限定外层类：匿名类里未限定的同名调用会解析到自己，
+                //按住音量键 600ms 后就会无限递归直到 StackOverflow（线上 7 例）。
+                PlayerActivity.this.showVolumePanel();
             }
         });
 

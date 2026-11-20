@@ -79,6 +79,11 @@ public class UserDynamicAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         this.emptyTip = emptyTip;
     }
 
+    /** 当前是否还挂着「还没有发布过动态」占位（加载更多 0→N 时要复位并整表刷新） */
+    public boolean isEmptyTip() {
+        return emptyTip;
+    }
+
     /** 只在列表真的为空时多出来的一条：纯文本占位，放在个人信息卡下面 */
     private static class EmptyHolder extends RecyclerView.ViewHolder {
         EmptyHolder(TextView view) {

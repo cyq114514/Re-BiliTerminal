@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.activity.base;
 
 import static com.RobinNotBad.BiliClient.activity.dynamic.DynamicActivity.getRelayDynamicLauncher;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -45,6 +46,7 @@ import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
 import com.RobinNotBad.BiliClient.util.BackgroundManager;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
+import com.RobinNotBad.BiliClient.util.CrashTrace;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -735,26 +737,56 @@ public class BaseActivity extends AppCompatActivity {
 
     @Override
     public void startActivity(Intent intent) {
-        super.startActivity(intent);
-        applyNoTransition();
+        try {
+            super.startActivity(intent);
+            applyNoTransition();
+        } catch (ActivityNotFoundException e) {
+            handleActivityNotFound(intent);
+        }
     }
 
     @Override
     public void startActivity(Intent intent, @Nullable Bundle options) {
-        super.startActivity(intent, options);
-        applyNoTransition();
+        try {
+            super.startActivity(intent, options);
+            applyNoTransition();
+        } catch (ActivityNotFoundException e) {
+            handleActivityNotFound(intent);
+        }
     }
 
     @Override
     public void startActivityForResult(Intent intent, int requestCode) {
-        super.startActivityForResult(intent, requestCode);
-        applyNoTransition();
+        try {
+            super.startActivityForResult(intent, requestCode);
+            applyNoTransition();
+        } catch (ActivityNotFoundException e) {
+            handleActivityNotFound(intent);
+        }
     }
 
     @Override
     public void startActivityForResult(Intent intent, int requestCode, @Nullable Bundle options) {
-        super.startActivityForResult(intent, requestCode, options);
-        applyNoTransition();
+        try {
+            super.startActivityForResult(intent, requestCode, options);
+            applyNoTransition();
+        } catch (ActivityNotFoundException e) {
+            handleActivityNotFound(intent);
+        }
+    }
+
+    /**
+     * 隐式 Intent 在精简 ROM/手表上可能没有任何处理者，startActivity* 会同步抛
+     * ActivityNotFoundException（线上本地视频选择器一条即此）。全局兜底只保证不闪退，
+     * 需要业务回退的入口仍应在调用点做 resolveActivity/降级链。
+     *
+     * <p>只接 ActivityNotFoundException，SecurityException/业务异常照常抛出。
+     */
+    private void handleActivityNotFound(Intent intent) {
+        String action = intent == null ? "null" : String.valueOf(intent.getAction());
+        String type = intent == null ? null : intent.getType();
+        CrashTrace.log("无处理者: " + action + (type == null || type.isEmpty() ? "" : "/" + type));
+        MsgUtil.showMsg("这台设备没有可用的选择器/应用");
     }
 
     @Override

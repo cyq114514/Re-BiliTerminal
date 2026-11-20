@@ -148,8 +148,15 @@ public abstract class BaseDanmaku {
 
     /**
      * 绘制用缓存
+     *
+     * <p>volatile：绘制线程与 DFM Cache-Building 线程会并发读写；只靠非 volatile 字段
+     * 会出现「hasDrawingCache() 刚通过、下一行读到 null」的 TOCTOU NPE（线上 3 例）。
+     * 置空/销毁一侧还要持有 {@link #cacheLock}，见 AndroidDisplayer 与 CacheManagingDrawTask。
      */
-    public IDrawingCache<?> cache;
+    public volatile IDrawingCache<?> cache;
+
+    /** 每条弹幕一把锁：把「读 cache + 用 holder 绘制」与「置空 + destroy」串起来，锁顺序 cacheLock→holder */
+    public final Object cacheLock = new Object();
 
     /**
      * 是否是直播弹幕

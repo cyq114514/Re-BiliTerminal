@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.util;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.util.AttributeSet;
@@ -45,7 +46,13 @@ public class AsyncLayoutInflaterX {
     @UiThread
     public void inflate(@LayoutRes int resid, @Nullable ViewGroup parent,
                         @NonNull OnInflateFinishedListener callback) {
-        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.ASYNC_INFLATE_ENABLE, true)) {
+        // API<23 强制走主线程 Handler 路径：Android 5.x 上后台线程 inflate 会与主线程
+        // 并发克隆 StateListAnimator（selector 里 <set> 型，如 CardStyle/ButtonStyle 的
+        // press_scale），命中 AnimatorSet.clone 共享 Node.mTmpClone 的平台竞态 NPE；
+        // 这条后台路径还会把失败吞成一次主线程重试，只能看到「第二次」现场。
+        // 详见 notes/platform.md §1；API 23+ 才允许线程池 inflate。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.ASYNC_INFLATE_ENABLE, true)) {
             InflateRequest request = obtainRequest();
             request.inflater = this;
             request.resid = resid;
@@ -199,6 +206,11 @@ public class AsyncLayoutInflaterX {
                 // Probably a Looper failure, retry on the UI thread
                 Log.w(TAG, "Failed to inflate resource in the background! Retrying on the UI"
                         + " thread", ex);
+                // 同时把原始异常写进崩溃追踪：此前这条路径只进 logcat，主线程重试
+                // 再崩时只剩「第二次」的现场，原始失败原因（如 5.x 的 AnimatorSet.clone
+                // 竞态）完全丢失。CrashTrace 本身绝不外抛，可以放心放在这里。
+                CrashTrace.log("AsyncLayoutInflaterX: 后台 inflate 失败（原始异常） "
+                        + Log.getStackTraceString(ex));
             }
             Message.obtain(request.inflater.mHandler, 0, request)
                     .sendToTarget();

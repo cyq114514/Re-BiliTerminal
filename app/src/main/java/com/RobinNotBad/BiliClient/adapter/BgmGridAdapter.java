@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.api.BgmApi;
 import com.RobinNotBad.BiliClient.model.bgm.BgmSubject;
 import com.RobinNotBad.BiliClient.util.ClickGuard;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 
@@ -80,13 +81,19 @@ public class BgmGridAdapter extends RecyclerView.Adapter<BgmGridAdapter.Holder> 
         final BgmSubject subject = list.get(position);
         holder.title.setText(subject.title());
 
-        Glide.with(context)
-                .load(BgmApi.imageFor(bestCover(subject), cellWidthPx))
-                .override(cellWidthPx, Math.round(cellWidthPx / COVER_RATIO))
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                .placeholder(R.mipmap.placeholder)
-                .centerCrop()
-                .into(holder.cover);
+        //页面正在 finishing/destroyed 时 RecyclerView 的延迟布局任务仍可能 bind 到这一格，
+        //Glide.with(Activity) 在 isDestroyed（BaseActivity 覆写里含 isFinishing）后会直接抛
+        //"You cannot start a load for a destroyed activity"（同线上 9912 的机制）。
+        //先判活：图不要了即可，但不能让异常带走进程。
+        if (ToolsUtil.isHostAlive(context)) {
+            Glide.with(context)
+                    .load(BgmApi.imageFor(bestCover(subject), cellWidthPx))
+                    .override(cellWidthPx, Math.round(cellWidthPx / COVER_RATIO))
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .placeholder(R.mipmap.placeholder)
+                    .centerCrop()
+                    .into(holder.cover);
+        }
 
         holder.itemView.setOnClickListener(view -> ClickGuard.protect(view, () -> {
             if (listener != null) listener.onItemClick(subject);

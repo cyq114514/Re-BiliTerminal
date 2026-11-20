@@ -72,6 +72,11 @@ public final class CrashUploader {
     /** 本地崩溃记录文件保留份数 */
     private static final int MAX_LOCAL_FILES = 20;
 
+    /** 上传认领后缀：同一待发文件只允许一个路径 POST（防重复上报） */
+    private static final String INFLIGHT_SUFFIX = ".inflight";
+    /** 认领后超过这个时长仍未删除，视为进程中途死亡，下次启动收回队列 */
+    private static final long INFLIGHT_STALE_MS = 10 * 60 * 1000L;
+
     /**
      * 单条待发记录的最大重试次数。
      * 队列里如果有一条被服务端永久拒绝（表约束不匹配、字段超长等 4xx），
@@ -173,18 +178,29 @@ public final class CrashUploader {
 
     /**
      * 尝试上传（调用方必须是后台线程）。成功则删掉对应的待发文件。
+     *
+     * <p>上传前先把待发文件原子改名为 {@code .inflight} 认领（见 {@link #claim(File)}）：
+     * 只有认领成功的一方能 POST，其它并发路径（启动补发、崩溃页手动补发、:crash 进程）
+     * 会直接跳过，避免同一个事件被提交两次。
      */
     public static boolean tryUpload(Context context, JSONObject report, File pending) {
+        File claimed = claim(pending);
+        if (pending != null && claimed == null) {
+            CrashTrace.log("上报: 文件已被其它路径认领，跳过 " + pending.getName());
+            return false;
+        }
         if (upload(context, report)) {
             CrashTrace.log("上报: 成功");
             //同时打一行 logcat：CrashTrace 只写偏好，连电脑排查时看 logcat 更快
             Logu.e("crash", "上报成功");
-            if (pending != null && pending.exists()) {
+            if (claimed != null) {
                 //noinspection ResultOfMethodCallIgnored
-                pending.delete();
+                claimed.delete();
             }
+            if (pending != null) clearFail(pending);   // .fail 是按原文件名旁挂的
             return true;
         }
+        releaseClaim(claimed, pending);
         CrashTrace.log("上报: 失败，保留在待发队列");
         Logu.e("crash", "上报失败，已入待发队列");
         return false;
@@ -194,25 +210,34 @@ public final class CrashUploader {
     public static void flushPending(Context context) {
         File dir = pendingDir(context);
         if (dir == null) return;
+        recoverStaleInflight(dir);
         File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
         if (files == null || files.length == 0) return;
         //P0 优先、P1 其次，同优先级按时间（弱网设备上队列常满，不能先发哨兵）
         sortForUpload(files);
         for (File file : files) {
-            JSONObject report = readJson(file);
+            //先认领再读/传：与 submit 的直传、崩溃页补发、:crash 进程互斥，
+            //避免同一个待发文件被两个 POST 各发一次（线上 4 对亚秒级重复即此竞态）。
+            File claimed = claim(file);
+            if (claimed == null) continue;
+            JSONObject report = readJson(claimed);
             if (report == null) {
                 //noinspection ResultOfMethodCallIgnored
-                file.delete();
+                claimed.delete();
+                clearFail(file);
                 continue;
             }
             if (upload(context, report)) {
                 //noinspection ResultOfMethodCallIgnored
-                file.delete();
+                claimed.delete();
                 clearFail(file);
                 CrashTrace.log("上报: 补发成功 " + file.getName());
                 Logu.e("crash", "补发成功 " + file.getName());
                 continue;
             }
+            //失败要把认领收回队列；后续计次/放弃仍按原 .json 文件名，
+            //否则 .fail 旁挂文件会和待发文件对不上
+            releaseClaim(claimed, file);
             //旧实现"首条失败就 break"：一旦队首那条被服务端永久拒绝，后面所有记录永远发不出去。
             //现在改为逐条计次，连续失败到 MAX_RETRY 次就丢弃并留痕，保证队列能继续往前走
             int fails = bumpFail(file);
@@ -277,13 +302,24 @@ public final class CrashUploader {
      */
     public static boolean submit(Context context, JSONObject report) {
         File pending = enqueue(context, report);
+        if (pending == null) {
+            //入队失败（目录不可写）仍尽力直传，保持旧行为
+            return upload(context, report);
+        }
+        //先认领再传：+2s 的 flushPending 会看到同一个 pending 文件，
+        //若这里不先摘走，弱网下两个 POST 会各插一行（线上 4 对亚秒级重复）。
+        File claimed = claim(pending);
+        if (claimed == null) {
+            CrashTrace.log("上报: 文件已被其它路径认领，跳过重复提交 " + pending.getName());
+            return true;   // 已有路径在处理，视为已提交，不再重复 POST
+        }
         if (upload(context, report)) {
-            if (pending != null && pending.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                pending.delete();
-            }
+            //noinspection ResultOfMethodCallIgnored
+            claimed.delete();
+            clearFail(pending);
             return true;
         }
+        releaseClaim(claimed, pending);
         return false;
     }
 
@@ -447,6 +483,56 @@ public final class CrashUploader {
             return dir;
         } catch (Throwable t) {
             return null;
+        }
+    }
+
+    /**
+     * 上传认领：把 {@code *.json} 原子改名为 {@code *.json.inflight}。
+     *
+     * <p>同一待发文件可能被四条路径同时处理：启动直传（submit）、启动补发（flushPending）、
+     * 崩溃页手动补发、{@code :crash} 进程补发。rename 在同一目录内原子，只有认领成功的一方能
+     * POST，其它路径直接跳过——这是线上 4 对亚秒级重复上报（同 install、同退出时间）的修复点。
+     *
+     * @return 认领到的 .inflight 文件；null 表示不存在或已被别的路径认领
+     */
+    private static File claim(File pending) {
+        if (pending == null || !pending.isFile()) return null;
+        File claimed = new File(pending.getParentFile(), pending.getName() + INFLIGHT_SUFFIX);
+        try {
+            if (claimed.exists()) return null;
+            return pending.renameTo(claimed) ? claimed : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 上传失败/放弃时把认领文件放回队列；claimed 为 null 或已删除时无事发生。 */
+    private static void releaseClaim(File claimed, File pending) {
+        if (claimed == null || pending == null || !claimed.exists()) return;
+        try {
+            if (!pending.exists()) claimed.renameTo(pending);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 回收“认领后进程被杀”留下的 .inflight 文件。
+     *
+     * <p>上传超时是 8s，超过 10 分钟仍停留在 .inflight 只能是进程中途死亡；
+     * 放回 .json 让下次启动继续补发，避免记录永久卡死。
+     */
+    private static void recoverStaleInflight(File dir) {
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".json" + INFLIGHT_SUFFIX));
+        if (files == null) return;
+        long now = System.currentTimeMillis();
+        for (File file : files) {
+            if (now - file.lastModified() < INFLIGHT_STALE_MS) continue;
+            File back = new File(dir, file.getName().substring(0,
+                    file.getName().length() - INFLIGHT_SUFFIX.length()));
+            try {
+                if (!back.exists()) file.renameTo(back);
+            } catch (Throwable ignored) {
+            }
         }
     }
 

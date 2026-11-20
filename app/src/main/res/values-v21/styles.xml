@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    API 21 / 22：关闭 <set> 型按压缩放。
+
+    Android 5.x 的 View 构造会走
+    AnimatorInflater.loadStateListAnimator → StateListAnimator.clone → AnimatorSet.clone；
+    press_scale 这种「selector 每个 item 包一个 <set>」的资源会命中 5.x 上
+    AnimatorSet 共享 Node.mTmpClone 的平台竞态（NPE，
+    "Attempt to write to field '...Node.nodeDependents' on a null object reference"），
+    已在 1.3.9 的 Android 5.1 设备上实机触发（SettingMainActivity，见 notes/platform.md §1）。
+
+    同名 style 在 values-* 之间是整份替换、不会与 values/ 逐 item 合并，
+    所以这里只写差异项，公共项由 values/styles.xml 里的 *.Base 提供。
+-->
+<resources>
+    <style name="CardStyle" parent="CardStyle.Base">
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="ButtonStyle" parent="ButtonStyle.Base">
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+</resources>

@@ -99,13 +99,17 @@ public class CacheManagingDrawTask extends DrawTask {
     @Override
     protected void onDanmakuRemoved(BaseDanmaku danmaku) {
         super.onDanmakuRemoved(danmaku);
-        if (danmaku.hasDrawingCache()) {
-            if (danmaku.cache.hasReferences()) {
-                danmaku.cache.decreaseReference();
-            } else {
-                danmaku.cache.destroy();
+        //与 AndroidDisplayer.draw 共用 cacheLock：绘制进行中不允许 destroy/置空
+        synchronized (danmaku.cacheLock) {
+            IDrawingCache<?> cache = danmaku.cache;
+            if (cache != null) {
+                if (cache.hasReferences()) {
+                    cache.decreaseReference();
+                } else {
+                    cache.destroy();
+                }
+                danmaku.cache = null;
             }
-            danmaku.cache = null;
         }
     }
 
@@ -328,28 +332,35 @@ public class CacheManagingDrawTask extends DrawTask {
         }
 
         protected void entryRemoved(boolean evicted, BaseDanmaku oldValue, BaseDanmaku newValue) {
-            if (oldValue.cache != null) {
-                IDrawingCache<?> cache = oldValue.cache;
-                long releasedSize = clearCache(oldValue);
-                if (oldValue.isTimeOut()) {
-                    mContext.getDisplayer().getCacheStuffer().releaseResource(oldValue);
+            //cache 的读/清/销毁统一在单条弹幕的 cacheLock 内，避免与绘制线程并发
+            synchronized (oldValue.cacheLock) {
+                if (oldValue.cache != null) {
+                    IDrawingCache<?> cache = oldValue.cache;
+                    long releasedSize = clearCache(oldValue);
+                    if (oldValue.isTimeOut()) {
+                        mContext.getDisplayer().getCacheStuffer().releaseResource(oldValue);
+                    }
+                    if (releasedSize <= 0) return;
+                    mRealSize -= releasedSize;
+                    mCachePool.release((DrawingCache) cache);
                 }
-                if (releasedSize <= 0) return;
-                mRealSize -= releasedSize;
-                mCachePool.release((DrawingCache) cache);
             }
         }
 
         private long clearCache(BaseDanmaku oldValue) {
-            if (oldValue.cache.hasReferences()) {
-                oldValue.cache.decreaseReference();
+            synchronized (oldValue.cacheLock) {
+                IDrawingCache<?> cache = oldValue.cache;
+                if (cache == null) return 0;
+                if (cache.hasReferences()) {
+                    cache.decreaseReference();
+                    oldValue.cache = null;
+                    return 0;
+                }
+                long size = sizeOf(oldValue);
+                cache.destroy();
                 oldValue.cache = null;
-                return 0;
+                return size;
             }
-            long size = sizeOf(oldValue);
-            oldValue.cache.destroy();
-            oldValue.cache = null;
-            return size;
         }
 
         protected int sizeOf(BaseDanmaku value) {
@@ -540,11 +551,14 @@ public class CacheManagingDrawTask extends DrawTask {
                                 cacheitem.measureResetFlag++;
                             }
                             cacheitem.requestFlags |= BaseDanmaku.FLAG_REQUEST_INVALIDATE;
-                            if (!pair.second && cacheitem.hasDrawingCache() && !cacheitem.cache.hasReferences()) {
-                                DrawingCache cache = DanmakuUtils.buildDanmakuDrawingCache(cacheitem, mDisp, (DrawingCache) cacheitem.cache);
-                                cacheitem.cache = cache;
-                                push(cacheitem, 0, true);
-                                return;
+                            synchronized (cacheitem.cacheLock) {
+                                IDrawingCache<?> current = cacheitem.cache;
+                                if (!pair.second && current instanceof DrawingCache && !current.hasReferences()) {
+                                    DrawingCache cache = DanmakuUtils.buildDanmakuDrawingCache(cacheitem, mDisp, (DrawingCache) current);
+                                    cacheitem.cache = cache;
+                                    push(cacheitem, 0, true);
+                                    return;
+                                }
                             }
                             if (cacheitem.isLive) {
                                 clearCache(cacheitem);
@@ -643,15 +657,17 @@ public class CacheManagingDrawTask extends DrawTask {
             }
 
             private void releaseDanmakuCache(BaseDanmaku item, DrawingCache cache) {
-                if (cache == null) {
-                    cache = (DrawingCache) item.cache;
+                //置空与销毁必须在 cacheLock 内，否则可能落在 draw 取到 holder、还没画完的窗口里
+                DrawingCache released;
+                synchronized (item.cacheLock) {
+                    released = cache != null ? cache : (DrawingCache) item.cache;
+                    item.cache = null;
                 }
-                item.cache = null;
-                if (cache == null) {
+                if (released == null) {
                     return;
                 }
-                cache.destroy();
-                mCachePool.release(cache);
+                released.destroy();
+                mCachePool.release(released);
             }
 
             private long prepareCaches(boolean repositioned) {
@@ -829,10 +845,15 @@ public class CacheManagingDrawTask extends DrawTask {
                         cache = (DrawingCache) danmaku.cache;
                     }
                     if (cache != null) {
-                        danmaku.cache = null;
+                        //把缓存从原弹幕摘走必须持它的 cacheLock：否则原弹幕可能正好在 draw 里用这块 cache
+                        synchronized (danmaku.cacheLock) {
+                            if (danmaku.cache == cache) danmaku.cache = null;
+                        }
 //Log.e("cache", danmaku.text + "DrawingCache hit!!:" + item.paintWidth + "," + danmaku.paintWidth);
                         cache = DanmakuUtils.buildDanmakuDrawingCache(item, mDisp, cache);  //redraw
-                        item.cache = cache;
+                        synchronized (item.cacheLock) {
+                            item.cache = cache;
+                        }
                         mCacheManager.push(item, 0, forceInsert);
                         return RESULT_SUCCESS;
                     }

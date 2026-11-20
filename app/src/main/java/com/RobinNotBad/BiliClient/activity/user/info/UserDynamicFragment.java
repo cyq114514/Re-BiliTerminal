@@ -30,6 +30,11 @@ public class UserDynamicFragment extends RefreshListFragment {
     private ArrayList<Dynamic> dynamicList;
     private UserDynamicAdapter adapter;
     private long offset = 0;
+    /**
+     * 刷新世代：每次 loadDynamics 自增，在途的旧请求回来时直接丢弃。
+     * 用户主页下拉刷新/加载更多会并发，只有一代数据允许落到 adapter。
+     */
+    private int loadGeneration = 0;
 
     public UserDynamicFragment() {
 
@@ -63,11 +68,14 @@ public class UserDynamicFragment extends RefreshListFragment {
     }
 
     private void loadDynamics() {
+        //刷新=新世代：先作废所有在途请求，后台只构建局部 list，主线程一次性替换引用
+        final int gen = ++loadGeneration;
         CenterThreadPool.run(() -> {
             try {
                 UserInfo userInfo = UserInfoApi.getUserInfo(mid);
                 if (userInfo == null) {
                     runOnUiThread(() -> {
+                        if (gen != loadGeneration || !isAdded()) return;
                         MsgUtil.showMsg("用户不存在");
                         requireActivity().finish();
                     });
@@ -75,57 +83,91 @@ public class UserDynamicFragment extends RefreshListFragment {
                 }
                 Log.e("debug", "获取到用户信息");
 
+                final ArrayList<Dynamic> fresh = new ArrayList<>();
+                final long newOffset;
                 try {
-                    //刷新=重新开始：游标与列表复位，下拉刷新复用同一入口
-                    offset = 0;
-                    dynamicList.clear();
-                    offset = DynamicApi.getDynamicList(dynamicList, offset, mid, null);
-                    bottom = (offset == -1);
+                    newOffset = DynamicApi.getDynamicList(fresh, 0L, mid, null);
                     Log.e("debug", "获取到用户动态");
                 } catch (Exception e) {
                     loadFail(e);
+                    return;
                 }
 
-                if (isAdded()) {
-                    adapter = new UserDynamicAdapter(requireContext(), dynamicList, userInfo);
+                runOnUiThread(() -> {
+                    //必须同时校验世代与 isAdded：页面/刷新已换代时，旧结果直接丢弃
+                    if (!isAdded() || getContext() == null || gen != loadGeneration) return;
+                    offset = newOffset;
+                    bottom = (newOffset == -1);
+                    //换引用而不是 clear：旧 adapter 仍挂载期间它的 list 一个字节都不动，
+                    //RecyclerView 不会看到 itemCount 在两次 layout 之间突变（线上 3 例 Inconsistency 的根因）
+                    dynamicList = fresh;
+                    UserDynamicAdapter next = new UserDynamicAdapter(requireContext(), fresh, userInfo);
                     //空动态不再整页替换成空态（用户反馈 2026-11-07：那样连个人信息都看不见了），
                     //改成在列表末尾追加一条占位，头像/昵称/签名/关注数始终留在屏幕上
-                    adapter.setEmptyTip(dynamicList.isEmpty());
-                    setAdapter(adapter);
+                    next.setEmptyTip(fresh.isEmpty());
+                    adapter = next;
+                    setAdapter(next);
                     setRefreshing(false);
-                    hideEmptyView();
-                }
+                    if (fresh.isEmpty()) showEmptyView("TA 还没有发布过动态~");
+                    else hideEmptyView();
+                });
             } catch (Exception e) {
-                loadFail(e);
-                showEmptyView("加载失败，请下拉重试");
+                //旧世代失败的提示不能盖掉新世代：只有仍是当前刷新时才报错
+                if (gen == loadGeneration) {
+                    loadFail(e);
+                    showEmptyView("加载失败，请下拉重试");
+                }
             }
         });
     }
 
     @SuppressLint("NotifyDataSetChanged")
     private void continueLoading() {
+        //绑定当前世代；刷新一旦发生，这一页结果必须整页丢弃，不能插到新表里
+        final int gen = loadGeneration;
+        final long reqOffset = offset;
         CenterThreadPool.run(() -> {
             try {
-                List<Dynamic> list = new ArrayList<>();
-                offset = DynamicApi.getDynamicList(list, offset, mid, null);
+                final List<Dynamic> list = new ArrayList<>();
+                final long newOffset = DynamicApi.getDynamicList(list, reqOffset, mid, null);
                 runOnUiThread(() -> {
-                    //首个加载是在 onViewCreated 的后台线程里建 adapter 的，用户在那之前就上拉时
-                    //adapter 还是 null，直接 notify 会 NPE（线上 1 例）。这一页无处可放，
-                    //丢掉即可——首屏那次加载会带全量数据
-                    if (adapter == null) return;
+                    //adapter 身份 + 世代双守卫：Fragment 的 adapter 字段可能已被刷新换代，
+                    //而 RecyclerView 还挂着旧 adapter；两者不一致时不能 notify。
+                    if (!isAdded() || gen != loadGeneration) return;
+                    if (adapter == null || recyclerView == null
+                            || recyclerView.getAdapter() != adapter) return;
+                    if (list.isEmpty()) {
+                        bottom = (newOffset == -1);
+                        setRefreshing(false);
+                        return;
+                    }
+                    boolean tipWasShown = adapter.isEmptyTip();
+                    int dataStart = dynamicList.size();          //插入前的数据条数
                     dynamicList.addAll(list);
-                    adapter.notifyItemRangeInserted(dynamicList.size() - list.size() + 1, list.size());
+                    if (tipWasShown) {
+                        //0→N：原空态占位在 last position，插入会把它顶出边界，
+                        //必须复位 emptyTip 并整表刷新（否则位置校验会失败）
+                        adapter.setEmptyTip(false);
+                        adapter.notifyDataSetChanged();
+                    } else {
+                        //+1 = 列表第 0 项的个人信息头
+                        adapter.notifyItemRangeInserted(dataStart + 1, list.size());
+                    }
+                    offset = newOffset;
+                    bottom = (newOffset == -1);
+                    setRefreshing(false);
                 });
-                bottom = (offset == -1);
-                setRefreshing(false);
             } catch (Exception e) {
-                loadFail(e);
+                if (gen == loadGeneration) loadFail(e);
             }
         });
     }
 
     public void onDynamicRemove(int position) {
         try {
+            //返回时列表可能已经刷新换代：只允许在“当前 adapter 仍挂在列表上”时接受旧下标
+            if (adapter == null || recyclerView == null || recyclerView.getAdapter() != adapter) return;
+            if (position < 0 || position >= dynamicList.size()) return;
             DynamicHolder.removeDynamicFromList(dynamicList, position, adapter);
         } catch (Throwable ignored) {
         }
