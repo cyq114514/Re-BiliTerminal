@@ -4,9 +4,9 @@
 
 ## 1. 提 Issue
 
-- 功能异常 / 闪退：[Bug 反馈](../../issues/new?template=bug_report.yml)（请附版本、设备、复现步骤；有日志更好）
-- 新功能：[功能建议](../../issues/new?template=feature_request.yml)
-- 工程/构建/CI/文档类：[工程任务](../../issues/new?template=engineering_task.yml)
+- 功能异常 / 闪退：[Bug 反馈](https://github.com/cyq114514/Re-BiliTerminal/issues/new?template=bug_report.yml)（请附版本、设备、复现步骤；有日志更好）
+- 新功能：[功能建议](https://github.com/cyq114514/Re-BiliTerminal/issues/new?template=feature_request.yml)
+- 工程/构建/CI/文档类：[工程任务](https://github.com/cyq114514/Re-BiliTerminal/issues/new?template=engineering_task.yml)
 
 > 不要在公开 Issue 里贴登录 Cookie、签名口令、私钥、`local.properties` 内容；敏感问题请私下联系维护者。
 

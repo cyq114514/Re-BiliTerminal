@@ -1,7 +1,7 @@
 # 修改说明
 
 > 一个 PR 只做一件事；未执行的检查**不得**标为通过（用 `NOT RUN` / `BLOCKED` / `PARTIAL` 并写原因）。
-> 规则与验证矩阵见 [`AGENTS.md`](AGENTS.md)、[`docs/development/workflow.md`](docs/development/workflow.md)。
+> 规则与验证矩阵见 [`AGENTS.md`](../AGENTS.md)、[`docs/development/workflow.md`](../docs/development/workflow.md)。
 
 ## 1. 目标
 
