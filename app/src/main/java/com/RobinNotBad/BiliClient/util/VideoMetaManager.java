@@ -63,21 +63,36 @@ public final class VideoMetaManager {
         }
     }
 
+    /**
+     * 续播位置归一化（纯逻辑）：不到 5 秒视为没看、距结尾不足 5 秒视为看完、
+     * 位置超过总时长视为脏数据——这三种都从头播（返回 0）。
+     */
+    public static long normalizeResumeMs(long progressMs, long durationMs) {
+        if (progressMs <= 5000L) return 0L;
+        if (durationMs > 0L && durationMs - progressMs <= 5000L) return 0L;
+        if (durationMs > 0L && progressMs > durationMs) return 0L;
+        return progressMs;
+    }
+
+    /**
+     * 落盘目标归一化（纯逻辑）：位置过小或已看完写 0，避免下次被误判成续播。
+     */
+    public static long normalizeSaveTargetMs(long positionMs, long durationMs) {
+        long target = positionMs > 0L ? positionMs : 0L;
+        if (durationMs > 0L && durationMs - target <= 5000L) target = 0L;
+        return target;
+    }
+
     /** 读取续播位置（毫秒），0 表示从头播。已按“已看完/位置过小”归一化。 */
     public static long readResumeMs(File videoFolder) {
         VideoMeta meta = readMeta(videoFolder);
-        if (meta.progressMs <= 5000L) return 0L;
-        if (meta.durationMs > 0L && meta.durationMs - meta.progressMs <= 5000L) return 0L;
-        if (meta.durationMs > 0L && meta.progressMs > meta.durationMs) return 0L;
-        return meta.progressMs;
+        return normalizeResumeMs(meta.progressMs, meta.durationMs);
     }
 
     /** 落盘本地播放位置；位置过小或已看完写 0，同时清时长，避免误导下次判断。 */
     public static void saveProgress(File videoFolder, long positionMs, long durationMs) {
         VideoMeta meta = readMeta(videoFolder);
-        long target = positionMs;
-        if (target <= 0L) target = 0L;
-        if (durationMs > 0L && durationMs - target <= 5000L) target = 0L;
+        long target = normalizeSaveTargetMs(positionMs, durationMs);
         if (target == meta.progressMs && (target == 0L || meta.durationMs == durationMs)) return;
         meta.progressMs = target;
         meta.durationMs = target > 0L ? durationMs : 0L;

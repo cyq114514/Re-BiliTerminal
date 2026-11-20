@@ -12,18 +12,13 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 import okhttp3.CookieJar;
 import okhttp3.OkHttpClient;
@@ -55,7 +50,6 @@ import okhttp3.ResponseBody;
 public final class LocalHlsProxy {
 
     private static final String TAG = "third-hls";
-    private static final int MAX_SESSIONS = 8;
     private static final long MAX_FORWARD_BYTES = 16L * 1024 * 1024;
 
     private static final LocalHlsProxy INSTANCE = new LocalHlsProxy();
@@ -77,9 +71,8 @@ public final class LocalHlsProxy {
     private static final long PLAYLIST_CACHE_TTL_MS = 5 * 60 * 1000L;
     private static final int PLAYLIST_CACHE_MAX = 16;
 
-    private final AtomicLong ids = new AtomicLong();
-    private final ConcurrentHashMap<String, Route> routes = new ConcurrentHashMap<>();
-    private final LinkedHashMap<String, Session> sessions = new LinkedHashMap<>();
+    /** 会话/token 路由表（纯逻辑，见 HlsRouteTable；上限与淘汰规则在那里） */
+    private final HlsRouteTable table = new HlsRouteTable();
     /** 同一集重看：省掉一次 m3u8 网络往返；改写仍每次重做，保证 token 绑定当前会话 */
     private final LinkedHashMap<String, CachedPlaylist> playlistCache = new LinkedHashMap<>();
 
@@ -88,24 +81,6 @@ public final class LocalHlsProxy {
     private ExecutorService workers;
 
     private LocalHlsProxy() {
-    }
-
-    private static final class Route {
-        final String url;
-        final Map<String, String> headers;
-
-        Route(String url, Map<String, String> headers) {
-            this.url = url;
-            this.headers = headers;
-        }
-    }
-
-    private static final class Session {
-        String id;
-        String origin;
-        Map<String, String> headers;
-        byte[] playlist;
-        final Set<String> tokens = new HashSet<>();
     }
 
     private static final class CachedPlaylist {
@@ -153,15 +128,12 @@ public final class LocalHlsProxy {
             }
             if (body == null || !body.contains("#EXTM3U")) return mediaUrl;
 
-            Session session = new Session();
-            session.id = Long.toHexString(ids.incrementAndGet());
-            session.origin = mediaUrl;
-            session.headers = copyHeaders(headers);
+            HlsRouteTable.Session session = table.newSession(mediaUrl, headers);
             String rewritten = HlsPlaylist.rewrite(body, mediaUrl,
-                    absolute -> routeFor(absolute, session));
+                    absolute -> localForwardUrl(table.routeFor(absolute, session)));
             session.playlist = rewritten.getBytes("UTF-8");
 
-            registerSession(session);
+            table.register(session);
             String local = "http://127.0.0.1:" + port + "/p/" + session.id + "/index.m3u8";
             Logu.w(TAG, "HLS 代理就绪 原=" + MediaUrls.summarize(mediaUrl)
                     + " 映射=" + session.tokens.size() + " 本地=" + local);
@@ -175,27 +147,11 @@ public final class LocalHlsProxy {
     }
 
     // ---------------------------------------------------------------- 路由登记
-    // 播放列表改写本身在 HlsPlaylist（纯 Java，可单测）里，这里只负责把 token 落到路由表。
+    // 播放列表改写本身在 HlsPlaylist、会话/token 表在 HlsRouteTable（两者都是纯 Java，可单测），
+    // 这里只负责把它们接到本地端口上。
 
-    /** 登记会话并淘汰最旧的，顺手清掉它名下的路由，避免 token 无限累积 */
-    private void registerSession(Session session) {
-        synchronized (sessions) {
-            sessions.put(session.id, session);
-            while (sessions.size() > MAX_SESSIONS) {
-                String oldest = sessions.keySet().iterator().next();
-                Session removed = sessions.remove(oldest);
-                if (removed != null) {
-                    for (String token : removed.tokens) routes.remove(token);
-                }
-            }
-        }
-    }
-
-    /** 登记一个「本地 token → 真实 URL」，返回本地路径 */
-    private String routeFor(String remoteUrl, Session session) {
-        String token = Long.toHexString(ids.incrementAndGet());
-        routes.put(token, new Route(remoteUrl, session.headers));
-        session.tokens.add(token);
+    /** token → 本机转发地址 */
+    private String localForwardUrl(String token) {
         return "http://127.0.0.1:" + port + "/f/" + token;
     }
 
@@ -242,10 +198,7 @@ public final class LocalHlsProxy {
                 String id = path.substring(3);
                 int slash = id.indexOf('/');
                 if (slash >= 0) id = id.substring(0, slash);
-                Session session;
-                synchronized (sessions) {
-                    session = sessions.get(id);
-                }
+                HlsRouteTable.Session session = table.session(id);
                 if (session == null) {
                     writeError(socket.getOutputStream(), 404, "session gone");
                 } else {
@@ -269,7 +222,7 @@ public final class LocalHlsProxy {
 
     /** 转发真实资源；若返回的是另一级 m3u8，继续改写，支持多级播放列表 */
     private void forward(String token, OutputStream out) throws IOException {
-        Route route = routes.get(token);
+        HlsRouteTable.Route route = table.route(token);
         if (route == null || UrlGuard.check(route.url) != null) {
             writeError(out, 403, "unknown route");
             return;
@@ -297,12 +250,11 @@ public final class LocalHlsProxy {
             byte[] bytes = body.bytes();
             String contentType = response.header("Content-Type", "application/octet-stream");
             if (HlsPlaylist.isPlaylist(contentType, bytes)) {
-                Session session = new Session();
-                session.id = "sub" + token;
-                session.headers = route.headers;
+                HlsRouteTable.Session session = table.newSessionWithId(
+                        "sub" + token, route.url, route.headers);
                 String rewritten = HlsPlaylist.rewrite(new String(bytes, "UTF-8"), route.url,
-                        absolute -> routeFor(absolute, session));
-                registerSession(session);
+                        absolute -> localForwardUrl(table.routeFor(absolute, session)));
+                table.register(session);
                 writeOk(out, "application/vnd.apple.mpegurl", rewritten.getBytes("UTF-8"));
             } else {
                 writeOk(out, contentType, bytes);
@@ -327,12 +279,6 @@ public final class LocalHlsProxy {
         } finally {
             response.close();
         }
-    }
-
-    private static Map<String, String> copyHeaders(Map<String, String> source) {
-        Map<String, String> copy = new HashMap<>();
-        if (source != null) copy.putAll(source);
-        return copy;
     }
 
     private static void writeOk(OutputStream out, String contentType, byte[] bytes)

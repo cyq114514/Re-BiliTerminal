@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GsonUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
+import com.RobinNotBad.BiliClient.util.PlayerProgressRules;
 import com.RobinNotBad.BiliClient.util.PlayerSentinel;
 import com.RobinNotBad.BiliClient.util.ProgressDiag;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -48,7 +49,7 @@ import java.util.Map;
 public class PlayerApi {
 
     //续播位置的合理上限，用于兜底异常数据
-    private static final long MAX_PROGRESS_MS = 24L * 60 * 60 * 1000;
+
 
     //番剧取流：v2 才有 play_view_business_info（观看进度），v1 只做兜底
     private static final String PGC_PLAYURL_V2 = "https://api.bilibili.com/pgc/player/web/v2/playurl";
@@ -339,7 +340,7 @@ public class PlayerApi {
         //last_play_cid/last_play_time 是 aid 级"上次播放"数据：进度只属于 last_play_cid 那一P。
         //请求的 cid 与上次播放的 cid 不一致时（多P视频换P续播）不能把别人的进度套在本P上，应从头播
         playerData.cidHistory = data.last_play_cid;
-        playerData.progress = adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
+        playerData.progress = PlayerProgressRules.adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
         if (playerData.cidHistory == 0) { playerData.cidHistory = playerData.cid; playerData.progress = 0; }
 
         if (data.accept_description != null && data.accept_quality != null) {
@@ -364,7 +365,7 @@ public class PlayerApi {
         if (data.durl == null || data.durl.isEmpty()) throw new JSONException("durl is empty");
         playerData.videoUrls = buildMediaCandidates(data.durl.get(0).url, data.durl.get(0).backup_url);
         playerData.videoUrl = playerData.videoUrls.isEmpty() ? data.durl.get(0).url : playerData.videoUrls.get(0);
-        playerData.cidHistory = data.last_play_cid; playerData.progress = adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
+        playerData.cidHistory = data.last_play_cid; playerData.progress = PlayerProgressRules.adoptLastPlayTime(data.last_play_cid, playerData.cid, data.last_play_time);
         if (playerData.cidHistory == 0) { playerData.cidHistory = playerData.cid; playerData.progress = 0; }
         if (data.accept_description != null && data.accept_quality != null) {
             playerData.qnStrList = data.accept_description.toArray(new String[0]);
@@ -575,7 +576,7 @@ public class PlayerApi {
                 lastPlayTime = rawLastPlayTime > 0 ? rawLastPlayTime : 0;
                 how = "季级证明后采纳";
             } else {
-                lastPlayTime = adoptLastPlayTime(data.data.last_play_cid, cid, rawLastPlayTime);
+                lastPlayTime = PlayerProgressRules.adoptLastPlayTime(data.data.last_play_cid, cid, rawLastPlayTime);
                 how = lastPlayTime > 0 ? "cid配对采纳" : "cid不配对已丢弃";
             }
             ProgressDiag.log("wbi/v2", "aid=" + aid + " cid=" + cid + " last_play_cid=" + data.data.last_play_cid
@@ -630,30 +631,22 @@ public class PlayerApi {
         ProgressDiag.log("续播查询", "aid=" + aid + " cid=" + cid + " epid=" + epid + " seasonId=" + seasonId
                 + " 服务端进度=" + describeWatchProgress(watchProgress));
 
-        //1. 服务端按集保存的本集进度（PiliPlus 口径，毫秒）
-        long adopted = 0;
-        String source = null;
-        if (watchProgress != null && watchProgress.current_watch_progress > 0) {
-            adopted = watchProgress.current_watch_progress;
-            source = "服务端按集进度 current_watch_progress";
-            if (watchProgress.last_ep_id != 0 && watchProgress.last_ep_id != epid
-                    && adopted == watchProgress.last_time)
-                //仅提示：两者数值相同只是巧合（本集自己看到的位置恰好等于季级那条记录），按集级采用
-                ProgressDiag.log("续播结果", "注：本集进度与季级位置数值相同（本集 epid=" + epid
-                        + "，季级 last_ep_id=" + watchProgress.last_ep_id + "），仍按集级采用");
-            if (durationMs > 0 && adopted > durationMs) {
-                //位置不可能超过总时长：只可能是异常数据，宁可从头播也不要跳到一个离谱的位置
-                ProgressDiag.log("续播结果", "服务端按集进度 " + adopted + "ms 超过总时长 " + durationMs + "ms，按从头播放处理");
-                adopted = 0;
-                source = null;
-            }
+        //1+2. 服务端按集保存的本集进度 / 同响应的 last_time（配对规则在 PlayerProgressRules）
+        PlayerProgressRules.WatchProgressChoice choice = PlayerProgressRules.selectWatchProgress(
+                watchProgress != null ? watchProgress.current_watch_progress : 0,
+                watchProgress != null ? watchProgress.last_ep_id : 0,
+                watchProgress != null ? watchProgress.last_time : 0,
+                epid, durationMs);
+        long adopted = choice.ms;
+        String source = choice.source;
+        if (choice.sameValueAsSeason) {
+            //仅提示：两者数值相同只是巧合（本集自己看到的位置恰好等于季级那条记录），按集级采用
+            ProgressDiag.log("续播结果", "注：本集进度与季级位置数值相同（本集 epid=" + epid
+                    + "，季级 last_ep_id=" + watchProgress.last_ep_id + "），仍按集级采用");
         }
-
-        //2. 本集就是"本季最近观看"那一集，但集级字段为空：同响应的 last_time（毫秒）就是本集位置
-        if (adopted <= 0 && watchProgress != null && epid != 0
-                && watchProgress.last_ep_id == epid && watchProgress.last_time > 0) {
-            adopted = watchProgress.last_time;
-            source = "季级(同响应 last_time)";
+        if (choice.overDurationDiscarded) {
+            ProgressDiag.log("续播结果", "服务端按集进度 " + watchProgress.current_watch_progress
+                    + "ms 超过总时长 " + durationMs + "ms，按从头播放处理");
         }
 
         //3. v1 回退或字段缺失时才查季级状态接口（多一次请求）
@@ -682,9 +675,8 @@ public class PlayerApi {
         //   真正的「本集无记录」只在「本集就是本季最近一集、服务端仍说没有位置」时成立。
         //   注意第 1 层因位置越界被丢弃（adopted 归零）时 current 仍 > 0，这里同样不该跳过扫描。
         boolean serverConfirmsNoRecordForThisEp = watchProgress != null
-                && watchProgress.current_watch_progress <= 0
-                && epid != 0
-                && watchProgress.last_ep_id == epid;
+                && PlayerProgressRules.serverConfirmsNoRecord(
+                        watchProgress.current_watch_progress, watchProgress.last_ep_id, epid);
         if (serverConfirmsNoRecordForThisEp) {
             ProgressDiag.log("续播结果", "服务端确认本集无记录（本集即最近一集且 current=0），跳过观看记录扫描");
         } else {
@@ -715,38 +707,18 @@ public class PlayerApi {
     }
 
     /**
-     * last_play_time 是与 last_play_cid 配对的"上次播放"进度，只属于那一P。
-     * 仅当上次播放的P就是本次请求的P时才作为续播进度采纳；换P播放一律从头开始，
-     * 否则会出现"选了P3却从P2的位置开始播"的进度错乱。
-     */
-    private static int adoptLastPlayTime(long lastPlayCid, long requestCid, long lastPlayTime) {
-        if (lastPlayCid != requestCid || lastPlayTime <= 0) return 0;
-        return (int) lastPlayTime;
-    }
-
-    /**
      * last_play_time 官方文档标注为毫秒，但该字段在 x/player/wbi/v2 中未被文档确证。
-     * 这里以毫秒为准，仅当毫秒值超出视频总时长、而换算成秒后落在时长内时按秒处理，避免把一个较大的毫秒值当成越界数据丢弃。
+     * 归一化规则（毫秒/秒自校准、越界丢弃、24 小时上限）在 {@link PlayerProgressRules}，
+     * 这里只保留诊断日志：规则本身可独立 JVM 单测，日志不影响返回值。
      */
     private static int normalizeProgress(long raw, long durationMs) {
-        if (raw <= 0) return 0;
-        long ms = raw;
-        if (durationMs > 0 && ms > durationMs) {
-            long sec = raw * 1000L;
-            if (sec <= durationMs) {
-                Logu.d("history-last", "last_play_time 疑似单位为秒：" + raw);
-                ms = sec;
-            } else {
-                Logu.e("history-last", "last_play_time 越界已丢弃：" + raw + " / " + durationMs);
-                ms = 0;
-            }
+        int ms = PlayerProgressRules.normalizeProgress(raw, durationMs);
+        if (raw > 0 && ms == 0) {
+            Logu.e("history-last", "last_play_time 越界/超限已丢弃：" + raw + " / " + durationMs);
+        } else if (ms > 0 && ms != raw) {
+            Logu.d("history-last", "last_play_time 疑似单位为秒：" + raw);
         }
-        //timelength 缺失时没有参照，24 小时兜底，避免异常数据经 int 截断后变成一个离谱的跳转位置
-        if (ms > MAX_PROGRESS_MS) {
-            Logu.e("history-last", "last_play_time 超出合理范围已丢弃：" + ms);
-            ms = 0;
-        }
-        return (int) ms;
+        return ms;
     }
 
     public static Intent jumpToPlayer(PlayerData playerData) {
