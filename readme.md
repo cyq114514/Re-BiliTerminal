@@ -249,6 +249,13 @@ ALIAS_PASSWORD=******
 应用内更新所需的 `update.json`（签名密钥以仓库 Secrets 提供：`KEYSTORE_B64`、
 `KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`）。
 
+> **构建边界：** 正式包（R8 混淆 + 资源收缩 + 签名）只在 CI 构建；本地跑 `assembleRelease`
+> 需要自备签名配置，且不保证与 CI 产物等价。真机安装、播放/番剧回归需要自备设备。
+> 在 ARM64 Linux（如手机上的 PRoot）上做 Debug 构建时，AGP 自带的 Maven `aapt2` 是 x86_64、
+> 无法执行，需要覆盖为系统 arm64 版本：
+> `./gradlew :app:assembleDebug -Pandroid.aapt2FromMavenOverride=/path/to/arm64/aapt2`；
+> 官方 x86_64 环境与 CI 不需要这个参数。
+
 ## 技术栈
 
 - **语言 / 界面**：Java + XML（`minSdk 19`，无 Kotlin、无 Compose）
