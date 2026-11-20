@@ -66,7 +66,19 @@ ALIAS_PASSWORD=******
 ## 5. CI 环境事实
 
 - `ubuntu-latest` + `actions/setup-java@v4`（temurin 17）；Android SDK 依赖 runner 预装，工作流里用 `sdk.dir=$ANDROID_HOME`（`ci.yml:55`），没有显式 `setup-android`。
-- tag（`v*`）构建时在 runner 上现场生成 `local.properties`（含 `sdk.dir`、keystore、3 组凭据），并用 `sed` 脱敏后打印（`ci.yml:43-83`）。
+- 唯一 workflow 是 `.github/workflows/ci.yml`，触发与行为（`ci.yml:8-14`）：
+
+| 触发 | 执行内容 |
+|---|---|
+| `push` → `main` | checkout → JDK 17 → `:app:assembleDebug` → 上传 debug artifact（不发版、不注入凭据） |
+| `push` → tag `v*` | 同上的 debug 构建后，写 `local.properties` → `:app:assembleRelease` → 资源冒烟（教程插图 ≥6）→ 上传 release artifact → 创建/覆盖 GitHub Release → 写 update 元数据 → 生成并上传 `update.json` |
+| `pull_request` → `main` | 同 `push main`：只跑 debug 构建并上传 artifact；不注入 secrets、不碰 Release |
+| `workflow_dispatch` | 按所选 ref：非 tag 仅 debug；tag 走完整发布链 |
+
+- **权限**：workflow 级 `permissions: contents: write`（`ci.yml:4-6`）——写权限对 PR 构建同样生效，属已知风险（见仓库治理审查记录，未在本次修改）。
+- **release secrets 共 7 个**：`KEYSTORE_B64`（base64 解码为 `$HOME/release.jks`）、`KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`（签名，4 键"有则用、缺则出 unsigned"）；`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头，缺则境内番剧库不可用）；`DANDAN_APP_ID`、`DANDAN_APP_SECRET`（弹弹play 弹幕签名，缺则第三方番剧无弹幕）。缺失只在 CI 打 `::warning`，不失败（`ci.yml:43-83`）。
+- **Release 资产命名**：签名成功为 `Re-BiliTerminal-<tag>-release.apk`；未签名为 `Re-BiliTerminal-<tag>-release-unsigned.apk`（`ci.yml:114-120`）。
+- **`update.json` 字段**：`versionCode`、`versionName`、`sha256`、`size`、`fileName`、`notes`、`htmlUrl`；versionCode 由 `app/build.gradle` 的 `grep` 取得（`ci.yml:131`），客户端 `UpdateManager` 主通道读取 `releases/latest/download/update.json`。
 - 真实运行记录/耗时/失败史：本机无 gh、无 GitHub 登录，**未核实**（核实方法：网页 Actions，或登录后 `gh run list`）。
 
 ## 6. 常见问题

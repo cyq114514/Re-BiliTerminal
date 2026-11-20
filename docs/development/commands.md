@@ -44,7 +44,7 @@ app/build/outputs/apk/release/app-release*.apk
 
 | 命令 | 用途 | 级别 | 备注 |
 |---|---|---|---|
-| `./gradlew -PemuArm64 connectedDebugAndroidTest` | 唯一仪器化测试（TLS 回移） | D | 需 arm64 设备/模拟器；**测试会向线上 Supabase 写数据并真实联网** |
+| `./gradlew -PemuArm64 connectedDebugAndroidTest` | 唯一仪器化测试（TLS 回移，2 个用例：强制 Conscrypt 握手 + 仅内置补根验 netlify 链） | D | 需 arm64 设备/模拟器；**测试会向线上 Supabase 写数据并真实联网** |
 | 单元测试 | —— | — | 仓库**没有** `src/test`，不要臆造 `./gradlew test` 有内容 |
 
 ## 5. 设备与日志（第二阶段）
