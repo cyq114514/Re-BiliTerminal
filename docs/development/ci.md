@@ -168,7 +168,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 | 本地 JVM 单元测试（全部） | **PASS** | `./gradlew :app:testDebugUnitTest :app:assembleDebug -Pandroid.aapt2FromMavenOverride=...` → `BUILD SUCCESSFUL`；XML 汇总 **210 tests / 0 failures / 0 errors / 0 skipped**（19 个测试类，含基础设施冒烟） |
 | 本地 Debug 编译 | **PASS** | 同一次 Gradle 调用产出 `app/build/outputs/apk/debug/app-debug.apk`（约 22.0 MB，构建时间 2026-11-21 03:03（本地）） |
 | 仓库自检脚本 | **PASS** | `check-env`（FAIL 0 / WARN 1：本机 aapt2 override 提示）、`check-repo`（FAIL 0 / WARN 2：工作区未提交、tag 版本提示）、`check-links`（FAIL 0）、`validate-ci`（FAIL 0 / WARN 1：action 未 pin SHA）、`check-tests`（FAIL 0 / WARN 0） |
-| GitHub Actions 真实运行 | **PASS** | [run 44838407423](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44838407423)（`main` @ `d91bf9b`）：`规范与环境检查` PASS、`编译自检（Debug）` PASS、`JVM 单元测试` PASS（日志汇总 **210 tests / 0 failures / 0 errors / 0 skipped**，Gradle `BUILD SUCCESSFUL in 1m 11s`）、`发布（tag）` skipped（非 tag，符合预期）；artifact `unit-test-results`（XML+HTML）与 `Re-BiliTerminal-debug` 均上传成功 |
+| GitHub Actions 真实运行 | **PASS** | 两次 main push 均全绿：[run 44839324416](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44839324416)（`main` @ `5cf433a`）与 [run 44838407423](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44838407423)（`d91bf9b`）：`规范与环境检查` / `编译自检（Debug）` / `JVM 单元测试` PASS，`发布（tag）` skipped（非 tag，符合预期）；CI 日志 **210 tests / 0 failures / 0 errors / 0 skipped**（`BUILD SUCCESSFUL in 1m 11s`）；artifact `unit-test-results`（XML+HTML）与 `Re-BiliTerminal-debug` 均上传成功 |
 | Android Emulator 集成测试 | **NOT RUN / NOT ADOPTED** | 见 §4 评估；现有仪器化测试会写线上数据，未接入 |
 | Release tag 发布链 | **NOT RUN** | 只在真实 tag 推送时验证；本次未创建 tag、未发 Release |
 
@@ -178,7 +178,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 2. **`adoptLastPlayTime` 无上限**：超大异常值直接 `(int)` 截断（可能变负）。现有调用方对进度做了 `> 5` 判断才使用，风险有限；未在本轮改行为。
 3. **AudioQueue 不过滤 `invalid`**：过滤责任在 `FavoriteVideoListActivity` 调用方；测试已锁定该契约并注释。是否下沉到队列需单独评审。
 4. **未接入 lint / 覆盖率 / 模拟器**：见 §7 与 `testing.md` §6。
-5. **CI checkout 行尾差异**：Ubuntu runner 上 `eol=crlf` 文件可能显示为 modified；`check-repo.sh` 已过滤「仅 CR/LF 差异」，若仍出现说明是真实内容改动（本次 CI 首跑据此修正）。
+5. **CI checkout 行尾差异（已修并验证）**：Ubuntu runner 上 `eol=crlf` 文件会显示为 modified；`check-repo.sh` 已过滤「仅 CR/LF 差异」。第二次 CI 日志：`[ OK ] 工作区干净` + `[INFO] 已忽略 6 个仅行尾差异（CI checkout 的 eol=crlf 归一化）`；若再出现 dirty，说明是真实内容改动。
 6. **PR 触发尚未单独实测**：本次是 main push 触发；PR 的同套 job 与 `paths-ignore` 由同一 workflow 定义，等首次 PR 再确认。
 
 ### 8.2 下一步（按顺序）
