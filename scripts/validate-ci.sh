@@ -77,7 +77,7 @@ for f in "${files[@]}"; do
     if grep -qE 'retention-days:' "$f"; then ok "artifact 设置了 retention-days"; else bad "artifact 未设 retention-days（默认保留 90 天）"; fi
 
     # 4. 环境显式化
-    if grep -qE 'android-actions/setup-android|sdkmanager' "$f"; then
+    if grep -qE 'android-actions/setup-android|sdkmanager|ci-prepare-sdk' "$f"; then
         ok "显式安装/声明 Android SDK"
     else
         no "未显式安装 Android SDK（依赖 runner 预装 ANDROID_HOME）"
