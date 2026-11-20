@@ -168,22 +168,21 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 | 本地 JVM 单元测试（全部） | **PASS** | `./gradlew :app:testDebugUnitTest :app:assembleDebug -Pandroid.aapt2FromMavenOverride=...` → `BUILD SUCCESSFUL`；XML 汇总 **210 tests / 0 failures / 0 errors / 0 skipped**（19 个测试类，含基础设施冒烟） |
 | 本地 Debug 编译 | **PASS** | 同一次 Gradle 调用产出 `app/build/outputs/apk/debug/app-debug.apk`（约 22.0 MB，构建时间 2026-11-21 03:03（本地）） |
 | 仓库自检脚本 | **PASS** | `check-env`（FAIL 0 / WARN 1：本机 aapt2 override 提示）、`check-repo`（FAIL 0 / WARN 2：工作区未提交、tag 版本提示）、`check-links`（FAIL 0）、`validate-ci`（FAIL 0 / WARN 1：action 未 pin SHA）、`check-tests`（FAIL 0 / WARN 0） |
-| GitHub Actions 真实运行 | **NOT RUN** | 本轮改动在本地完成时尚未 push；且本机保存的旧 PAT 已失效（GitHub 返回 401 / `Invalid username or token`）。CI 状态只以真实 Actions 结果为准，不以本地结果替代 |
+| GitHub Actions 真实运行 | **PASS** | [run 44838407423](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44838407423)（`main` @ `d91bf9b`）：`规范与环境检查` PASS、`编译自检（Debug）` PASS、`JVM 单元测试` PASS（日志汇总 **210 tests / 0 failures / 0 errors / 0 skipped**，Gradle `BUILD SUCCESSFUL in 1m 11s`）、`发布（tag）` skipped（非 tag，符合预期）；artifact `unit-test-results`（XML+HTML）与 `Re-BiliTerminal-debug` 均上传成功 |
 | Android Emulator 集成测试 | **NOT RUN / NOT ADOPTED** | 见 §4 评估；现有仪器化测试会写线上数据，未接入 |
 | Release tag 发布链 | **NOT RUN** | 只在真实 tag 推送时验证；本次未创建 tag、未发 Release |
 
 ### 8.1 已知遗留/风险（本次未修）
 
-1. **CI 真实结果待验证**：新 workflow 尚未在 Actions 上跑过；首次推送后需重点确认 4 个 job 的 SDK/JDK/缓存/报告路径与 `summarize-tests.py` 的实际输出。
-2. **旧 token 失效**：需要用户提供新的 GitHub PAT 才能完成 push 与真实 CI 验证（本轮未伪造结果）。
-3. **Robolectric 4.18**：本机 aarch64 与 CI x86_64 都已/将使用同一版本；CI 首次需要下载 android-all。
-4. **归一化死分支**：`PlayerProgressRules.normalizeProgress` 的“按秒自校准”分支在正数输入下数学上不可达（`raw > duration` 与 `raw*1000 <= duration` 互斥）。本次保持生产行为不变，测试锁定现状；若要修，必须单独评审并补真实服务端样例。
-5. **`adoptLastPlayTime` 无上限**：超大异常值直接 `(int)` 截断（可能变负）。现有调用方对进度做了 `> 5` 判断才使用，风险有限；未在本轮改行为。
-6. **AudioQueue 不过滤 `invalid`**：过滤责任在 `FavoriteVideoListActivity` 调用方；测试已锁定该契约并注释。是否下沉到队列需单独评审。
-7. **未接入 lint / 覆盖率 / 模拟器**：见 §7 与 `testing.md` §6。
+1. **归一化死分支**：`PlayerProgressRules.normalizeProgress` 的“按秒自校准”分支在正数输入下数学上不可达（`raw > duration` 与 `raw*1000 <= duration` 互斥）。本次保持生产行为不变，测试锁定现状；若要修，必须单独评审并补真实服务端样例。
+2. **`adoptLastPlayTime` 无上限**：超大异常值直接 `(int)` 截断（可能变负）。现有调用方对进度做了 `> 5` 判断才使用，风险有限；未在本轮改行为。
+3. **AudioQueue 不过滤 `invalid`**：过滤责任在 `FavoriteVideoListActivity` 调用方；测试已锁定该契约并注释。是否下沉到队列需单独评审。
+4. **未接入 lint / 覆盖率 / 模拟器**：见 §7 与 `testing.md` §6。
+5. **CI checkout 行尾差异**：Ubuntu runner 上 `eol=crlf` 文件可能显示为 modified；`check-repo.sh` 已过滤「仅 CR/LF 差异」，若仍出现说明是真实内容改动（本次 CI 首跑据此修正）。
+6. **PR 触发尚未单独实测**：本次是 main push 触发；PR 的同套 job 与 `paths-ignore` 由同一 workflow 定义，等首次 PR 再确认。
 
 ### 8.2 下一步（按顺序）
 
-1. 用户提供有效 token 或手动 push 后，触发真实 Actions，确认 `checks` / `build` / `unit-test` 全绿并读取 Job Summary。
-2. 若 CI 暴露新环境问题（SDK/缓存/报告路径），只修 CI 或测试基础设施，不放宽断言。
-3. 视需要补 P2 纯逻辑测试与增量 lint（见 `testing.md` §7）。
+1. 首次真实 PR 后确认 PR 触发链路与 `paths-ignore`（本次只验证了 main push）。
+2. 视需要补 P2 纯逻辑测试与增量 lint（见 `testing.md` §7）。
+3. 满足 `ci.md` §4 的接入条件后再评估 Emulator nightly；真机回归仍按模块清单执行。
