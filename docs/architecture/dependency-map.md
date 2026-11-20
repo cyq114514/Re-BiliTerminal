@@ -101,7 +101,7 @@ gradlePluginPortal() / google() / mavenCentral() / jitpack.io          ← 两�
 | `DanmakuFlameMaster` | 已 fork（6 个提交 / 7 个文件），不能用上游 maven 坐标替换 | [module-map](./module-map.md) §6 |
 | `brotlij` + `libbrotli.so` | 原样第三方 JNI；**许可证来源未核实**（无 license 头、无 LICENSE 文件），不能随意替换/清理 | `brotlij/build.gradle:7`【未核实】 |
 | `libndkbitmap.so` | 弹幕缓存绘制依赖；DFM 模块内的 `src/main/libs` 与 `app/libs` 两份同名库不可混用 | `app/libs/*/libndkbitmap.so` |
-| AGP / Gradle / JDK / compileSdk | 属于基线，Phase 内不升级（AGENTS.md 硬规则）；升 compileSdk 需同步 4 个模块 | `build.gradle:6-8`、各模块 `build.gradle` |
+| AGP / Gradle / JDK / compileSdk | 属于基线，本迭代内不升级（AGENTS.md 硬规则）；升 compileSdk 需同步 4 个模块 | `build.gradle:6-8`、各模块 `build.gradle` |
 
 ## 6 新增依赖的硬规则
 

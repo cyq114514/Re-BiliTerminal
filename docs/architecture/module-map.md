@@ -2,7 +2,7 @@
 
 > 定位：**动手前回答两个问题**——"我要改的代码属于哪个 Gradle 模块 / 哪个包"和"这块是不是本项目自己的代码"。需要看依赖版本与构建仓库时读 [dependency-map](./dependency-map.md)；要判断风险读 [risk-map](./risk-map.md)。
 
-规模数据均为本地 `find`/`wc` 实测（当前 HEAD）：`app` 468 个 .java / 92,653 行；清单 113 个 `<activity>`、19 个 Fragment 类。
+规模数据均为本地 `find`/`wc` 实测（当前 HEAD）：`app` 468 个 .java / 92,653 行；清单 113 个 `<activity>`（115 处声明含 2 个 alias）、19 个业务 Fragment 类（另有 3 个基类，共 22 个声明）。
 
 ---
 
@@ -43,8 +43,8 @@
 |---|---|---|---|
 | `activity/` 顶层 | 15 | 壳层/工具型页面：启动、菜单、崩溃页、对话框外壳、文本/图片查看、计算器伪装、外链、彩蛋 | `SplashActivity`、`MenuActivity`、`CatchActivity`、`GetIntentActivity`、`CalculatorActivity`、`DialogActivity`、`EchoCaveActivity` |
 | `activity/base` | 6 | 基类（主题覆盖层、方向锁、恢复栈、DPI/圆屏、EventBus、`startActivity` 重写） | `BaseActivity`(797)、`InstanceActivity`、`RefreshListActivity`、`RefreshMainActivity`、`BaseFragment`、`RefreshListFragment` |
-| `activity/*` 13 子包 | 127 | 业务页面，见 §4 | `activity/player/PlayerActivity`(6544) |
-| `api/` | 50 | HTTP 请求 + JSON/Gson 解析一体，全部是静态方法；无接口抽象 | `PlayerApi`(921)、`BgmApi`(1042)、`DynamicApi`、`UserInfoApi`、`ConfInfoApi` |
+| `activity/*` 13 子包 | 133 | 业务页面，见 §4（与顶层 15 合计 148） | `activity/player/PlayerActivity`(6544) |
+| `api/` | 50 | HTTP 请求 + JSON/Gson 解析一体，全部是静态方法；无服务接口抽象（仅 `BgmApi` 内 2 个回调接口） | `PlayerApi`(921)、`BgmApi`(1042)、`DynamicApi`、`UserInfoApi`、`ConfInfoApi` |
 | `adapter/` | 57（17 顶层 + 8 子包） | RecyclerView/ViewPager 适配器 | `SettingsAdapter`、`QualitySelectorAdapter`、`ReplyAdapter`、`MenuGridAdapter` |
 | `model/` | 67（65 顶层 + `bgm`/`message` 子包） | POJO / 响应模型（Parcelable + Gson/JSON 双风格） | `PlayerData`、`ApiResult`、`ApiResponse`、`SettingSection` |
 | `service/` | 4 | 3 个前台 Service + 音频缓存代理 | `DownloadService`(1149)、`AudioPlayerService`(1619)、`PlaybackService`(266)、`AudioCacheProxy` |

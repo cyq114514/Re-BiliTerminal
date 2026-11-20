@@ -65,24 +65,33 @@ ALIAS_PASSWORD=******
 
 ## 5. CI 环境事实
 
-- `ubuntu-latest` + `actions/setup-java@v4`（temurin 17）；Android SDK 依赖 runner 预装，工作流里用 `sdk.dir=$ANDROID_HOME`（`ci.yml:55`），没有显式 `setup-android`。
-- 唯一 workflow 是 `.github/workflows/ci.yml`，触发与行为（`ci.yml:8-14`）：
+- 运行环境：`ubuntu-latest` + `actions/setup-java@v4`（temurin 17）；Android SDK 依赖 runner 预装，通过 `ANDROID_HOME` 使用。**只有 tag 发布 job** 会把 `sdk.dir=$ANDROID_HOME` 写进 `local.properties`（build job 不写）。
+- 唯一 workflow 是 `.github/workflows/ci.yml`，触发与行为：
 
 | 触发 | 执行内容 |
 |---|---|
-| `push` → `main` | checkout → JDK 17 → `:app:assembleDebug` → 上传 debug artifact（不发版、不注入凭据） |
-| `push` → tag `v*` | 同上的 debug 构建后，写 `local.properties` → `:app:assembleRelease` → 资源冒烟（教程插图 ≥6）→ 上传 release artifact → 创建/覆盖 GitHub Release → 写 update 元数据 → 生成并上传 `update.json` |
-| `pull_request` → `main` | 同 `push main`：只跑 debug 构建并上传 artifact；不注入 secrets、不碰 Release；纯 docs/`*.md`/`site/**` 变更按 `paths-ignore` 跳过 |
+| `push` → `main` | checkout → JDK 17 → 准备 Android SDK → `:app:assembleDebug` → 上传 debug artifact（不发版、不注入凭据） |
+| `push` → tag `v*` | 同上的 debug 构建后（在 `build` job），进入 `release` job：写 `local.properties` → `:app:assembleRelease` → 资源冒烟（教程插图 ≥6）→ 上传 release artifact → 创建/覆盖 GitHub Release → 写 update 元数据 → 生成并上传 `update.json` |
+| `pull_request` → `main` | 同 `push main`：只跑 debug 构建并上传 artifact；不注入 secrets、不碰 Release；纯 `docs/**`、`**.md`、`site/**` 变更按 `paths-ignore` 跳过 |
 | `workflow_dispatch` | 按所选 ref：非 tag 仅 debug；tag 走完整发布链 |
 
+- **准备 Android SDK**：每个 job 先检查 `platforms/android-33` 与 `build-tools`；runner 未预装时用自带的 `sdkmanager` 安装（首次约 1~2 分钟）。找不到 `sdkmanager` 时只告警并依赖 AGP 自动下载（软失败，不阻断）。真实 CI 首跑发现 `ubuntu-26.04` 镜像不再预装 platform-33，这一步是必要的。
 - **权限**：顶层默认 `permissions: contents: read`；只有 tag-only 的 `release` job 单独申请 `contents: write`。PR 构建与 main push 都不持有写 token，也不接触 secrets。
-- **Android SDK 准备**：job 内检查 `platforms/android-33` 与 `build-tools`；runner 未预装时用自带的 `sdkmanager` 安装（首次约 1~2 分钟），找不到 `sdkmanager` 则告警并依赖 AGP 自动下载。真实 CI 首跑发现 `ubuntu-26.04` 镜像不再预装 platform-33，此步骤是必要的。
 - **并发/超时/缓存/保留期**：`concurrency` 按 ref 分组（tag 发布不取消，分支/PR 连推取消旧任务）；`build` 超时 30 分钟、`release` 45 分钟；`setup-java` 启用 Gradle 缓存；artifact 保留 7 天。
-- **PR 过滤**：仅 `pull_request` 忽略 `docs/**`、`**.md`、`site/**`（纯文档 PR 不跑构建）；`push`/`tag` 不做路径过滤，避免影响发版判断。
-- **release secrets 共 7 个**：`KEYSTORE_B64`（base64 解码为 `$HOME/release.jks`）、`KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`（签名，4 键"有则用、缺则出 unsigned"）；`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头，缺则境内番剧库不可用）；`DANDAN_APP_ID`、`DANDAN_APP_SECRET`（弹弹play 弹幕签名，缺则第三方番剧无弹幕）。缺失只在 CI 打 `::warning`，不失败（`ci.yml:43-83`）。
-- **Release 资产命名**：签名成功为 `Re-BiliTerminal-<tag>-release.apk`；未签名为 `Re-BiliTerminal-<tag>-release-unsigned.apk`（`ci.yml:114-120`）。
-- **`update.json` 字段**：`versionCode`、`versionName`、`sha256`、`size`、`fileName`、`notes`、`htmlUrl`；versionCode 由 `app/build.gradle` 的 `grep` 取得（`ci.yml:131`），客户端 `UpdateManager` 主通道读取 `releases/latest/download/update.json`。
-- **真实运行记录（2026-11-21，PR #1）**：run 44782040134 成功——build job 2m23s（其中 Gradle 构建 1m22s；首次无缓存，结束后缓存已保存）；release job 因非 tag 正确跳过；debug artifact 16.7MB、保留 7 天。首跑 run 44781850513 曾失败：runner（ubuntu-26.04）不再预装 platform-33，已把「校验预装」改为「缺失时用 sdkmanager 安装」。
+- **release secrets 共 7 个**：`KEYSTORE_B64`（base64 解码为 `$HOME/release.jks`）、`KEY_PASSWORD`、`ALIAS_NAME`、`ALIAS_PASSWORD`（签名，4 键"全有才签名、缺任一按未签名"）；`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头，缺则境内番剧库不可用）；`DANDAN_APP_ID`、`DANDAN_APP_SECRET`（弹弹play 弹幕签名，缺则第三方番剧无弹幕）。缺失只在 CI 打 `::warning`，不失败。
+- **Release 资产命名**：签名成功为 `Re-BiliTerminal-<tag>-release.apk`；未签名为 `Re-BiliTerminal-<tag>-release-unsigned.apk`。
+- **`update.json` 字段**：`versionCode`、`versionName`、`sha256`、`size`、`fileName`、`notes`、`htmlUrl`。**versionCode 优先从已构建 APK 的 `aapt2 dump badging` 读取**（与包体强一致）；解析失败才回退 `app/build.gradle` 的 grep 并打告警。客户端 `UpdateManager` 主通道读取 `releases/latest/download/update.json`。
+- **已知发布链风险（历史遗留，未修）**：secrets 缺失导致未签名包时，流程仍会生成并上传 `update.json`，客户端可能提示更新到签名不一致、无法安装的包。修复需要产品决策（阻断 Release / 不写 update.json / update.json 标记 signed:false），不在本次文档修复范围。
+
+### 真实运行记录（2026-11-21，PR #1 及其合并）
+
+| run | 事件 | 结果 | 说明 |
+|---|---|---|---|
+| 44781850513 | PR | ❌ 失败 | 首跑：runner 不预装 platform-33，SDK 预检查步骤直接失败 → 改为缺失时 sdkmanager 安装 |
+| 44782040134 | PR | ✅ 成功 | 冷启动无缓存：build job 2m23s（Gradle 1m22s），artifact 16.7MB/7 天，release job 正确跳过 |
+| 44782797819 | PR | ✅ 成功 | **缓存命中**：job 95s，Gradle 37s（缓存约 446MB） |
+| 44785586408 | PR | ✅ 成功 | 复查修复提交 `a050f94` 的最终 PR run |
+| 44786409920 | push main | ✅ 成功 | merge commit `3a7db29` 合并后 main 构建通过 |
 
 ## 6. 常见问题
 

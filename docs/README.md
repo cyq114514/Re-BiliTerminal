@@ -11,6 +11,8 @@
 | [AGENTS.md](../AGENTS.md) | 任何 Agent/开发工作开始前：规则、验证要求、Git 纪律、红线 |
 | [architecture/overview.md](architecture/overview.md) | 第一次接触项目：分层实况、启动链、全局状态、线程模型 |
 | [readme.md](../readme.md) | 用户视角：它是什么、怎么装、怎么构建、已知问题 |
+| [app/AGENTS.md](../app/AGENTS.md) | 改 `app/` 代码前：模块专属约束（界面 token、播放器线程、网络隐私、设置 4 处） |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | 提 Issue/PR、本地验证命令与红线（面向人类贡献者） |
 | [DESIGN.md](../DESIGN.md) | 任何界面改动前：颜色/字号/圆角/间距/顶栏按钮的强制规范 |
 | [更新日志.md](更新日志.md) | 查「某版本改了什么、为什么」；按版本检索，**不要从头通读**（2,500+ 行） |
 

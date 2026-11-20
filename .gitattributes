@@ -7,6 +7,7 @@
 *.sh    text eol=lf
 *.bat   text eol=crlf
 gradlew text eol=lf
+*.properties text eol=crlf
 
 # 二进制：资源、预编译库与发布产物
 *.png     binary

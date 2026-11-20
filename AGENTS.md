@@ -70,7 +70,7 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 | 级别 | 命令/方式 | 说明 |
 |---|---|---|
 | 静态 | `git diff --check` + 人工审 diff | 每次必做 |
-| 仓库自检 | `./scripts/check-env.sh`、`./scripts/check-repo.sh`、`./scripts/validate-ci.sh` | 只读检查，详见 `docs/development/commands.md` §1.1 |
+| 仓库自检 | `./scripts/check-env.sh`、`check-repo.sh`、`project-info.sh`、`validate-ci.sh`、`check-links.sh` | 5 个只读脚本，详见 `docs/development/commands.md` §1.1 |
 | 文档链接 | `./scripts/check-links.sh` | 改文档后运行；出现失效链接即失败 |
 | 编译 | `./gradlew :app:assembleDebug` | 本机可行（ARM64 需 aapt2 override） |
 | Release 等价 | CI tag 构建（R8 + `shrinkResources` + 资源冒烟） | 本地**无法**等价验证 |

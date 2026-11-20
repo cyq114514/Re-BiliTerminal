@@ -11,7 +11,7 @@
 | `git diff --stat` | 提交前看改动面 | A | 再看关键文件完整 diff |
 | `git diff --check` | 空白错误/冲突标记 | A | 每次提交前必做 |
 | `git log --oneline -10` | 近期提交风格与上下文 | A | 提交正文惯例：根因 + 修法 |
-| `git log --follow -- <path>` | 判断文件是原样引入还是本项目改过 | A | 见 `architecture/module-map.md` 的边界判定 |
+| `git log --follow -- <path>` | 判断文件是原样引入还是本项目改过 | A | 见 `../architecture/module-map.md` 的边界判定 |
 
 ### 1.1 仓库自检脚本（`scripts/`，均为只读）
 

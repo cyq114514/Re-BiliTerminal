@@ -2,7 +2,7 @@
 
 > 定位：这是架构文档的入口。**第一次接触本项目、或被派到一个不知道落在哪个模块的任务时，先读这一份**（10 分钟内建立"它是什么、怎么跑起来、线程怎么走"的模型）；之后按需跳到 [module-map](./module-map.md)、[dependency-map](./dependency-map.md)、[data-flow](./data-flow.md)、[risk-map](./risk-map.md)。
 
-- 基线：分支 `chore/agent-friendly-repo`，代码与 `main @ a26c03c`（1.3.9）一致；规模为本机实测：**468 个 .java / 92,653 行**、4 个 Gradle 模块、清单 **113 个 `<activity>`**（115 处 `<activity` 含 2 个 alias）。
+- 基线：`main @ 3a7db29`（工程治理合并后，1.3.9）；规模为本机实测：**468 个 .java / 92,653 行**、4 个 Gradle 模块、清单 **113 个 `<activity>`**（115 处 `<activity` 含 2 个 alias）。
 - 证据口径：文中 `path:line` 均按当前 HEAD 逐条打开核对过；**行为性描述（运行时表现）标【未核实】**，表示本仓库无法构建/真机验证，只能由代码与注释推断。
 
 ## 1 项目定位与边界
