@@ -85,6 +85,7 @@ app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
 | `util/PlaybackQualityPolicyTest` | 画质策略 | 手动优先、网络分档、非法值回退 |
 | `util/PlayerSeekPoliciesTest` | 进度跳转/横滑 | 倍率档位、mm:ss/hh:mm:ss 解析、越界 clamp、提示文案 |
 | `util/PrivacyLockUtilTest` | 隐私锁 | 开关+密码双条件、SHA-256 不落明文、错误密码 |
+| `scripts/check-tests.sh`（非 JVM 用例） | 收藏夹音频/视频并行 | 静态红线：`AudioPlayerService` 不得出现 `requestAudioFocus` / `abandonAudioFocus` / `AudioManager.AUDIOFOCUS`；CI `checks` 失败即阻断 |
 
 ### P1 安全与网络
 
@@ -109,6 +110,7 @@ app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
 | IJKPlayer 初始化/暂停/释放/Surface 生命周期 | native + 真实设备行为，JVM 无法等价 | 真机回归；`PlayerActivity` 的 `PLAYER_OPS` 序列需人工审查 |
 | Android Service 真实生命周期（下载/音频/后台播放） | 依赖系统调度与通知/前台服务 | Robolectric 只测数据库/状态纯逻辑；真机回归 |
 | 真实网络请求、Cookie/账号切换、超时 | 需要真实服务与凭据，且不稳定 | 只测参数构建/JSON 解析/错误分支；网络层靠真机回归 |
+| 音频与视频「播放状态互不干扰」的运行时行为 | 需要真实 MediaPlayer/IJK/Service 调度与同时播放 | `AudioPlayerService` 的 Audio Focus 红线由 `check-tests.sh` 静态守护（CI 必过）；真正的并行播放/后台状态仍需真机回归 |
 | 第三方番剧源真实站点解析 | 站点会变、不可控 | `UrlGuard`/`RuleLimits`/`SafeRegex`/HLS 的离线安全测试 |
 | Release 资源收缩/R8/签名 | 只能在 CI tag 构建验证 | tag 发布链的资源冒烟 + 人工发版验收 |
 | 数据库跨进程/并发写 | 需要多进程环境 | 迁移/映射测试；真实下载流程真机回归 |
