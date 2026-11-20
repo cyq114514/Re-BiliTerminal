@@ -1,0 +1,87 @@
+# 开发环境（environment）
+
+> 什么时候读：第一次在本机构建、换机器/换环境、构建报错时。
+> 命令清单见 `commands.md`；命令是否在本机真实可用也标注在那里。
+
+## 1. 版本矩阵（以实际配置为准）
+
+| 项 | 版本/值 | 出处 |
+|---|---|---|
+| JDK（构建） | 17（`sourceCompatibility`/`targetCompatibility` 为 Java 11） | `app/build.gradle:121-122` |
+| Gradle Wrapper | 8.14.3（腾讯镜像 + SHA-256 校验） | `gradle/wrapper/gradle-wrapper.properties` |
+| Android Gradle Plugin | 8.10.0 | `build.gradle:6-8` |
+| compileSdk / minSdk / targetSdk | 33 / 19 / 26 | `app/build.gradle:11,29,31` |
+| 构建产物 ABI | release：`armeabi-v7a`；debug：`armeabi-v7a` + `x86`（`-PemuArm64` 时加 `arm64-v8a`） | `app/build.gradle:42-47,111-116` |
+| 应用包名 | `com.RobinNotBad.BiliClient.re`（debug 再加 `.test`） | `app/build.gradle` |
+| 依赖仓库 | 本地：阿里云镜像优先；CI（`GITHUB_ACTIONS=true`）：直连 google/mavenCentral/jitpack，**跳过镜像** | `settings.gradle:3-27` |
+
+> 镜像分支是踩坑后的既有设计（v1.3.3 的 tag CI 因阿里云镜像 502 整条构建失败），**不要删除或"统一"**。
+
+## 2. 首次配置
+
+1. 安装 JDK 17、Android SDK（`platforms;android-33` + `build-tools`）。
+2. 在仓库根目录创建 `local.properties`（已被 `.gitignore` 忽略）：
+
+```properties
+# 只放 SDK 路径；签名/凭据见下
+sdk.dir=/path/to/Android/sdk
+```
+
+3. 签名相关（仅构建 release 时需要，**不要提交**）：
+
+```properties
+KEY_PATH=/path/to/your.jks      # 必须是纯 ASCII 路径
+KEY_PASSWORD=******
+ALIAS_NAME=******
+ALIAS_PASSWORD=******
+```
+
+缺 `KEY_PATH` 时 release 会静默产出 `app-release-unsigned.apk`（`app/build.gradle:71-102` 的条件挂载）。`KEY_PATH` 含中文会因 `Properties.load()` 按 ISO-8859-1 解析而报 `keystore file not found`。
+
+4. 可选凭据（同样只走 `local.properties` 或 CI secrets）：`BGM_PROXY_AUTH`（Bangumi 反代 Basic 头）、`DANDAN_APP_ID`/`DANDAN_APP_SECRET`（弹弹play 弹幕）。缺失只降级，不影响其他功能。
+
+## 3. 本地构建（x86_64 / CI 正常路径）
+
+```bash
+./gradlew :app:assembleDebug     # 调试包
+./gradlew :app:assembleRelease   # 正式包（需签名配置；本地结果不等价于 CI）
+```
+
+产物：`app/build/outputs/apk/{debug,release}/*.apk`。
+
+## 4. ARM64 Linux / PRoot 专节（本机现状）
+
+本机（OnePlus 13 上的 Ubuntu 24.04 ARM64 PRoot）实测：JDK 17 与 Gradle 8.14.3 可用，但 **AGP 从 Maven 取回的 `aapt2` 是 x86_64 二进制，无法执行**（无 binfmt，不装 qemu）。Debug 构建需要指向系统 arm64 的 aapt2：
+
+```bash
+./gradlew :app:assembleDebug \
+  -Pandroid.aapt2FromMavenOverride=/usr/lib/android-sdk/build-tools/debian/aapt2
+```
+
+- 该参数**只为本机环境服务**，CI/官方 x86_64 环境**不需要**，也不要把它写进 Gradle 默认配置。
+- 本机可做：Debug 编译（冷启动约 2 分 19 秒 / 增量约 29 秒）、`aapt2 dump badging/resources` 校验产物。
+- 本机不可做：`assembleRelease`（R8 + `shrinkResources` 需要官方 aapt2 语义）、签名与发布（无 keystore、无 gh）、仪器化测试（无设备）、`adb`/`logcat`（SDK 内 adb 为 x86_64）。
+- 结论：**Release 与发布链只在 GitHub Actions 验证**（见 `.github/workflows/ci.yml`）。
+
+## 5. CI 环境事实
+
+- `ubuntu-latest` + `actions/setup-java@v4`（temurin 17）；Android SDK 依赖 runner 预装，工作流里用 `sdk.dir=$ANDROID_HOME`（`ci.yml:55`），没有显式 `setup-android`。
+- tag（`v*`）构建时在 runner 上现场生成 `local.properties`（含 `sdk.dir`、keystore、3 组凭据），并用 `sed` 脱敏后打印（`ci.yml:43-83`）。
+- 真实运行记录/耗时/失败史：本机无 gh、无 GitHub 登录，**未核实**（核实方法：网页 Actions，或登录后 `gh run list`）。
+
+## 6. 常见问题
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `aapt2` 报格式错误/无法执行 | 架构不匹配（ARM64 + x86_64 aapt2） | 用 §4 的 override 参数 |
+| `keystore file not found` | `KEY_PATH` 含非 ASCII 或路径错 | 用纯 ASCII 绝对路径 |
+| release 包文件名带 `unsigned` | `local.properties` 缺 `KEY_PATH` | 补签名配置，或确认是否需要未签名包 |
+| CI 依赖解析 502 | 阿里云镜像在境外 runner 不可靠 | 不要删 `settings.gradle` 的 `GITHUB_ACTIONS` 分支 |
+| `SDK location not found` | 缺 `local.properties` 的 `sdk.dir` | 补上（CI 由 workflow 生成） |
+| 依赖下载慢 | 本地镜像已优先阿里云；首轮仍需完整下载 | 保留 `~/.gradle` 缓存；不要反复 `clean` |
+
+## 7. 安全注意
+
+- `local.properties`、`*.jks`、`*.keystore`、`*.p12` 已在 `.gitignore`；**签名口令与凭据不得写进任何文档或源码**。
+- 仓库历史曾出现明文签名口令（已从当前工作区文档移除，**仍需轮换密钥**才能真正失效）；新增文档/日志前先确认不含凭据。
+- CI 的 secret 只在 tag 分支使用；debug 构建先于凭据写入（`ci.yml:40-43`），不要打乱顺序。
