@@ -263,16 +263,19 @@ public class OpusApi {
     }
 
     public static OpusParagraph[] analyzeParagraphs(JSONArray jsonArray) throws JSONException {
-        OpusParagraph[] paragraphs = new OpusParagraph[jsonArray.length()];
+        ArrayList<OpusParagraph> paragraphs = new ArrayList<>(jsonArray.length());
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject paragraphJson = jsonArray.getJSONObject(i);
             OpusParagraph paragraph = new OpusParagraph(paragraphJson);
-            paragraphs[i] = paragraph;
+            //content 为 null 表示"这个段落没有任何可显示的内容"（数据缺失的卡片、未知类型），
+            //直接跳过而不是留一个空白占位——渲染层也就不会为它分配高度
+            if (paragraph.content == null) continue;
+            paragraphs.add(paragraph);
             //链接 span 的 4 个正则在这里（后台线程）算一次并缓存进段落，
             //避免每段落每次绑定都在主线程重算（原来 OpusContentAdapter 每次 bind 都跑 setLink）
             paragraph.linkedContent();
         }
-        return paragraphs;
+        return paragraphs.toArray(new OpusParagraph[0]);
     }
 
     /**

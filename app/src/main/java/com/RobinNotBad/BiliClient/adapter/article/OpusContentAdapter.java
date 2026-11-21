@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.model.Opus;
 import com.RobinNotBad.BiliClient.model.OpusParagraph;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
+import com.RobinNotBad.BiliClient.util.LinkUrlUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
@@ -74,6 +75,9 @@ public class OpusContentAdapter extends RecyclerView.Adapter<OpusContentAdapter.
                 break;
             case OpusParagraph.TYPE_ARTICLE:
                 view = LayoutInflater.from(this.context).inflate(R.layout.cell_article_list, parent, false);
+                break;
+            case OpusParagraph.TYPE_LINK_CARD:
+                view = LayoutInflater.from(this.context).inflate(R.layout.cell_opus_link_card, parent, false);
                 break;
             case OpusParagraph.TYPE_VIDEO:
                 view = LayoutInflater.from(this.context).inflate(R.layout.cell_dynamic_video, parent, false);
@@ -337,6 +341,10 @@ public class OpusContentAdapter extends RecyclerView.Adapter<OpusContentAdapter.
                 }
                 break;
 
+            case OpusParagraph.TYPE_LINK_CARD:
+                bindLinkCard(holder, realPosition);
+                break;
+
             case OpusParagraph.TYPE_VIDEO:
 
                 break;
@@ -367,6 +375,52 @@ public class OpusContentAdapter extends RecyclerView.Adapter<OpusContentAdapter.
                     }
                 }
                 break;
+        }
+    }
+
+    /**
+     * 绑定链接卡片段（{@code para_type=6}）。
+     *
+     * <p>每次绑定都必须重设点击监听：holder 是复用的，上一张卡片挂上的 OnClickListener
+     * 会留到下一张失效卡片（无可跳转地址）上，点一下就跳去了上一条链接。
+     */
+    private void bindLinkCard(ArticleLineHolder holder, int realPosition) {
+        if (realPosition < 0 || realPosition >= paragraphs.length) return;
+        if (!(paragraphs[realPosition].content instanceof OpusParagraph.LinkCard)) return;
+
+        OpusParagraph.LinkCard card = (OpusParagraph.LinkCard) paragraphs[realPosition].content;
+
+        ImageView cover = holder.itemView.findViewById(R.id.cardCover);
+        TextView title = holder.itemView.findViewById(R.id.cardTitle);
+        TextView desc = holder.itemView.findViewById(R.id.cardDesc);
+
+        title.setText(card.title);
+
+        if (card.desc.isEmpty()) {
+            desc.setVisibility(View.GONE);
+        } else {
+            desc.setVisibility(View.VISIBLE);
+            desc.setText(card.desc);
+        }
+
+        String coverUrl = GlideUtil.url(card.cover);
+        if (coverUrl.isEmpty()) {
+            //失效卡片（ITEM_NULL）没有封面：收掉图片，文字顶到左边
+            cover.setVisibility(View.GONE);
+        } else {
+            cover.setVisibility(View.VISIBLE);
+            Glide.with(BiliTerminal.context).asDrawable().load(coverUrl)
+                    .placeholder(R.mipmap.placeholder)
+                    .transition(GlideUtil.getTransitionOptions())
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .into(cover);
+        }
+
+        if (card.clickable()) {
+            holder.itemView.setOnClickListener(view -> LinkUrlUtil.handleWebURL(context, card.jumpUrl));
+        } else {
+            holder.itemView.setOnClickListener(null);
+            holder.itemView.setClickable(false);
         }
     }
 
