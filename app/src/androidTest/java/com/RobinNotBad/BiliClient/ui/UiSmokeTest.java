@@ -88,6 +88,13 @@ public class UiSmokeTest {
                 "search", "message", "dynamic", "dynamic_info", "article"}) {
             edit.putInt("tutorial_ver_" + tag, 999);
         }
+        try {
+            // 首次进入菜单会因 last_version 为空自动打开 UpdateLogActivity，盖住菜单页。
+            String versionName = context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0).versionName;
+            edit.putString("last_version", versionName);
+        } catch (Exception ignored) {
+        }
         edit.commit();
 
         shotDir = new File(context.getExternalFilesDir(null), "ui-shots");

@@ -86,6 +86,8 @@ cat > "$REPORT/prefs.xml" <<XML
     <boolean name="usage_stats_enable" value="false" />
     <boolean name="player_ui_round" value="$ROUND_BOOL" />
     <float name="dpi" value="1.0" />
+    <!-- 避免首次菜单自动打开 UpdateLogActivity -->
+    <string name="last_version">1.3.9</string>
     <!-- 教程是独立 TutorialActivity；不预置已读会盖住目标页，导致后续 UI 测试误判 -->
     <int name="tutorial_ver_recommend" value="999" />
     <int name="tutorial_ver_video" value="999" />
