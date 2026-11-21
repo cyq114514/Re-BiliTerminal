@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 进度条拖柄：14dp 白色圆点，替代原先带“电视机”图形的 player_tv_white/blue 选择器 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/textwhite" />
+    <size
+        android:width="14dp"
+        android:height="14dp" />
+</shape>

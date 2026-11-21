@@ -57,8 +57,8 @@
     <string name="crash_notice_title">崩溃上报说明</string>
     <string name="crash_notice_message_on">为了定位闪退与统计活跃设备数，本版本起默认开启崩溃上报与活跃设备统计。\n\n【会收集】崩溃堆栈、机型、系统版本、应用版本、随机生成的安装标识、崩溃时所在页面；活跃设备统计每天最多一条（安装标识+版本+机型）。\n【不会收集】账号、Cookie、浏览记录、搜索记录。\n\n每次崩溃还会在本机 Download/ReBiliDiag 留一份记录（该目录不可写时回落到 Android/media）。\n\n不想上报？点下方「关闭上报」，或随时到 设置 → 偏好设置 关闭「崩溃上报」与「活跃设备统计」。</string>
     <string name="crash_notice_message_off">你此前关闭过崩溃上报，本次更新不会自动为你打开。\n\n崩溃上报会收集：崩溃堆栈、机型、系统版本、应用版本、随机安装标识、崩溃时所在页面；不包含账号、Cookie、浏览与搜索记录。\n\n如需开启，请到 设置 → 偏好设置 → 崩溃上报 打开。</string>
-    <string name="crash_notice_ok">我知道了</string>
-    <string name="crash_notice_disable">关闭上报</string>
+    <string name="crash_notice_ok">知道了</string>
+    <string name="crash_notice_disable">关闭</string>
     <string name="desc_crash_report">默认开启。崩溃时会把崩溃堆栈与机型信息发送到开发者自建的收集服务，用于定位闪退问题。\n无论开关是否开启，崩溃时都会在本机留一份记录（Download/ReBiliDiag）。\n上报内容不包含账号、Cookie、浏览与搜索记录。关闭后不再联网上报，改动立即生效。</string>
 
 
@@ -268,7 +268,7 @@
     <string name="use_tip">如果你在部分页面出现了无法加载的问题（如推荐列表等），请尝试退出登录后重新登录。</string>
     <string name="update_tip">此版本为 Re：哔哩终端，属非官方分支，使用过程中出现的问题请勿在官方群聊反馈。</string>
 
-    <string name="tutorial_pager">提示\n\n←这个页面可以左右翻页喵→\n\n（共有%d页，滑动一下不再显示）</string>
+    <string name="tutorial_pager">提示\n\n←这个页面可以左右翻页喵→\n\n（共有%d页，点击任意位置关闭）</string>
     <string name="btn_confirm_settings">确认设置</string>
     <string name="btn_preview">查看预览</string>
     <string name="btn_login_copy">复制</string>

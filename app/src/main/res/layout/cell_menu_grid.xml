@@ -8,8 +8,8 @@
     android:gravity="center_horizontal"
     android:orientation="vertical"
     android:paddingHorizontal="6dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="4dp">
+    android:paddingTop="3dp"
+    android:paddingBottom="2dp">
 
     <FrameLayout
         android:layout_width="wrap_content"
@@ -17,10 +17,10 @@
 
         <ImageView
             android:id="@+id/menu_icon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:background="@drawable/background_menu_button"
-            android:padding="11dp" />
+            android:padding="9dp" />
 
         <TextView
             android:id="@+id/menu_badge"
@@ -42,9 +42,9 @@
         android:id="@+id/menu_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/menu_button_label_spacing"
+        android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:gravity="center"
         android:singleLine="true"
-        android:textSize="11sp" />
+        android:textSize="10sp" />
 </LinearLayout>

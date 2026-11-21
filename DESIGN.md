@@ -39,6 +39,15 @@
 
 - **与视频卡片同一套 token**：`background_menu_button`（cell_menu_grid 的圆形图标底）用 `card_bg_new` 半透明灰底 + `card_border_new` 0.5dp 描边，与选集卡片、顶栏刷新胶囊统一。**Why:** 用户 2026-11-07 先反馈灰底渐变描边「灰蒙蒙」，白描边方案后最终定稿为视频卡片统一 token——圆形/方形只是形状差异，卡片语言只有一套。
 
+## 播放器控制层（2026-11-21 视觉换肤）
+
+- **顶/底是 10dp 发丝描边卡片，但底色用 `@color/player_chrome_bg`（#B31C1C1C），不是 30% 卡片灰**：视频画面亮度不可控，`card_bg_new`/`card_bg_nested` 压到亮画面上会把白字变成低对比度。**Why:** 亮色视频帧实测白字读不清；结构、圆角、描边仍是卡片 token，只调整底的不透明度。
+- **播放键 = 38dp 主题强调色实心圆 + 深色 glyph**（`player_icon_play/pause`，不再自带旧灰圆环）；进度条/滑块 tint 也走 `ThemeManager.getPrimary()`。
+- **开关态图标统一走 `setPlayerToggleIcon()`**：开启=主题强调色，关闭=`textwhite` + alpha 0.5。旧资源里写死的 B 站蓝不再直接出现在界面上。
+- **浮层面板用 `dialog_bg`**（与 AdaptiveDialog 同款）+ 10dp + 0.5dp；选项 chip 用 `radius_chip` 14dp，选中强调色实心 + 白字，未选中 `player_chrome_bg`。选择器 item 用 TextView 版 `cell_player_chip`，不要换回 MaterialButton——`Theme.NoSwipe` 不是 MaterialComponents 后代。
+- **圆屏（`player_ui_round`）不铺顶/底卡片**：圆边缘弦宽放不下；顶栏退回浮动文字 + 1px 阴影，底排上移并加宽侧边距、右列缩到 26dp。**Why:** 384 圆屏实测 5 键底排的外两键会掉出可视圆。
+- **不改按钮顺序、id、Click 与显隐逻辑**；视觉集中在 `PlayerActivity.applyPlayerVisualTheme()` 与 `setPlayerToggleIcon()`，浮层用 shape drawable，避免在 NoSwipe 主题下引入 Material 容器。
+
 ## 通用清单
 
 - 图标只用一套风格（项目现有 `icon_*.xml` 为 filled vector），正文/按钮里不用 emoji，不手画复杂 vector 路径。

@@ -21,6 +21,10 @@
         暗底上就是卡片四周的一圈脏黑边）。
     -->
     <color name="card_bg_new">#4D262626</color>
+    <!-- 播放器控制层/胶囊：压在视频画面上的卡片底。
+         全站卡片 30% 灰只在纯黑背景上成立；视频画面亮度不可控，30% 会把白字
+         压成低对比度。这里用 70% 深色，描边/圆角/结构仍走卡片 token。 -->
+    <color name="player_chrome_bg">#B31C1C1C</color>
     <!--输入框 hint 统一色：此前 #80ffffff 在 4 个布局里各写各的，无 token-->
     <color name="text_hint">#80ffffff</color>
     <color name="card_border_new">#363636</color>

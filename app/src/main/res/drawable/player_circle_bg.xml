@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    播放器右侧/圆屏底部的圆形按钮底。
+    与全站 background_menu_button 同一形状语言，但底换成 player_chrome_bg：
+    background_menu_button 的 30% 灰压在亮视频上会变成中灰，白图标同样读不清。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/player_chrome_bg" />
+            <stroke
+                android:width="@dimen/card_stroke_new"
+                android:color="@color/card_border_new" />
+        </shape>
+    </item>
+</layer-list>

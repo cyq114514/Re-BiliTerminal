@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    播放器胶囊底：左侧 -10s/倍速/+10s、字幕条、音量提示、未选中的选择器 chip 共用。
+    圆角走 chip 档（radius_chip 14dp），底用 player_chrome_bg：胶囊既压在视频上，
+    也会出现在不透明面板里，70% 深色在两种背景下都能把白字托住。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/player_chrome_bg" />
+    <stroke
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/radius_chip" />
+</shape>

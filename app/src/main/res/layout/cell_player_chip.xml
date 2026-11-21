@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    播放器选择器 chip：与全站筛选胶囊同一套语言（14dp 圆角、灰底 + 0.5dp 描边、12sp）。
+    用 TextView 而不是 MaterialButton：PlayerActivity 是 Theme.NoSwipe（非 MaterialComponents），
+    Material 组件在部分 API 上会直接拒绝 inflate（同 activity_player.xml 里 MaterialCardView 的坑）。
+-->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/chip_text"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="3dp"
+    android:layout_marginVertical="2dp"
+    android:background="@drawable/player_pill_bg"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center"
+    android:minWidth="40dp"
+    android:minHeight="32dp"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="6dp"
+    android:textColor="@color/textwhite"
+    android:textSize="12sp" />

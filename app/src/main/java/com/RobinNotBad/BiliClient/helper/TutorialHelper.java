@@ -230,6 +230,12 @@ public class TutorialHelper {
                 Log.d("debug-tutorial", pagename);
                 textView.setVisibility(View.VISIBLE);
                 textView.setText(activity.getString(R.string.tutorial_pager, pagecount));
+                //只靠"翻页时隐藏"在视频详情页不可靠：左右滑动会被封面的手势吞掉（圆屏实测两次滑动
+                //都没退出教程）。点一下整层遮罩直接关闭，给一个不依赖 ViewPager 的退出口。
+                textView.setOnClickListener(v -> {
+                    textView.setVisibility(View.GONE);
+                    SharedPreferencesUtil.putBoolean("tutorial_pager_" + pagename, false);
+                });
 
                 View viewPager = activity.findViewById(R.id.viewPager);
                 if (viewPager instanceof ViewPager) {

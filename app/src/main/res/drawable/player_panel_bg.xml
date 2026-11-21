@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    播放器浮层面板底（字幕/弹幕发送/选P/清晰度/视频分段/倍速/调音）。
+    与 AdaptiveDialog 的 dialog_bg 同款：不透明深灰 + 0.5dp 发丝描边 + 10dp 圆角。
+    不透明是必要的：面板压在视频画面之上，半透明会让长文本失去可读性。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/dialog_bg" />
+    <stroke
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
+</shape>

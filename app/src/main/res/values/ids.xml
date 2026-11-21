@@ -5,4 +5,6 @@
     <item name="tag_child_rpid" type="id" />
     <!-- 子评论行 → 正在播放的高亮动画，复用时先取消，避免动画改到别人的背景 -->
     <item name="tag_color_anim" type="id" />
+    <!-- 顶栏动作被圆屏「更多」收纳时打的标记：区分"页面自己 GONE"和"我们收走了" -->
+    <item name="round_overflow_hidden" type="id" />
 </resources>

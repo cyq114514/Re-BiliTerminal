@@ -4,17 +4,15 @@ import android.annotation.SuppressLint;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
-import androidx.appcompat.content.res.AppCompatResources;
-import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.model.SubtitleLink;
+import com.RobinNotBad.BiliClient.ui.widget.PlayerChipStyle;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder> {
@@ -48,7 +46,7 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_subtitle, parent, false);
+        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_player_chip, parent, false);
         ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
@@ -71,27 +69,19 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
     public class Holder extends RecyclerView.ViewHolder {
 
         private OnItemClickListener listener;
-        private final Button button;
+        private final TextView chip;
 
         public Holder(View view) {
             super(view);
-            button = itemView.findViewById(R.id.btn);
+            chip = itemView.findViewById(R.id.chip_text);
         }
 
         void bind(int currentIndex, boolean isSelected) {
             if (currentIndex < 0 || list == null || currentIndex >= list.length)
                 return;
-            button.setText(list[currentIndex].lang);
-            if (isSelected) {
-                button.setTextColor(0xcc262626);
-                ViewCompat.setBackgroundTintList(button, AppCompatResources.getColorStateList(itemView.getContext(),
-                        R.color.background_button_selected));
-            } else {
-                button.setTextColor(ContextCompat.getColor(button.getContext(), R.color.textwhite));
-                ViewCompat.setBackgroundTintList(button,
-                        AppCompatResources.getColorStateList(itemView.getContext(), R.color.background_button));
-            }
-            button.setOnClickListener(v -> {
+            chip.setText(list[currentIndex].lang);
+            PlayerChipStyle.apply(chip, isSelected);
+            chip.setOnClickListener(v -> {
                 setSelectedItemIndex(currentIndex);
                 if (listener != null) {
                     listener.onItemClick(currentIndex);

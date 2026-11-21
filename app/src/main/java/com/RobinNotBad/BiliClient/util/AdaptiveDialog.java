@@ -77,6 +77,7 @@ public final class AdaptiveDialog {
         private CharSequence message;
         private boolean cancelable = true;
         private String[] items;
+        private boolean plainItems;
         private int checkedIndex = -1;
         private DialogInterface.OnClickListener itemPickListener;
         private DialogInterface.OnDismissListener dismissListener;
@@ -150,6 +151,22 @@ public final class AdaptiveDialog {
             this.items = items;
             this.checkedIndex = checkedIndex;
             this.itemPickListener = listener;
+            this.plainItems = false;
+            return this;
+        }
+
+        /**
+         * 普通动作列表：没有单选圆点，点一条执行一条。
+         *
+         * <p>圆屏顶栏的「更多」动作数是 1~3 个，用按钮横排会因卡片变窄把两个汉字挤成两行；
+         * 用列表行呈现既清楚又不怕条目多。
+         */
+        public Builder setItems(@Nullable String[] items,
+                                @Nullable DialogInterface.OnClickListener listener) {
+            this.items = items;
+            this.checkedIndex = -1;
+            this.itemPickListener = listener;
+            this.plainItems = true;
             return this;
         }
 
@@ -242,7 +259,7 @@ public final class AdaptiveDialog {
             listView.setVisibility(listMode ? View.VISIBLE : View.GONE);
             if (listMode) {
                 listView.setLayoutManager(new LinearLayoutManager(context));
-                listView.setAdapter(new ChoiceAdapter(items, checkedIndex, (position, adapter) -> {
+                listView.setAdapter(new ChoiceAdapter(items, checkedIndex, !plainItems, (position, adapter) -> {
                     checkedIndex = position;
                     //只刷新旧两行：整表 notifyDataSetChanged 在番剧上百集时会把所有可见行重绑一遍，
                     //低端机/手表上点选会有明显顿挫感
@@ -261,6 +278,10 @@ public final class AdaptiveDialog {
                 return;
             }
             buttonBar.setVisibility(View.VISIBLE);
+            //圆屏上按钮宽度只剩 ~107px：13sp+8dp 内边距会把「关闭上报」折成两行。
+            //不做竖排（竖排按钮会吃掉正文高度，崩溃说明只剩 1px）；改小字号/内边距，
+            //让四个汉字在一行内放下，正文区域保持原样。
+            boolean roundScreen = SharedPreferencesUtil.getBoolean("player_ui_round", false);
             //按 neutral(2) → negative(3) → positive(4) 排序，和系统弹窗一致的视觉顺序
             Collections.sort(buttons, (a, b) -> Integer.compare(a.order, b.order));
 
@@ -271,6 +292,11 @@ public final class AdaptiveDialog {
                 //弹窗不在 Activity 的内容树里，强调色按钮需要单独应用一次
                 ThemeApplier.apply(button);
                 button.setText(spec.text);
+                if (roundScreen) {
+                    button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11);
+                    int pad = dp(3);
+                    button.setPadding(pad, 0, pad, 0);
+                }
                 //高度写死：MaterialButton 的 wrap_content 会被 TextButton 样式的 inset 与
                 //padding 叠加压扁，界面放大后文字只剩中间一条（实测 dpi 1.6 时可复现）
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -306,19 +332,36 @@ public final class AdaptiveDialog {
 
             DisplayMetrics metrics = new DisplayMetrics();
             wm.getDefaultDisplay().getRealMetrics(metrics);
-            //圆屏（适配审计 20261107 P2-19）：86% 高的矩形四角必然落出圆弧，
-            //重点是让标题/正文/按钮避开裁切区。开启圆屏适配时窗口收窄到 84%，
-            //同时卡片在窗口内四边再让出安全边距（水平 4% 屏宽、垂直 3% 屏高）；
-            //窗口背景是透明的，多让出的部分不产生视觉痕迹
+            //圆屏：窗口本身是透明背景，真正可见的是 root 里让出 padH/padV 之后的卡片。
+            //84%×86% 的窗口对应 322×330 卡片，四角在 384 圆上必然出圆；改成收窄到 72%，
+            //高度按内接圆反算（卡片四角刚好落在圆内），超高内容继续走内部滚动。
             boolean roundScreen = SharedPreferencesUtil.getBoolean("player_ui_round", false);
+            int padH = 0, padV = 0;
             if (roundScreen) {
-                int padH = (int) (metrics.widthPixels * 0.04);
-                int padV = (int) (metrics.heightPixels * 0.03);
+                padH = (int) (metrics.widthPixels * 0.04);
+                padV = (int) (metrics.heightPixels * 0.03);
                 root.setPadding(padH, padV, padH, padV);
+                //圆屏卡片只有 262px 宽：默认 16dp 内边距把按钮区压到 ~83px/个，
+                //四个汉字在 13sp/11sp 下都会折行。卡片内容左右收到 8dp，按钮区回到 ~107px，
+                //「关闭上报/开始下载」这类四字标签能一行放下；标题/正文同时更宽。
+                View card = root.findViewById(R.id.dialog_card);
+                if (card instanceof ViewGroup && ((ViewGroup) card).getChildCount() > 0) {
+                    View inner = ((ViewGroup) card).getChildAt(0);
+                    int innerPadH = dp(8);
+                    inner.setPadding(innerPadH, inner.getPaddingTop(),
+                            innerPadH, inner.getPaddingBottom());
+                }
             }
-            float widthRatio = roundScreen ? 0.84f : WIDTH_RATIO;
+            float widthRatio = roundScreen ? 0.76f : WIDTH_RATIO;
             int maxWidth = (int) (metrics.widthPixels * widthRatio);
             int maxHeight = (int) (metrics.heightPixels * HEIGHT_RATIO);
+            if (roundScreen) {
+                int r = Math.min(metrics.widthPixels, metrics.heightPixels) / 2;
+                int cardW = Math.max(1, maxWidth - padH * 2);
+                double safeHalf = Math.sqrt(Math.max(0d, (double) r * r - (double) (cardW / 2) * (cardW / 2)));
+                int circleMax = (int) (2 * (safeHalf + padV)) - dp(2);
+                maxHeight = Math.min(maxHeight, circleMax);
+            }
             if (maxWidth <= 0 || maxHeight <= 0) return;
 
             boolean listMode = items != null && items.length > 0;
@@ -389,12 +432,14 @@ public final class AdaptiveDialog {
     private static final class ChoiceAdapter extends RecyclerView.Adapter<ChoiceAdapter.Holder> {
 
         private final String[] items;
+        private final boolean showRadio;
         private final AdapterPick pick;
         private int checked;
 
-        ChoiceAdapter(String[] items, int checked, AdapterPick pick) {
+        ChoiceAdapter(String[] items, int checked, boolean showRadio, AdapterPick pick) {
             this.items = items;
             this.checked = checked;
+            this.showRadio = showRadio;
             this.pick = pick;
         }
 
@@ -409,6 +454,7 @@ public final class AdaptiveDialog {
         @Override
         public void onBindViewHolder(@NonNull Holder holder, int position) {
             holder.text.setText(items[position]);
+            holder.radio.setVisibility(showRadio ? View.VISIBLE : View.GONE);
             holder.radio.setChecked(position == checked);
             holder.itemView.setOnClickListener(v -> {
                 int pos = holder.getAdapterPosition();

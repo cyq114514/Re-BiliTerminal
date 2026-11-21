@@ -1,49 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  提示框页（免责声明、更新说明等）。
+  外层必须是「标题 + 可滚动正文 + 固定按钮」的竖排结构：旧版把按钮放在长文末尾，
+  圆表首屏只看到半截正文，按钮在滚动到底之前根本看不到，用户被卡在首屏。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/activity_padding_horizontal"
     tools:context=".activity.DialogActivity">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/tip_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="@dimen/activity_padding_horizontal"
-        android:orientation="vertical">
+        android:layout_marginTop="6dp"
+        android:gravity="center"
+        android:text="@string/pagename_dialog"
+        android:textSize="17sp" />
 
-        <TextView
-            android:id="@+id/tip_title"
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:id="@+id/dialog_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:text="@string/pagename_dialog"
-            android:textSize="17sp" />
+            android:orientation="vertical">
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"
-            android:layout_marginTop="5dp"
-            android:alpha="0.7"
-            android:padding="8dp">
-
-            <TextView
-                android:layout_height="wrap_content"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:gravity="center"
-                android:alpha="0.9"
-                android:textSize="14sp"
-                android:id="@+id/content"
-                android:layout_margin="6dp"
-                android:text="内容" />
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:alpha="0.7"
+                android:padding="8dp">
 
-        </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:id="@+id/content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="6dp"
+                    android:alpha="0.9"
+                    android:gravity="center"
+                    android:text="内容"
+                    android:textSize="14sp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/close_btn"
-            android:text="知道了"
-            android:layout_marginTop="5dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-</com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/close_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="4dp"
+        android:text="知道了" />
+</LinearLayout>
