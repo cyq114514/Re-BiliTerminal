@@ -38,7 +38,7 @@ if [ -d "$TEST_DIR" ]; then
         no "测试文件只有 $test_count 个：核心业务覆盖可能不完整（预期 ≥10）"
     fi
 else
-    bad "缺少 $TEST_DIR（JVM 单元测试目录）"
+    bad "缺少 ${TEST_DIR}（JVM 单元测试目录）"
 fi
 
 if grep -qE "^[[:space:]]*testImplementation[[:space:]]+'junit:junit" app/build.gradle 2>/dev/null; then
@@ -67,7 +67,7 @@ if [ -f "$AUDIO_SERVICE" ]; then
         ok "AudioPlayerService 未请求 Audio Focus（与视频并行播放的设计保持不变）"
     fi
 else
-    bad "缺少 $AUDIO_SERVICE（无法校验音频焦点设计约束）"
+    bad "缺少 ${AUDIO_SERVICE}（无法校验音频焦点设计约束）"
 fi
 
 # 3. 测试不得依赖真实线上服务/凭据

@@ -42,7 +42,7 @@ if command -v java >/dev/null 2>&1; then
         1) java_major=$(printf '%s' "$java_ver" | cut -d. -f2) ;;
     esac
     if [ -n "${java_major:-}" ] && [ "$java_major" -ge 17 ] 2>/dev/null; then
-        ok "JDK: $java_ver（要求 17+）"
+        ok "JDK: ${java_ver}（要求 17+）"
     else
         bad "JDK: $java_ver 低于 17（构建需要 JDK 17）"
     fi
@@ -90,7 +90,7 @@ if [ -n "$aapt2" ]; then
     if [ "$aapt2_arch" = "x86_64" ] && [ "$host_machine" = "aarch64" ]; then
         no "aapt2 是 x86_64，当前主机是 aarch64：Debug 构建需加 -Pandroid.aapt2FromMavenOverride=<arm64 aapt2>（见 docs/development/environment.md §4）"
     else
-        ok "aapt2: $aapt2（$aapt2_arch，主机 $host_machine）"
+        ok "aapt2: ${aapt2}（${aapt2_arch}，主机 ${host_machine}）"
     fi
 else
     info "未找到 aapt2（x86_64 环境由 Gradle 自带，可忽略）"

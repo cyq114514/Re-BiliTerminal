@@ -368,7 +368,7 @@ jobs:
           AAPT2=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)
           APK_CODE=$("$AAPT2" dump badging "$APK" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
           EXPECTED_CODE=$(grep -m1 -E '^[[:space:]]*versionCode[[:space:]]' app/build.gradle | grep -oE '[0-9]+' | head -1)
-          echo "APK versionCode=$APK_CODE，build.gradle=$EXPECTED_CODE"
+          echo "APK versionCode=${APK_CODE}，build.gradle=$EXPECTED_CODE"
           [ -n "$APK_CODE" ] && [ "$APK_CODE" = "$EXPECTED_CODE" ] || { echo "::error::APK versionCode 与构建配置不一致"; exit 1; }
 
       # release 独有的资源收缩会把"只被 getIdentifier 动态引用"的资源判成不可达并裁掉

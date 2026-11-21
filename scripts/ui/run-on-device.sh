@@ -23,8 +23,8 @@ trap 'fail_stage "script-${UI_DEVICE_ID:-unknown}"' ERR
 
 APP_APK=$(find "$APK_DIR" -type f -name '*.apk' ! -iname '*androidTest*' 2>/dev/null | head -1 || true)
 TEST_APK=$(find "$APK_DIR" -type f -iname '*androidTest*.apk' 2>/dev/null | head -1 || true)
-[ -n "$APP_APK" ] || { stage "找不到 app APK（$APK_DIR）"; exit 2; }
-[ -n "$TEST_APK" ] || { stage "找不到 androidTest APK（$APK_DIR）"; exit 2; }
+[ -n "$APP_APK" ] || { stage "找不到 app APK（${APK_DIR}）"; exit 2; }
+[ -n "$TEST_APK" ] || { stage "找不到 androidTest APK（${APK_DIR}）"; exit 2; }
 
 stage "wait for adb"
 adb wait-for-device
