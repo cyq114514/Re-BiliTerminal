@@ -104,6 +104,13 @@ for f in "${files[@]}"; do
 
     # 7. 发布产物与更新机制
     if grep -q 'update\.json' "$f"; then ok "包含 update.json 生成/上传逻辑"; else info "未发现 update.json 逻辑"; fi
+    if grep -q 'dump badging' "$f" && grep -qE 'apksigner.*verify|APKSIGNER.*verify' "$f"; then
+        ok "release 签名与 APK versionCode 有硬校验"
+    elif grep -qE 'apksigner.*verify|APKSIGNER.*verify' "$f"; then
+        ok "release 包含 apksigner 签名校验"
+    else
+        info "未发现 release 签名校验（若本 workflow 不发版可忽略）"
+    fi
     if grep -qE 'mipmap/tutorial_' "$f"; then ok "包含 release 资源冒烟（教程插图）"; else info "未发现资源冒烟断言"; fi
     if grep -q 'dump badging' "$f"; then
         ok "versionCode 从已构建 APK 读取（aapt2 dump badging）"
@@ -118,6 +125,28 @@ for f in "${files[@]}"; do
         ok "配置了 paths 过滤"
     else
         info "未配置 paths-ignore（docs-only 变更也会跑全量构建）"
+    fi
+
+    # 9. 发版门禁（P0）：release 必须等全部日常 job，且包含前置校验/签名校验
+    if grep -qE '^  release:' "$f"; then
+        release_block=$(sed -n '/^  release:/,$p' "$f")
+        if printf '%s\n' "$release_block" | grep -qE 'needs:.*\[.*checks.*unit-test.*\]|needs:.*\[.*unit-test.*checks.*\]'; then
+            ok "release 依赖 checks + unit-test（测试失败不发布）"
+        elif printf '%s\n' "$release_block" | grep -q 'scripts/check-release.sh'; then
+            bad "release 未同时依赖 checks + unit-test（测试失败仍可能发布）"
+        else
+            info "release 未使用 P0 门禁脚本（若本 workflow 不发布可忽略）"
+        fi
+        if printf '%s\n' "$release_block" | grep -q 'scripts/check-release.sh'; then
+            ok "release 调用发版前置校验脚本（tag/versionCode/签名）"
+        else
+            bad "release 缺少 scripts/check-release.sh 前置校验"
+        fi
+        if printf '%s\n' "$release_block" | grep -qE 'apksigner.*verify|APKSIGNER.*verify'; then
+            ok "release 构建后校验 APK 签名"
+        else
+            bad "release 缺少 apksigner verify（unsigned 可能静默发布）"
+        fi
     fi
 done
 

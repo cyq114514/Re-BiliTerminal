@@ -14,7 +14,7 @@ tag 推送时同一 workflow 再跑 `release`。它保证了「能编译、能�
 - 编译失败与测试失败的清晰分离；
 - 对「Audio Focus 设计」「第三方源安全上限」这类业务红线的自动回归保护。
 
-本次增量为 `checks` 与 `unit-test` 两个 job，并保持 `build` / `release` 的职责与发布链不变。
+本次增量为 `checks` 与 `unit-test` 两个 job；`build` 不变，`release` 保留原发布动作并新增 P0 门禁。
 
 ## 2. Workflow 结构（`.github/workflows/ci.yml`）
 
@@ -30,10 +30,10 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 | `checks` | 全部触发 | 15m | `check-env.sh`、`check-repo.sh`、`check-links.sh`、`validate-ci.sh`、`check-tests.sh` | 规范/链接/CI 配置/测试不变量被破坏 |
 | `build` | 全部触发 | 30m | `./gradlew :app:assembleDebug --stacktrace` | 编译失败（环境或代码） |
 | `unit-test` | 全部触发 | 25m | `./gradlew :app:testDebugUnitTest --stacktrace`；汇总 XML；上传报告 | 测试失败（真实代码缺陷或测试代码缺陷） |
-| `release` | 仅 `refs/tags/v*` | 45m | 签名注入 → `assembleRelease` → 资源冒烟 → GitHub Release → `update.json` | 发布链失败（与日常门禁独立） |
+| `release` | 仅 `refs/tags/v*` | 45m | 前置校验（tag/versionCode/secrets）→ 签名注入 → `assembleRelease` → 签名+versionCode 校验 → 资源冒烟 → GitHub Release → `update.json` | 发布链失败；测试/规范失败会阻止发布 |
 
 `build` 与 `unit-test` **并行**、互不 `needs`：编译失败与测试失败在 Actions 页面上是两条独立结果，
-不会因为其中一个失败而看不到另一个的真实状态。`release` 仍只 `needs: build`，不因新增测试而改变既有发版路径。
+不会因为其中一个失败而看不到另一个的真实状态。`release` 现为 `needs: [build, checks, unit-test]`：任一日常 job 失败，release 不会执行。
 
 ### 2.1 触发面
 
@@ -116,13 +116,19 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 
 在此之前，涉及 IJKPlayer、Surface、Service 生命周期、真实播放链路的验证仍按 `docs/modules/player.md` 的**真机回归清单**执行，不能用 JVM 测试冒充。
 
-## 5. 发布链（保持不变）
+## 5. 发布链（P0 门禁）
 
 - 只有 tag `v*` 会进入 `release` job；普通 PR/main push 永远拿不到写权限与 secrets。
+- `release` 依赖 `[build, checks, unit-test]`：任一日常 job 失败，发布不执行。
+- 发版前置校验 `scripts/check-release.sh`（任一 FAIL 即中止）：
+  - tag 必须严格等于 `v<versionName>`（历史 `-fix`/`fix` tag 白名单放行，base 版本仍需一致）；
+  - 新 tag 的 `versionCode` 必须大于当前最新 Release；同 tag 补发跳过递增检查；
+  - 签名 4 个 secrets 必须齐全，正式 tag **禁止 unsigned 发布**。
+- 构建后额外硬校验：`apksigner verify` 必须通过，且 APK `versionCode` 与 `build.gradle` 一致。
 - 7 个 secrets（签名 4 键 + `BGM_PROXY_AUTH` + `DANDAN_APP_ID/SECRET`）只在 release job 注入；
   debug/unit-test job 在任何凭据写入之前完成。
 - `versionCode` 优先从已构建 APK 的 `aapt2 dump badging` 读取；Release 资源冒烟（教程插图 ≥6）保留。
-- `update.json` 生成/上传逻辑未改。已知历史风险（未签名包仍写 `update.json`）保持不变，见 `environment.md`。
+- `update.json` 生成/上传逻辑未改；签名缺失不再是“降级发布”，而是直接失败。
 - **不要**在普通测试 job 里执行发布动作，也不要把 release secrets 提升到 workflow 级 `env`。
 
 > 关于 `BuildConfig` 里的静态凭据：`DANDAN_APP_ID`/`DANDAN_APP_SECRET`/`BGM_PROXY_AUTH` 会打进 APK，
@@ -181,6 +187,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 4. **未接入 lint / 覆盖率 / 模拟器**：见 §7 与 `testing.md` §6。
 5. **CI checkout 行尾差异（已修并验证）**：Ubuntu runner 上 `eol=crlf` 文件会显示为 modified；`check-repo.sh` 已过滤「仅 CR/LF 差异」。第二次 CI 日志：`[ OK ] 工作区干净` + `[INFO] 已忽略 6 个仅行尾差异（CI checkout 的 eol=crlf 归一化）`；若再出现 dirty，说明是真实内容改动。
 6. **PR 触发尚未单独实测**：本次是 main push 触发；PR 的同套 job 与 `paths-ignore` 由同一 workflow 定义，等首次 PR 再确认。
+7. **`check-repo` 的 versionCode WARN 仍在**：本地检查仍会提示「HEAD 比 tag 多提交但 versionCode 未递增」；发版 job 现在会硬拦，但本地/PR 阶段仍只是告警。
 
 ### 8.2 真实 CI 失败与修复记录（过程，非最终状态）
 

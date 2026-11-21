@@ -141,7 +141,7 @@ jobs:
     name: 发布（tag）
     # 只有 tag 推送才进入发布链；普通 PR / main push 永远不会拿到写权限与 secrets
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, checks, unit-test]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -160,19 +160,48 @@ jobs:
       - name: 准备 Android SDK（platform 33 / build-tools）
         run: ./scripts/ci-prepare-sdk.sh
 
-      # 新 tag 建议统一为 v<versionName>；历史 -fix/fix1 命名只告警、不阻断发布
-      - name: 校验 tag 与 versionName 一致
+      # P0 发版门禁：tag/versionCode/签名任一不满足就不进入构建，避免错版/未签名发布。
+      # 同 tag 补发跳过 versionCode 递增；历史 -fix/fix1 tag 在 check-release.sh 内白名单放行。
+      - name: 发版前置校验（tag / versionCode / 签名配置）
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          # 只用于「是否存在」判断，脚本不会输出 secret 值
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ALIAS_NAME: ${{ secrets.ALIAS_NAME }}
+          ALIAS_PASSWORD: ${{ secrets.ALIAS_PASSWORD }}
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          GRADLE_VERSION=$(grep -m1 -E '^[[:space:]]*versionName[[:space:]]' app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "tag=$GITHUB_REF_NAME  versionName=$GRADLE_VERSION"
-          if [ "$TAG_VERSION" != "$GRADLE_VERSION" ]; then
-            echo "::warning::tag（$GITHUB_REF_NAME）与 versionName（$GRADLE_VERSION）不一致；新 tag 建议统一为 v<versionName>，发布继续。"
+          set -Eeuo pipefail
+          VERSION_NAME=$(grep -m1 -E '^[[:space:]]*versionName[[:space:]]' app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION_CODE=$(grep -m1 -E '^[[:space:]]*versionCode[[:space:]]' app/build.gradle | grep -oE '[0-9]+' | head -1)
+          PREVIOUS_VERSION_CODE=""
+          # 已存在同 tag 的 Release：视为补发，允许沿用 versionCode；新 tag 必须递增。
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "已存在 $TAG 的 Release，按同 tag 补发处理：跳过 versionCode 递增校验"
+          else
+            LATEST_TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name // empty' 2>/dev/null || true)
+            if [ -n "$LATEST_TAG" ]; then
+              TMPDIR=$(mktemp -d)
+              trap 'rm -rf "$TMPDIR"' EXIT
+              if gh release download "$LATEST_TAG" --pattern update.json --dir "$TMPDIR" --clobber -R "$GITHUB_REPOSITORY" 2>/dev/null; then
+                PREVIOUS_VERSION_CODE=$(jq -r '.versionCode // empty' "$TMPDIR/update.json" 2>/dev/null || true)
+              fi
+              if [ -z "$PREVIOUS_VERSION_CODE" ]; then
+                B64=$(gh api "repos/$GITHUB_REPOSITORY/contents/app/build.gradle?ref=$LATEST_TAG" --jq '.content' 2>/dev/null || true)
+                if [ -n "$B64" ]; then
+                  PREVIOUS_VERSION_CODE=$(printf '%s' "$B64" | base64 -d 2>/dev/null | grep -m1 -E '^[[:space:]]*versionCode[[:space:]]' | grep -oE '[0-9]+' | head -1)
+                fi
+              fi
+              echo "最新 Release $LATEST_TAG 的 versionCode=${PREVIOUS_VERSION_CODE:-未知}"
+            fi
           fi
+          TAG="$TAG" VERSION_NAME="$VERSION_NAME" VERSION_CODE="$VERSION_CODE" \
+            PREVIOUS_VERSION_CODE="$PREVIOUS_VERSION_CODE" ./scripts/check-release.sh
 
       # ===== 以下仅在 tag 发布 job 内执行，secrets 只出现在本 job =====
-      # 三组 secret 各自独立：缺签名密钥 → 出未签名包；缺反代凭据 → Bangumi 只能直连；
-      # 缺弹弹play 凭据 → 第三方番剧没有弹幕（其余功能不受影响）。
+      # 签名 4 键由前置校验强制要求（正式 tag 不允许 unsigned）；缺反代/弹弹play 凭据
+      # 只会让对应功能降级，不阻断发布。
       - name: 写入构建配置（签名 + Bangumi 反代 + 弹弹play 凭据）
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
@@ -183,20 +212,18 @@ jobs:
           DANDAN_APP_ID: ${{ secrets.DANDAN_APP_ID }}
           DANDAN_APP_SECRET: ${{ secrets.DANDAN_APP_SECRET }}
         run: |
+          # 4 键已在「发版前置校验」强制齐全；这里再防御一次，避免任何路径静默 unsigned。
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEY_PASSWORD" ] || [ -z "$ALIAS_NAME" ] || [ -z "$ALIAS_PASSWORD" ]; then
+            echo "::error::签名 secrets 不完整，禁止进入 Release 构建"
+            exit 1
+          fi
           {
             echo "sdk.dir=$ANDROID_HOME"
-            # 签名 4 键"全有或全无"：任一缺失都按未签名处理，避免"看起来签了名其实失败"
-            if [ -n "$KEYSTORE_B64" ] && [ -n "$KEY_PASSWORD" ] && [ -n "$ALIAS_NAME" ] && [ -n "$ALIAS_PASSWORD" ]; then
-              echo "$KEYSTORE_B64" | base64 -d > "$HOME/release.jks"
-              echo "KEY_PATH=$HOME/release.jks"
-              echo "KEY_PASSWORD=$KEY_PASSWORD"
-              echo "ALIAS_NAME=$ALIAS_NAME"
-              echo "ALIAS_PASSWORD=$ALIAS_PASSWORD"
-            else
-              if [ -n "$KEYSTORE_B64" ]; then
-                echo "::warning::签名配置不完整（KEYSTORE_B64 存在但 4 键未齐），本次按未签名构建"
-              fi
-            fi
+            echo "$KEYSTORE_B64" | base64 -d > "$HOME/release.jks"
+            echo "KEY_PATH=$HOME/release.jks"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+            echo "ALIAS_NAME=$ALIAS_NAME"
+            echo "ALIAS_PASSWORD=$ALIAS_PASSWORD"
             # 整行写入（含 "Basic " 前缀）；Base64 只含 A-Za-z0-9+/=，不会被 Properties 解析破坏
             if [ -n "$BGM_PROXY_AUTH" ]; then
               echo "BGM_PROXY_AUTH=$BGM_PROXY_AUTH"
@@ -207,9 +234,6 @@ jobs:
               echo "DANDAN_APP_SECRET=$DANDAN_APP_SECRET"
             fi
           } > local.properties
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "::warning::未配置 KEYSTORE_B64 等 secrets，本次 Release 包不做正式签名"
-          fi
           if [ -z "$BGM_PROXY_AUTH" ]; then
             echo "::warning::未配置 BGM_PROXY_AUTH，包内 Bangumi 接口只能直连 api.bgm.tv（境内大概率不可用）"
           fi
@@ -221,6 +245,18 @@ jobs:
 
       - name: 构建 Release 包
         run: ./gradlew :app:assembleRelease --stacktrace
+
+      # P0：正式包必须真的签名，且 APK versionCode 与构建配置一致（防止签名/版本漂移）
+      - name: 校验 Release 签名与 versionCode
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK"
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)
+          APK_CODE=$("$AAPT2" dump badging "$APK" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+          EXPECTED_CODE=$(grep -m1 -E '^[[:space:]]*versionCode[[:space:]]' app/build.gradle | grep -oE '[0-9]+' | head -1)
+          echo "APK versionCode=$APK_CODE，build.gradle=$EXPECTED_CODE"
+          [ -n "$APK_CODE" ] && [ "$APK_CODE" = "$EXPECTED_CODE" ] || { echo "::error::APK versionCode 与构建配置不一致"; exit 1; }
 
       # release 独有的资源收缩会把"只被 getIdentifier 动态引用"的资源判成不可达并裁掉
       # （历史上裁掉过 6 张教程插图），这里对最终 APK 做一次冒烟断言，防止再无声回归
