@@ -64,9 +64,12 @@ site/
 | **Publish directory** | `site` |
 
 5. 点 **Deploy site**
-6. 等待构建完成（通常 20~40 秒），出现 `Published`
+6. 首次上线需要手动发布一次：仓库里的 `netlify.toml` 会跳过所有自动构建（官网只由 tag
+   发版流程部署），所以请在本地按第 6 节末尾的 `netlify deploy` 命令发布一次，
+   或暂时删掉 `netlify.toml` 再让 Netlify 构建；成功后再按第 6 节完成常驻配置。
 
-> 之后每次 `git push` 到 `main`，Netlify 会自动重新部署，不用手动操作。
+> 注意：**push 到 `main` 不会自动部署官网**。官网只在推 `v*` tag 发版时由 CI 部署，
+> 首次接入需要按第 6 节配置 Netlify 停止自动构建 + GitHub Secrets。
 
 ---
 
@@ -122,15 +125,56 @@ site/
 
 ---
 
-## 6. 日常更新流程
+## 6. 日常更新流程（官网只在发版时更新）
 
-| 方式 | 操作 |
+官网的发布时机是：**普通 commit / PR 不部署，只有推 `v*` tag 发版才部署**。
+
+| 场景 | 会不会更新官网 |
 |---|---|
-| 已连 GitHub | 改完文件 `git push` → Netlify 自动重新部署 |
-| 拖拽部署 | 重新拖一次 `site` 文件夹 → Netlify 保留历史版本，可回滚 |
+| push commit 到 `main` / 合并 PR | 否（Netlify 跳过构建） |
+| push tag `v*` 且 CI 发布成功 | 是（CI 的 `deploy-site` job 用 Netlify CLI 部署） |
+| 本地手动 `netlify deploy --prod` | 是（应急用，见本节末尾） |
 
-**发新版 APK 时官网无需改动**：只要 GitHub Release 里带上新的 `update.json`，
-页面版本号、下载文件名、SHA-256 会自动更新。
+发版时 CI 的顺序是：`release` job 构建签名 APK → 创建/更新 GitHub Release 与 `update.json`
+→ `deploy-site` job 部署 `site/` + `netlify/functions/`。页面版本号来自
+`/api/update.json` 的实时代理，所以 APK 和官网永远是同一版。
+
+### 一次性配置（新站点 / 换账号时做一次）
+
+1. **停止自动构建**（防止 push 就更新线上）：
+   站点 → **Project configuration** → **Developer settings** →
+   **Continuous deployment** → **Build settings** → **Configure** →
+   **Build status** 选 **Stopped builds**。
+   > 停止构建只停「git push / build hook / 后台按钮」触发的构建；
+   > CI 里用 CLI 的手动部署仍然可以正常发布，不受影响。
+   > 仓库里的 `netlify.toml` 还写了 `ignore = "exit 0"` 兜底：即使有人把自动构建重新打开，
+   > 普通 push 也只会得到一个 Skipped，不会更新线上。
+2. **创建访问令牌**：
+   Netlify 右上角头像 → **User settings** → **Applications** →
+   **Personal access tokens** → **New access token**，名字填 `github-actions`，
+   复制生成的值（只显示一次）。
+3. **找到 Site ID**：
+   站点 → **Project configuration** → **Site details**（或 **Site information**）→
+   **Site ID**，复制形如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` 的值。
+4. **加到 GitHub Secrets**：
+   仓库 → **Settings** → **Secrets and variables** → **Actions** →
+   **New repository secret**，新增两条：
+   - `NETLIFY_AUTH_TOKEN` = 第 2 步的令牌
+   - `NETLIFY_SITE_ID` = 第 3 步的 Site ID
+
+配置完推一个 `v*` tag 验证：Actions 里 `官网部署（tag）` job 变绿，Netlify 的
+**Deploys** 列表出现一条 `release vX.Y.Z` 的生产部署。
+
+### 应急：只改官网文案、不想发版
+
+`site/` 的改动（含 `changelog.html`）默认等下一次 tag 才上线。遇到错别字之类要马上改：
+
+```bash
+netlify deploy --prod --dir=site --functions=netlify/functions
+```
+
+> 需要先 `netlify login` 并在仓库根目录 `netlify link` 过站点。这条命令绕过 CI，
+> 线上会立刻更新，但不会产生新的 APK / Release。
 
 ---
 
@@ -138,6 +182,8 @@ site/
 
 | 现象 | 原因 | 解决 |
 |---|---|---|
+| push 了 commit，官网没变化 | 预期行为：官网只在 tag 发版时部署 | 等下次发版；急着改文案用第 6 节的本地 CLI 部署 |
+| Actions 的 `官网部署（tag）` 报缺少 NETLIFY_AUTH_TOKEN | 还没配 GitHub Secrets | 按第 6 节「一次性配置」补齐两条 secret |
 | `/api/update.json` 返回 404 | `_redirects` 没进发布目录，或发布目录填错 | 确认 Publish directory = `site`；确认 `site/_redirects` 存在且无扩展名 |
 | 页面没有样式（纯文字） | 上传的是外层目录，`assets/` 路径对不上 | 重新拖 `site` 文件夹本身 |
 | 打开是 404 页 | Publish directory 填成了 `site/index.html` | 改成 `site` |
