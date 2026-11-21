@@ -51,7 +51,7 @@ public class RecommendApi {
 
     /** 设置项：App 端推荐是否附带客户端签名（appkey/ts/sign）。默认开，出问题可一键关掉回退。 */
     public static final String KEY_APP_RECOMMEND_SIGN = "home_app_recommend_sign";
-    /** 设置项：App 端推荐是否附带 access_key。默认关——未验证对推荐是否有收益，属于账号凭证，需手动开启。 */
+    /** 设置项：App 端推荐是否附带 access_key。默认开——让推荐按登录账号的兴趣走；未登录或凭证为空时自动退回匿名请求。 */
     public static final String KEY_APP_RECOMMEND_ACCESS_KEY = "home_app_recommend_access_key";
     /** 设置项：按 UP 主 mid 屏蔽推荐，分隔符为逗号/空格/换行 */
     public static final String KEY_BLOCK_MIDS = "rcmd_block_mids";
@@ -390,8 +390,8 @@ public class RecommendApi {
      * {@code cover_left_text_1}，时长在 {@code player_args.duration}。
      *
      * <p>签名（appkey/ts/sign）与 access_key 都受设置项控制：
-     * 签名默认开，是"像官方客户端"的一部分；access_key 默认关——它属于账号凭证，
-     * 对推荐是否有收益尚未验证，需要用户自己在设置里打开。
+     * 两者默认都开——签名是"像官方客户端"的一部分；access_key 让推荐按登录账号的兴趣走，
+     * 未登录或取不到凭证时自动退回匿名请求。
      */
     private static int getRecommendApp(List<VideoCard> videoCardList, int page) throws IOException, JSONException {
         //第 1 页（含下拉刷新）必须把游标复位并带 pull=true：否则"刷新"拿到的是更早的下一批，
@@ -402,7 +402,7 @@ public class RecommendApi {
         TreeMap<String, String> params = appRcmdParams(fresh);
         String query;
         if (SharedPreferencesUtil.getBoolean(KEY_APP_RECOMMEND_SIGN, true)) {
-            if (SharedPreferencesUtil.getBoolean(KEY_APP_RECOMMEND_ACCESS_KEY, false)) {
+            if (SharedPreferencesUtil.getBoolean(KEY_APP_RECOMMEND_ACCESS_KEY, true)) {
                 long mid = NetWorkUtil.getLoginMid();
                 String accessKey = mid > 0 ? AppAuthStore.getAccessKey(mid) : "";
                 if (!accessKey.isEmpty()) params.put("access_key", accessKey);
