@@ -141,6 +141,19 @@ android {
     }
 }
 
+// Robolectric 默认在跑测试时用自己的 MavenArtifactFetcher 下载 android-all（约 160MB），
+// 该下载不走 Gradle 仓库配置、无重试，CI 上出现过一次 FileNotFoundException 导致整批测试红。
+// 这里改由 Gradle 解析同一个 artifact（走 settings.gradle 的仓库与缓存），再以本地目录交给
+// Robolectric：不再有测试运行期网络依赖，首次下载也可被 setup-java 的 Gradle 缓存复用。
+def robolectricAndroidAllVersion = '13-robolectric-9030017-i7'
+
+configurations {
+    robolectricJars {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
 dependencies {
     //noinspection GradleDependency
     implementation 'com.google.zxing:core:3.3.0'
@@ -194,5 +207,17 @@ dependencies {
     // 4.18 与 AGP 8.10 / JDK 17 兼容，仅测试使用，不影响 minSdk 19 与 release 体积。
     testImplementation 'org.robolectric:robolectric:4.18'
     testImplementation 'androidx.test:core:1.5.0'
+    robolectricJars "org.robolectric:android-all-instrumented:${robolectricAndroidAllVersion}"
     //崩溃上报已改为自建服务（Supabase REST + OkHttp），不再依赖任何闭源 SDK
+}
+
+
+def robolectricJarDir = layout.buildDirectory.dir('robolectric-jars/preinstrumented')
+def prepareRobolectricJars = tasks.register('prepareRobolectricJars', Copy) {
+    from configurations.robolectricJars
+    into robolectricJarDir
+}
+tasks.withType(Test).configureEach {
+    dependsOn prepareRobolectricJars
+    systemProperty 'robolectric.dependency.dir', robolectricJarDir.get().asFile.absolutePath
 }
