@@ -171,7 +171,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 | Android Emulator 集成测试 | **NOT RUN / NOT ADOPTED** | 见 §4 评估；现有仪器化测试会写线上数据，未接入 |
 | 发版链模拟（临时 tag，已清理） | **PASS** | 临时 tag `v1.3.9-ci-dryrun` @ `b64a17e` 触发 [run 44854878742](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44854878742)：`checks`/`build`/`unit-test`/`release` 全 success。真实 secrets 签名成功（证书 `CN=BiliTerminal`），APK `versionCode=20261120`/`versionName=1.3.9`/`armeabi-v7a`；教程插图 **6/6**；Release 自动创建并上传 `Re-BiliTerminal-v1.3.9-ci-dryrun-release.apk`(7,685,189B) + `update.json`(717B)，`update.json` 的 versionCode/sha256/size/fileName/htmlUrl 与 APK 一致。验证后已删除测试 Release、tag（API 404、本地 tag 已删），**未递增 versionCode、未发正式版本**；该 Actions run 保留作审计 |
 | P0 发版门禁云测（临时 tag，已清理） | **PASS** | 临时 tag `v1.3.10-dryrun` @ `ed22718` 触发 [run 44856939788](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44856939788)：`release` 前置校验日志 `最新 Release v1.3.9 的 versionCode=20261120` → `[OK] versionCode 递增 20261120 -> 20261121`、tag 严格一致；全部 4 个 job success。构建后 `apksigner` 校验真实证书 `CN=BiliTerminal`，`APK versionCode=20261121` 与 build.gradle 一致，教程插图 6/6；Release + `update.json` 字段与 APK sha256/size 一致（`versionCode=20261121`）。验证后删除测试 Release、tag、临时分支；`check-release.sh` 的错 tag/未递增/缺签名 3 类失败路径已在本机用例覆盖 |
-| 真实版本 Release（正式发版） | **NOT RUN** | 本次只做临时 tag 门禁云测并清理；正式版本从未创建：未递增 versionCode/versionName、未发布正式 Release |
+| 真实版本 Release（正式发版） | **PASS** | tag `v1.4.0` @ `9c03c98` 触发 [run 44900294301](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44900294301)：`规范与环境检查`/`编译自检（Debug）`/`JVM 单元测试`/`发布（tag）` 全 success。产物 `Re-BiliTerminal-v1.4.0-release.apk`（7,703,009B），`versionCode=20261121`/`versionName=1.4.0`/`armeabi-v7a`，`apksigner` 证书 `CN=BiliTerminal`；`update.json` 的 versionCode/sha256/size/fileName 与 APK 一致（sha256 `62ff7f3d…`）。`官网部署（tag）` 因未配置 `NETLIFY_AUTH_TOKEN`/`NETLIFY_SITE_ID` failure，不影响 APK 与 GitHub Release |
 
 ### 8.1 已知遗留/风险（本次未修）
 
@@ -182,6 +182,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 5. **CI checkout 行尾差异（已修并验证）**：Ubuntu runner 上 `eol=crlf` 文件会显示为 modified；`check-repo.sh` 已过滤「仅 CR/LF 差异」。第二次 CI 日志：`[ OK ] 工作区干净` + `[INFO] 已忽略 6 个仅行尾差异（CI checkout 的 eol=crlf 归一化）`；若再出现 dirty，说明是真实内容改动。
 6. **PR 触发尚未单独实测**：本次是 main push 触发；PR 的同套 job 与 `paths-ignore` 由同一 workflow 定义，等首次 PR 再确认。
 7. **`check-repo` 的 versionCode WARN 仍在**：本地检查仍会提示「HEAD 比 tag 多提交但 versionCode 未递增」；发版 job 现在会硬拦，但本地/PR 阶段仍只是告警。
+8. **官网部署 secrets 未配置**：v1.4.0 tag 发版时 `官网部署（tag）` 因 `NETLIFY_AUTH_TOKEN` / `NETLIFY_SITE_ID` 缺失 failure；APK 与 GitHub Release 已正常发布。按 `docs/Netlify部署教程.md` 第 6 节补齐两条 secret 后，重跑该 job 即可。
 
 ### 8.2 真实 CI 失败与修复记录（过程，非最终状态）
 
