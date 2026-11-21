@@ -83,18 +83,28 @@ public final class LyricProvider {
      * @param durationMs 当前音频时长，用于在网易云搜索结果里挑最匹配的一首；0 表示未知
      */
     public static Lyrics load(Context context, VideoCard item, int durationMs) {
-        if (item == null || item.cid <= 0) return new Lyrics();
-        Lyrics cached = readCache(context, item.cid);
-        if (cached != null && !cached.isEmpty()) {
-            Log.i("audio-lyric", "cid=" + item.cid + " 命中缓存 source=" + cached.source);
-            return cached;
+        if (item == null) return new Lyrics();
+        //离线优先：下载时落盘的歌词不受 24h TTL 限制，也不依赖网络（2026-11-21 反馈：
+        //听歌模式缓存音频后，离线时歌词没了）
+        Lyrics local = readLocal(item);
+        if (local != null && !local.isEmpty()) return local;
+        if (item.cid <= 0 && !hasLocalPath(item)) return new Lyrics();
+
+        if (item.cid > 0) {
+            Lyrics cached = readCache(context, item.cid);
+            if (cached != null && !cached.isEmpty()) {
+                Log.i("audio-lyric", "cid=" + item.cid + " 命中缓存 source=" + cached.source);
+                return cached;
+            }
         }
 
-        //两条来源并行：有字幕时 300-500ms 就能返回，不用等网易云那串搜索
-        java.util.concurrent.Future<Lyrics> biliFuture =
-                POOL.submit(() -> loadFromBiliSubtitle(item));
-        java.util.concurrent.Future<Lyrics> neteaseFuture = durationMs > 0
-                ? POOL.submit(() -> loadFromNetease(item, durationMs)) : null;
+        //两条来源并行：有字幕时 300-500ms 就能返回，不用等网易云那串搜索。
+        //B 站字幕需要 cid，本地旧缓存条目没有 cid 就只走网易云；时长未知也能搜，
+        //bestMatch 对未知时长给 0.5 的中性分，比"完全不搜"更有机会拿到歌词。
+        java.util.concurrent.Future<Lyrics> biliFuture = item.cid > 0
+                ? POOL.submit(() -> loadFromBiliSubtitle(item)) : null;
+        java.util.concurrent.Future<Lyrics> neteaseFuture =
+                POOL.submit(() -> loadFromNetease(item, durationMs));
 
         Lyrics lyrics = await(biliFuture, BILI_TIMEOUT_MS);
         if (lyrics != null && !lyrics.isEmpty()) {
@@ -110,7 +120,11 @@ public final class LyricProvider {
             }
         }
         if (lyrics == null) lyrics = new Lyrics();
-        if (!lyrics.isEmpty()) writeCache(context, item.cid, lyrics);
+        if (!lyrics.isEmpty()) {
+            writeCache(context, item.cid, lyrics);
+            //本地条目顺手回写一份：老缓存/在线听过一次之后，下次离线也有歌词
+            writeLocal(item, lyrics);
+        }
         Log.i("audio-lyric", "cid=" + item.cid + " source=" + lyrics.source
                 + " lines=" + lyrics.lines.size());
         return lyrics;
@@ -121,14 +135,18 @@ public final class LyricProvider {
      * 失败无提示、不重试。
      */
     public static void prefetch(Context context, VideoCard item, int durationMs) {
-        if (item == null || item.cid <= 0) return;
-        if (readCache(context, item.cid) != null) return;
+        if (item == null) return;
+        Lyrics local = readLocal(item);
+        if (local != null && !local.isEmpty()) return;
+        if (item.cid <= 0 && !hasLocalPath(item)) return;
+        if (item.cid > 0 && readCache(context, item.cid) != null) return;
         POOL.execute(() -> {
             try {
-                Lyrics lyrics = loadFromBiliSubtitle(item);
-                if (lyrics.isEmpty() && durationMs > 0) lyrics = loadFromNetease(item, durationMs);
+                Lyrics lyrics = item.cid > 0 ? loadFromBiliSubtitle(item) : new Lyrics();
+                if (lyrics.isEmpty()) lyrics = loadFromNetease(item, durationMs);
                 if (!lyrics.isEmpty()) {
                     writeCache(context, item.cid, lyrics);
+                    writeLocal(item, lyrics);
                     Log.i("audio-lyric", "预取歌词 cid=" + item.cid + " source=" + lyrics.source);
                 }
             } catch (Throwable ignored) {
@@ -350,6 +368,24 @@ public final class LyricProvider {
 
     // ==================== 缓存 ====================
 
+    /** 本地缓存条目（有 media 路径）——歌词可以和音频放在同一个文件夹里离线读取 */
+    public static boolean hasLocalPath(VideoCard item) {
+        return item != null && item.localPath != null && !item.localPath.isEmpty();
+    }
+
+    /** 单曲身份：在线条目用 cid，本地条目用 media 路径（本地条目通常没有 cid） */
+    public static String keyOf(VideoCard item) {
+        if (item == null) return "";
+        return item.cid > 0 ? "c" + item.cid : "p" + (item.localPath == null ? "" : item.localPath);
+    }
+
+    /** 与 media 文件同目录的 lyrics.json；非本地条目返回 null */
+    private static File localFile(VideoCard item) {
+        if (!hasLocalPath(item)) return null;
+        File folder = new File(item.localPath).getParentFile();
+        return folder == null ? null : new File(folder, "lyrics.json");
+    }
+
     private static File cacheFile(Context context, long cid) {
         File dir = new File(context.getCacheDir(), "lyrics");
         if (!dir.exists() && !dir.mkdirs()) {
@@ -364,8 +400,58 @@ public final class LyricProvider {
             File file = cacheFile(context, cid);
             if (!file.exists()) return null;
             if (System.currentTimeMillis() - file.lastModified() > CACHE_TTL_MS) return null;
-            String raw = FileUtil.readString(file);
-            if (raw == null || raw.isEmpty()) return null;
+            return parseJson(FileUtil.readString(file));
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * 先查随缓存落盘的歌词，再查 24h 网络缓存。
+     * 听歌页用它做「命中就不闪加载中」的首查，本地条目在离线时也能立刻出歌词。
+     */
+    public static Lyrics readCache(Context context, VideoCard item) {
+        Lyrics local = readLocal(item);
+        if (local != null && !local.isEmpty()) return local;
+        if (item == null || item.cid <= 0) return null;
+        return readCache(context, item.cid);
+    }
+
+    /**
+     * 读与音频同目录的 lyrics.json（下载时写入，无 TTL）。
+     * 这是「离线也能看歌词」的唯一来源：没有它就只能联网取。
+     */
+    public static Lyrics readLocal(VideoCard item) {
+        File file = localFile(item);
+        if (file == null || !file.exists()) return null;
+        try {
+            return parseJson(FileUtil.readString(file));
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 把歌词写到缓存条目的文件夹（与 media 同级），供离线读取；已存在则不覆盖 */
+    public static void writeLocal(VideoCard item, Lyrics lyrics) {
+        File file = localFile(item);
+        if (file != null && !file.exists()) writeJson(file, lyrics);
+    }
+
+    public static void writeLocal(File folder, Lyrics lyrics) {
+        if (folder == null) return;
+        File file = new File(folder, "lyrics.json");
+        if (file.exists()) return;   // 离线优先：已有的本地歌词不被后来的网络结果覆盖
+        writeJson(file, lyrics);
+    }
+
+    private static void writeCache(Context context, long cid, Lyrics lyrics) {
+        if (cid <= 0) return;   // 本地条目没有 cid，只写 lyrics.json
+        writeJson(cacheFile(context, cid), lyrics);
+    }
+
+    private static Lyrics parseJson(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        try {
             JSONObject root = new JSONObject(raw);
             JSONArray array = root.optJSONArray("lines");
             if (array == null) return null;
@@ -385,10 +471,12 @@ public final class LyricProvider {
         }
     }
 
-    private static void writeCache(Context context, long cid, Lyrics lyrics) {
-        if (lyrics == null || lyrics.lines.isEmpty()) return;
+    private static void writeJson(File file, Lyrics lyrics) {
+        if (file == null || lyrics == null || lyrics.lines.isEmpty()) return;
         OutputStreamWriter writer = null;
         try {
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
             JSONObject root = new JSONObject();
             root.put("source", lyrics.source);
             JSONArray array = new JSONArray();
@@ -399,7 +487,7 @@ public final class LyricProvider {
                 array.put(item);
             }
             root.put("lines", array);
-            writer = new OutputStreamWriter(new FileOutputStream(cacheFile(context, cid)), "UTF-8");
+            writer = new OutputStreamWriter(new FileOutputStream(file), "UTF-8");
             writer.write(root.toString());
             writer.flush();
         } catch (Throwable ignored) {

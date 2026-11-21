@@ -69,6 +69,7 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
 import com.RobinNotBad.BiliClient.util.TerminalContext;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.bumptech.glide.Glide;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -224,7 +225,7 @@ public class VideoInfoFragment extends BaseFragment {
             pendingFavState = favoured;
             return;
         }
-        fav.setImageResource(favoured ? R.drawable.icon_fav_1 : R.drawable.icon_fav_0);
+        ToolsUtil.setVectorIcon(fav, favoured ? R.drawable.icon_fav_1 : R.drawable.icon_fav_0);
     }
 
     @SuppressLint("SetTextI18n")
@@ -258,6 +259,11 @@ public class VideoInfoFragment extends BaseFragment {
         like = rootview.findViewById(R.id.btn_like);
         coin = rootview.findViewById(R.id.btn_coin);
         fav = rootview.findViewById(R.id.btn_fav);
+        //XML 的 android:src 在 21~23 会走 framework VectorDrawable，不认 evenOdd，
+        //首屏就会把圆底图标画成实心圆盘；这里用 compat 先加载一次兜住初始态
+        ToolsUtil.setVectorIcon(like, R.drawable.icon_like_0);
+        ToolsUtil.setVectorIcon(coin, R.drawable.icon_coin_0);
+        ToolsUtil.setVectorIcon(fav, R.drawable.icon_fav_0);
         TextView likeLabel = rootview.findViewById(R.id.like_label);
         TextView coinLabel = rootview.findViewById(R.id.coin_label);
         TextView favLabel = rootview.findViewById(R.id.fav_label);
@@ -319,11 +325,11 @@ public class VideoInfoFragment extends BaseFragment {
 
         //点赞投币收藏
         if (videoInfo.stats.coined != 0)
-            coin.setImageResource(R.drawable.icon_coin_1);
+            ToolsUtil.setVectorIcon(coin, R.drawable.icon_coin_1);
         if (videoInfo.stats.liked)
-            like.setImageResource(R.drawable.icon_like_1);
+            ToolsUtil.setVectorIcon(like, R.drawable.icon_like_1);
         if (videoInfo.stats.favoured)
-            fav.setImageResource(R.drawable.icon_fav_1);
+            ToolsUtil.setVectorIcon(fav, R.drawable.icon_fav_1);
 
         //收藏结果可能在 initView 之前就到达：stats 已由 applyFavState 更新，
         //但图标要等 fav 绑定后补一次（否则页面重建/慢网时图标会停在旧态）
@@ -331,7 +337,7 @@ public class VideoInfoFragment extends BaseFragment {
             boolean favoured = pendingFavState;
             pendingFavState = null;
             videoInfo.stats.favoured = favoured;
-            fav.setImageResource(favoured ? R.drawable.icon_fav_1 : R.drawable.icon_fav_0);
+            ToolsUtil.setVectorIcon(fav, favoured ? R.drawable.icon_fav_1 : R.drawable.icon_fav_0);
         }
 
         //历史上报
@@ -436,7 +442,7 @@ public class VideoInfoFragment extends BaseFragment {
                         if (videoInfo.stats.liked)
                             likeLabel.setText(StringUtil.toWan(++videoInfo.stats.like));
                         else likeLabel.setText(StringUtil.toWan(--videoInfo.stats.like));
-                        like.setImageResource(videoInfo.stats.liked ? R.drawable.icon_like_1 : R.drawable.icon_like_0);
+                        ToolsUtil.setVectorIcon(like, videoInfo.stats.liked ? R.drawable.icon_like_1 : R.drawable.icon_like_0);
                     });
                 } else if (isAdded()) {
                     String msg = "操作失败：" + result;
@@ -447,7 +453,7 @@ public class VideoInfoFragment extends BaseFragment {
                         case 65006:
                             msg = "已经点赞过了喵~";
                             videoInfo.stats.liked = true;
-                            runOnUiThread(() -> like.setImageResource(R.drawable.icon_like_1));
+                            runOnUiThread(() -> ToolsUtil.setVectorIcon(like, R.drawable.icon_like_1));
                             break;
                     }
                     String finalMsg = msg;
@@ -472,7 +478,7 @@ public class VideoInfoFragment extends BaseFragment {
                         runOnUiThread(() -> {
                             MsgUtil.showMsg("投币成功");
                             coinLabel.setText(StringUtil.toWan(++videoInfo.stats.coin));
-                            coin.setImageResource(R.drawable.icon_coin_1);
+                            ToolsUtil.setVectorIcon(coin, R.drawable.icon_coin_1);
                         });
                     } else if (isAdded()) {
                         String msg = "投币失败：" + result;
@@ -628,9 +634,9 @@ public class VideoInfoFragment extends BaseFragment {
                             if (code == 0) {
                                 //后台线程不能直接改 View（CalledFromWrongThreadException），统一回主线程
                                 runOnUiThread(() -> {
-                                    coin.setImageResource(R.drawable.icon_coin_1);
-                                    like.setImageResource(R.drawable.icon_like_1);
-                                    fav.setImageResource(R.drawable.icon_fav_1);
+                                    ToolsUtil.setVectorIcon(coin, R.drawable.icon_coin_1);
+                                    ToolsUtil.setVectorIcon(like, R.drawable.icon_like_1);
+                                    ToolsUtil.setVectorIcon(fav, R.drawable.icon_fav_1);
                                 });
                                 MsgUtil.showMsg("三连成功");
                             } else MsgUtil.showMsg("三连失败，错误码：" + code);

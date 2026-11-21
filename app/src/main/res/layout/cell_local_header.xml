@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 缓存页列表头部：下载列表入口（原样保留）+ 听缓存（音频）入口。
+     2026-11-21 反馈：用户缓存完一批音频后，必须绕到收藏夹页面才能进听歌模式，希望缓存界面就有入口。
+     做成列表头而不是新页面：不改 activity_simple_main_refresh 的共用结构，
+     也不挪动 LocalVideoAdapter 的 position 语义（头部仍是 0、视频条目仍从 1 开始）。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+        android:layout_marginVertical="@dimen/list_margin_vertical">
+
+        <TextView
+            android:id="@+id/downloadListText"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginHorizontal="8dp"
+            android:gravity="center_vertical"
+            android:text="下载列表"
+            android:textAlignment="textStart"
+            android:textSize="13sp"
+            app:drawableEndCompat="@drawable/arrow_forward" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <include
+        android:id="@+id/local_audio_entry"
+        layout="@layout/view_audio_entry_card" />
+
+</LinearLayout>

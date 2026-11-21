@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,6 +22,7 @@ import com.RobinNotBad.BiliClient.api.PlayerApi;
 import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener;
 import com.RobinNotBad.BiliClient.model.LocalVideo;
 import com.RobinNotBad.BiliClient.model.PlayerData;
+import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.bumptech.glide.Glide;
@@ -36,6 +39,17 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
     final ArrayList<LocalVideo> localVideoList;
     OnItemLongClickListener longClickListener;
     OnAudioItemClickListener audioClickListener;
+    OnAudioEntryClickListener audioEntryClickListener;
+
+    /**
+     * 列表头的「听缓存（音频）」入口：把缓存里的音频按列表顺序灌进听歌队列。
+     *
+     * <p>2026-11-21 反馈：缓存完一批音频后，用户得先绕到收藏夹页面才能进听歌模式；
+     * 这里把入口直接放到缓存页，不必再进收藏夹。
+     */
+    public interface OnAudioEntryClickListener {
+        void onAudioEntryClick();
+    }
 
     /**
      * 纯音频条目被点击：交给宿主的听歌队列，从这一条往下连播。
@@ -60,6 +74,10 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
         this.audioClickListener = listener;
     }
 
+    public void setOnAudioEntryClickListener(OnAudioEntryClickListener listener) {
+        this.audioEntryClickListener = listener;
+    }
+
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -67,8 +85,8 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
             View view = LayoutInflater.from(this.context).inflate(R.layout.cell_video_local, parent, false);
             return new LocalVideoHolder(view);
         } else {
-            View view = LayoutInflater.from(this.context).inflate(R.layout.cell_goto, parent, false);
-            return new GotoHolder(view);
+            View view = LayoutInflater.from(this.context).inflate(R.layout.cell_local_header, parent, false);
+            return new LocalHeaderHolder(view);
         }
     }
 
@@ -131,7 +149,7 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
                     return false;
             });
         } else
-            ((GotoHolder) holder).show(context);
+            ((LocalHeaderHolder) holder).show(context, audioEntryClickListener);
     }
 
     @Override
@@ -139,18 +157,47 @@ public class LocalVideoAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
         return localVideoList != null ? localVideoList.size() + 1 : 1;
     }
 
-    public static class GotoHolder extends RecyclerView.ViewHolder {
+    public static class LocalHeaderHolder extends RecyclerView.ViewHolder {
 
-        TextView textView;
+        final View audioEntry;
+        final TextView audioTitle;
+        final TextView audioSub;
+        final ImageView audioIcon;
 
-        public GotoHolder(@NonNull View itemView) {
+        public LocalHeaderHolder(@NonNull View itemView) {
             super(itemView);
-            textView = itemView.findViewById(R.id.text);
+            //下载列表：保持原来的位置与行为（第一个 header 行）
+            itemView.findViewById(R.id.downloadListText).setOnClickListener(v ->
+                    v.getContext().startActivity(new Intent(v.getContext(), DownloadListActivity.class)));
+            audioEntry = itemView.findViewById(R.id.local_audio_entry);
+            audioTitle = itemView.findViewById(R.id.audioEntryTitle);
+            audioSub = itemView.findViewById(R.id.audioEntrySub);
+            audioIcon = itemView.findViewById(R.id.audioEntryIcon);
         }
 
-        public void show(Context context) {
-            textView.setText("下载列表");
-            itemView.setOnClickListener(v -> context.startActivity(new Intent(context, DownloadListActivity.class)));
+        public void show(Context context, OnAudioEntryClickListener listener) {
+            audioTitle.setText("听缓存（音频）");
+            audioSub.setText("缓存里的音频按列表顺序连播");
+            //小屏/手表与收藏页同一口径：隐藏副标题、收小图标，避免入口卡占掉太多高度
+            float density = context.getResources().getDisplayMetrics().density;
+            int screenHeightDp = (int) (context.getResources().getDisplayMetrics().heightPixels / density);
+            if (screenHeightDp < 420) {
+                audioSub.setVisibility(View.GONE);
+                ViewGroup.LayoutParams lp = audioIcon.getLayoutParams();
+                int side = (int) (24 * density + 0.5f);
+                lp.width = side;
+                lp.height = side;
+                audioIcon.setLayoutParams(lp);
+            } else {
+                audioSub.setVisibility(View.VISIBLE);
+            }
+            //图标跟随主题色（API 21+ 才能直接 tint；低版本保持矢量原色）
+            if (Build.VERSION.SDK_INT >= 21) {
+                audioIcon.setImageTintList(ColorStateList.valueOf(ThemeManager.getPrimary()));
+            }
+            audioEntry.setOnClickListener(v -> {
+                if (listener != null) listener.onAudioEntryClick();
+            });
         }
     }
 
