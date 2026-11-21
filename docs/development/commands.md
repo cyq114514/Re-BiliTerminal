@@ -30,6 +30,8 @@
 > - `./scripts/ci-prepare-sdk.sh`：CI job 内准备 Android SDK（`platform 33` + build-tools）。依赖 `ANDROID_HOME`，找不到 `sdkmanager` 时只告警（软失败）；会调用 `sdkmanager` 安装组件，**不是只读脚本**，不要拿它在本地替代 §2 的构建前置。
 > - `python3 scripts/summarize-tests.py [results_dir]`：汇总 Gradle JUnit XML 到控制台与 GitHub Step Summary；默认目录 `app/build/test-results/testDebugUnitTest`。**没有 XML 时以退出码 2 明确报 NOT RUN**（编译失败/未执行），不会把「没跑」误报成 PASS。
 > - `./scripts/check-release.sh`：**发版前置校验**，只在 release job 调用；校验 tag/versionName、versionCode 递增、签名 secrets 齐全。默认无参数时全部 FAIL，需由 workflow 注入 `TAG`/`VERSION_NAME`/`VERSION_CODE`/`PREVIOUS_VERSION_CODE` 与 4 个签名 env；输出不含 secret 值。
+>
+> UI 冒烟相关脚本只在云端 AVD 内由 workflow 调用：`scripts/ui/prepare-matrix.py`、`scripts/ui/run-on-device.sh`、`scripts/ui/visual-diff.py`、`scripts/ui/make-report.py`；本机无 x86 模拟器，不手工执行（见 [ui-testing.md](ui-testing.md)）。
 
 ## 2. 构建
 

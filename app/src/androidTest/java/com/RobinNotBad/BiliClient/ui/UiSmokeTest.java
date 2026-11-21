@@ -29,6 +29,7 @@ import com.RobinNotBad.BiliClient.model.AudioQueue;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -155,6 +156,32 @@ public class UiSmokeTest {
     @Test(timeout = 180000)
     public void audioQueuePage() {
         smokePage("audio-queue", AudioQueueActivity.class, new Intent(context, AudioQueueActivity.class));
+    }
+
+    @Test(timeout = 180000)
+    public void rotationSmoke() throws Exception {
+        // 真实手表不支持横竖屏切换，记为 SKIP（报告中可见），手机设备必须通过。
+        Assume.assumeFalse("Wear OS 不执行横竖屏测试",
+                context.getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_WATCH));
+        try {
+            device.setOrientationLeft();
+            wake();
+            SystemClock.sleep(1200);
+            Intent intent = new Intent(context, SettingMainActivity.class);
+            try (ActivityScenario<Activity> scenario = ActivityScenario.launch(intent)) {
+                assertRootVisible("settings-landscape", scenario, 8000);
+                capture("settings-landscape");
+            }
+        } catch (Throwable t) {
+            capture("settings-landscape-FAILED");
+            throw t;
+        } finally {
+            try {
+                device.setOrientationNatural();
+                device.unfreezeRotation();
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @Test(timeout = 180000)

@@ -22,6 +22,8 @@ tag 推送时同一 workflow 再跑 `release`。它保证了「能编译、能�
 checks     规范与环境检查        只读脚本，不编译
 build      Debug 编译            产物 app-debug.apk
 unit-test  JVM 单元测试           JUnit XML + HTML 报告
+ui-prepare 生成 UI 设备矩阵        PR 2 台 / main 2 台 / 定时或手动 4 台
+ui-smoke   多屏幕 UI 冒烟          AVD + 安装 APK + UiSmokeTest + 截图/日志/报告
 release    仅 tag v*              原有发布链（签名/资源冒烟/Release/update.json）
 ```
 
@@ -30,6 +32,8 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 | `checks` | 全部触发 | 15m | `check-env.sh`、`check-repo.sh`、`check-links.sh`、`validate-ci.sh`、`check-tests.sh` | 规范/链接/CI 配置/测试不变量被破坏 |
 | `build` | 全部触发 | 30m | `./gradlew :app:assembleDebug --stacktrace` | 编译失败（环境或代码） |
 | `unit-test` | 全部触发 | 25m | `./gradlew :app:testDebugUnitTest --stacktrace`；汇总 XML；上传报告 | 测试失败（真实代码缺陷或测试代码缺陷） |
+| `ui-prepare` | 非 tag | 5m | 按事件生成 AVD 矩阵（PR 圆屏+小屏；main 标准+方屏；schedule/dispatch 全部） | 矩阵脚本/事件分支错误 |
+| `ui-smoke` | 矩阵非空 | 40m/设备 | 独占 runner+AVD；安装 build artifact；执行 `UiSmokeTest`；上传截图/Logcat/XML/HTML/差异 | UI 失败或模拟器基础设施失败（报告区分） |
 | `release` | 仅 `refs/tags/v*` | 45m | 前置校验（tag/versionCode/secrets）→ 签名注入 → `assembleRelease` → 签名+versionCode 校验 → 资源冒烟 → GitHub Release → `update.json` | 发布链失败；测试/规范失败会阻止发布 |
 
 `build` 与 `unit-test` **并行**、互不 `needs`：编译失败与测试失败在 Actions 页面上是两条独立结果，
@@ -40,7 +44,8 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 - `push` → `main`：完整日常 CI。
 - `push` → tag `v*`：日常 CI + 发布链。
 - `pull_request` → `main`：完整日常 CI；`docs/**`、`**.md`、`site/**` 纯文档变更跳过（避免无意义的 APK 构建）。
-- `workflow_dispatch`：手动触发；选 tag ref 时仍会走发布链（原有行为）。
+- `schedule`（周日 18:00 UTC）：完整 4 设备 UI 矩阵；独立 concurrency group，不被 main push 取消。
+- `workflow_dispatch`：手动触发；`ui_devices=all/round-watch/small-phone/standard-phone/square-watch` 可只跑指定设备；选 tag ref 时仍会走发布链（原有行为）。
 
 ### 2.2 并发、缓存、权限
 
@@ -94,27 +99,15 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 
 `scripts/check-tests.sh` 已把其中可自动检查的部分变成 `checks` job 的硬失败项。
 
-## 4. Android Emulator 集成测试：评估结论（未纳入默认门禁）
+## 4. 多屏幕 UI 冒烟（已接入）
 
-**状态：NOT ADOPTED（未接入）/ NOT RUN（未验证）**。
+`ui-smoke` 已接入云端 AVD：圆屏手表 / 小屏手机 / 标准手机 / 方屏手表，真实运行
+`UiSmokeTest` 并收集截图、Logcat、JUnit XML/HTML 与视觉差异。设备配置、触发矩阵、
+覆盖页面、报告结构和安全隔离详见 [ui-testing.md](ui-testing.md)。
 
-评估过的可行路径与拒绝理由：
-
-| 候选 | 结论 |
-|---|---|
-| 现有 `androidTest/TlsBackportInstrumentedTest` | ❌ 不接入：测试会**真实联网并向线上 Supabase 写测试数据**，不适合在 PR/main 每次运行 |
-| 新写 Activity/导航/生命周期冒烟 | ⚠️ 暂不接入：需要 `reactivecircus/android-emulator-runner` + x86_64 镜像 + KVM；首次启动 2–5 分钟，且本仓库 110+ Activity 的初始化依赖网络/登录态，离线冒烟能覆盖的价值有限 |
-| ijkplayer/播放器/Service 集成 | ❌ 不接入：`app/libs` 只有 `armeabi-v7a`/`x86` 原生库，模拟器上 native 行为与真机差异大，极易随机失败 |
-| 数据持久化/数据库 | ✅ 已用 Robolectric 在 JVM 覆盖（真实 SQLite/SharedPreferences），不需要模拟器 |
-
-接入条件（满足后再作为正式门禁）：
-
-1. 先有一个**离线、不写线上数据**的 instrumented 测试集合，且在模拟器上连续多次运行稳定；
-2. 明确 ABI/镜像（当前 debug 包支持 x86，可用 x86_64 镜像跑 32 位）；
-3. 作为**独立 workflow**、手动或 nightly 触发，不阻塞普通 PR；
-4. 连续至少 10 次无 flake 后，才讨论是否加入 PR 门禁。
-
-在此之前，涉及 IJKPlayer、Surface、Service 生命周期、真实播放链路的验证仍按 `docs/modules/player.md` 的**真机回归清单**执行，不能用 JVM 测试冒充。
+- PR 只跑圆屏+小屏，main 跑标准+方屏，schedule/workflow_dispatch 跑全部；
+- `ui-smoke` 不在 `release.needs` 中，UI 失败不阻断正式发版；
+- 现有 `TlsBackportInstrumentedTest` 仍**不纳入** UI 冒烟（会真实联网并写线上 Supabase）。
 
 ## 5. 发布链（P0 门禁）
 
@@ -161,9 +154,9 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 
 - **不跑 lint**：仓库未配置 `lint {}`，AGP 默认 lint 对 minSdk 19 历史代码噪音大；未纳入门禁（评估记录见 `testing.md` §6）。
 - **不跑 release 编译**（日常）：Release（R8 + `shrinkResources` + 签名）仍只在 tag 发布时验证，本地无法等价复现。
-- **不跑模拟器/真机测试**：见 §4。
+- **UI 冒烟只跑 JVM/模拟器可覆盖的页面骨架**：IJKPlayer/Surface/Service/真实播放链路仍靠真机回归（见 §4 与 `ui-testing.md`）。
 - **Docker/自托管 runner**：未使用；全部 job 使用 GitHub 托管 `ubuntu-latest`，不要求用户电脑/手机在线。
-- **action pin**：6 个 action 仍是 major tag（validate-ci WARN），供应链加固留作后续小步改进。
+- **action pin**：10+ 个 action（含 UI matrix）仍是 major tag（validate-ci WARN），供应链加固留作后续小步改进。
 
 ## 8. 本次交付验证记录（2026-11-21）
 
