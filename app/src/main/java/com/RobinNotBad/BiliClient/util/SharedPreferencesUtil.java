@@ -29,6 +29,10 @@ public class SharedPreferencesUtil {
     public static final String PRIVATE_MSG_AUTO_READ_ENABLE = "private_msg_auto_read_enable";
     //进入私信页时提示「私信有可能被拦截」（用户反馈 2026-11-07：能不能别每次弹）；关闭后不再出现
     public static final String PRIVATE_MSG_WARN_ENABLE = "private_msg_warn_enable";
+    /** 卡片/胶囊背景透明度：0=当前效果，100=完全透明 */
+    public static final String UI_PANEL_ALPHA = "ui_panel_alpha";
+    /** 右边缘左滑快捷面板（最近观看/历史/稍后再看/搜索） */
+    public static final String QUICK_SWIPE_ENABLE = "quick_swipe_enable";
     //启动首页（用户反馈 2026-11-07）：存菜单项的序号，0 = 跟随菜单排序（旧行为）
     public static final String LAUNCH_PAGE = "launch_page";
     public static final String FOLLOW_GROUP_MODE = "follow_group_mode";

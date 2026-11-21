@@ -27,7 +27,6 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.PrivacyLockUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
-import com.RobinNotBad.BiliClient.util.UpdateManager;
 
 import org.json.JSONException;
 
@@ -48,6 +47,8 @@ public class SplashActivity extends Activity {
     private int splashFrame;
     private Timer splashTimer;
     private String splashText = "欢迎使用\nRe：哔哩终端";
+    /**「启动时等待请求完成」：onCreate 读一次，决定画完整开屏还是只保留系统首帧图标。 */
+    private boolean waitForRequests;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -80,7 +81,15 @@ public class SplashActivity extends Activity {
         //可以只关开屏、保留其它页面的新版美学（总开关关闭时一律走旧版）
         boolean newUi = SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true)
                 && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.SPLASH_NEW_UI, true);
-        setContentView(newUi ? R.layout.activity_splash_new : R.layout.activity_splash);
+
+        //关闭「启动时等待请求完成」后，首屏通常在 onCreate 后十几毫秒就被拉起：
+        //此时完整开屏往往只来得及画出一帧就被盖掉，表现为「开屏闪一下再出现」。
+        //这种情况下只复用系统首帧（纯黑 + 居中图标），不渲染图标/光晕/打字动画，
+        //让系统预览窗口到 Activity 内容保持同一张画面；等待模式打开时才播完整开屏。
+        waitForRequests = SharedPreferencesUtil.getBoolean("splash_wait_requests", false);
+        setContentView(waitForRequests
+                ? (newUi ? R.layout.activity_splash_new : R.layout.activity_splash)
+                : R.layout.activity_splash_preview);
         //开屏页不继承 BaseActivity，主题色要在这里单独应用一次（只换强调色，不动布局）
         ThemeApplier.apply(findViewById(android.R.id.content));
         Log.e("debug", "进入应用");
@@ -95,15 +104,18 @@ public class SplashActivity extends Activity {
         }
         splashText = SharedPreferencesUtil.getString("ui_splashtext", "欢迎使用\nRe：哔哩终端");
 
-        splashTimer = new Timer();
-        splashTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(() -> showSplashText(splashFrame));
-                splashFrame++;
-                if (splashFrame > splashText.length()) this.cancel();
-            }
-        }, 100, 100);
+        //关掉等待模式时内容里没有 splashText（只有系统首帧那张图），也就不需要打字机定时器
+        if (splashTextView != null) {
+            splashTimer = new Timer();
+            splashTimer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    runOnUiThread(() -> showSplashText(splashFrame));
+                    splashFrame++;
+                    if (splashFrame > splashText.length()) this.cancel();
+                }
+            }, 100, 100);
+        }
 
         //只有从桌面图标正常冷启动才做页面恢复；
         //崩溃兜底重启（CatchActivity 用显式 intent、无 ACTION_MAIN）不走恢复，避免回到崩溃现场。
@@ -203,7 +215,7 @@ public class SplashActivity extends Activity {
             //「启动时等待请求完成」：默认关闭，开屏秒进（1.2.3 起的行为）。
             //打开后推迟进首屏，等下面第三步的三项启动校验跑完 + 开屏打字动画播完再走，
             //弱网/断网最多多停 6 秒，不会把人扣在开屏页上。
-            final boolean waitForRequests = SharedPreferencesUtil.getBoolean("splash_wait_requests", false);
+            //取值已在 onCreate 里决定用哪套内容，这里只按同一个开关决定流程。
             if (waitForRequests) {
                 waitStartupChecksAndSplash(splashStartMs);
                 if (isFinishing() || isDestroyed()) return;
@@ -345,7 +357,7 @@ public class SplashActivity extends Activity {
         runOnUiThread(() -> {
             MsgUtil.err(e);
             interruptSplash();
-            splashTextView.setText("网络错误");
+            if (splashTextView != null) splashTextView.setText("网络错误");
         });
         //指定了「启动首页」时，断网也照样进那一页（用户反馈 2026-11-07）；
         //没指定才走原来的恢复栈/本地缓存兜底
@@ -424,13 +436,8 @@ public class SplashActivity extends Activity {
      */
     private void scheduleStartupDialogs() {
         BiliTerminal.runAfterFirstPageResumed(() -> AppInfoApi.showStartupDialogs(BiliTerminal.context));
-        //「启动时检查更新」开关：默认开启。与检查更新页走同一条链路
-        //（GitHub 直连优先，失败依次试内置镜像），发现新版本时弹同一套自适应弹窗。
-        //放在首屏之后执行：不占启动关键路径，也不会和首屏抢着弹窗；弱网失败只记日志，不打扰用户
-        BiliTerminal.runAfterFirstPageResumed(activity -> {
-            if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.UPDATE_CHECK_ON_START, true)) return;
-            UpdateManager.autoCheck(activity);
-        });
+        //「启动时检查更新」不再在这里注册：自动检查统一由推荐页 / 主菜单的 onResume 触发，
+        //开关、6 小时节流、失败重试都在 UpdateManager.autoCheck 内部处理。
     }
 
     /** 「关闭界面过渡动画」打开时，离开开屏页也不要转场动画 */
@@ -457,6 +464,7 @@ public class SplashActivity extends Activity {
 
     @SuppressLint("SetTextI18n")
     private void showSplashText(int i) {
+        if (splashTextView == null) return;
         if (i > splashText.length()) splashTextView.setText(splashText);
         else splashTextView.setText(splashText.substring(0, i) + "_");
     }
@@ -464,7 +472,9 @@ public class SplashActivity extends Activity {
     private void interruptSplash() {
         if (splashTimer != null) splashTimer.cancel();
         splashTimer = null;
-        runOnUiThread(() -> splashTextView.setText(splashText));
+        runOnUiThread(() -> {
+            if (splashTextView != null) splashTextView.setText(splashText);
+        });
     }
 
     @Override

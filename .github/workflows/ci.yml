@@ -1,14 +1,15 @@
 name: CI
 
 # 触发面：
-#   - push main：规范检查 + Debug 编译 + JVM 单元测试（不发版）
+#   - push main：规范检查 + Debug 编译 + JVM 单元测试（不发版，也不更新官网）
 #   - pull_request → main：同上；纯文档变更跳过（paths-ignore）
-#   - push tag v*：额外进入 release job（与日常测试 job 职责分离，发布链行为不变）
+#   - push tag v*：额外进入 release job，并在 release 成功后部署官网（deploy-site）
 #   - schedule：每周完整 UI 矩阵（圆屏/方屏手表 + 小屏/标准手机），不阻断发版
 #   - workflow_dispatch：手动跑完整 CI；可选 ui_devices 只跑指定 UI 设备
 #
 # 权限最小化：workflow 默认只读；发布需要的 contents: write 只挂在 tag 专用的 release job 上。
-# 普通 PR/main push 不接触任何 secrets，也不执行 Release 发布。
+# 普通 PR/main push 不接触任何 secrets，也不执行 Release 发布 / 官网部署。
+# 官网只在 tag 发版时由 Netlify CLI 部署（netlify.toml 已跳过普通 push 的自动构建）。
 
 on:
   push:
@@ -442,3 +443,42 @@ jobs:
                 '{versionCode: (($versionCode | tonumber)? // 0), versionName: $versionName, sha256: $sha256, size: $size, fileName: $fileName, notes: $notes, htmlUrl: $htmlUrl}' \
             > update.json
           gh release upload "$TAG" update.json --clobber -R "$GITHUB_REPOSITORY"
+
+  # Job E：官网部署（仅 tag）。普通 commit / PR 永不进入本 job，也不会拿到 Netlify 凭据。
+  # Netlify 后台的自动构建已停止（netlify.toml 里 ignore 也兜底跳过），
+  # 线上官网只在这里更新：内容取自 tag 对应的 site/ 与 netlify/functions/。
+  # release 成功后才部署，避免 APK / update.json 还没就绪时官网先切到新版本。
+  deploy-site:
+    name: 官网部署（tag）
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 部署 site/ 与 Functions 到 Netlify（生产）
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -Eeuo pipefail
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::error::缺少 NETLIFY_AUTH_TOKEN / NETLIFY_SITE_ID，官网未部署（APK 与 Release 已正常发布）"
+            exit 1
+          fi
+          npm install --global netlify-cli@17.38.1 >/dev/null
+          # 纯静态站不需要 Netlify 侧构建：只上传静态文件 + Functions（CLI 默认不跑构建）。
+          # _redirects（/api/update.json → function）随 site/ 一起生效。
+          netlify deploy \
+            --prod \
+            --dir=site \
+            --functions=netlify/functions \
+            --message "release ${TAG}"

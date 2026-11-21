@@ -5,8 +5,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.SystemClock;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.test.core.app.ActivityScenario;
@@ -21,6 +23,7 @@ import com.RobinNotBad.BiliClient.activity.player.AudioQueueActivity;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity;
 import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteFolderListActivity;
+import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteVideoListActivity;
 import com.RobinNotBad.BiliClient.activity.video.BangumiActivity;
 import com.RobinNotBad.BiliClient.activity.video.BgmSubjectActivity;
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
@@ -35,6 +38,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -80,6 +84,10 @@ public class UiSmokeTest {
                 .putBoolean("setup", true)
                 .putBoolean("crash_report_enable", false)
                 .putBoolean("crash_report_asked", true)
+                .putBoolean("crash_report_notice_121", true)
+                .putBoolean("tutorial_pager_SearchActivity", false)
+                .putBoolean("tutorial_pager_VideoInfoActivity", false)
+                .putBoolean("tutorial_pager_BangumiActivity", false)
                 .putBoolean("usage_stats_enable", false)
                 .putString("usage_stats_last_day", today)
                 .putBoolean("player_ui_round", round)
@@ -98,9 +106,23 @@ public class UiSmokeTest {
         }
         edit.commit();
 
-        shotDir = new File(context.getExternalFilesDir(null), "ui-shots");
+shotDir = new File(context.getExternalFilesDir(null), "ui-shots");
         if (!shotDir.exists() && !shotDir.mkdirs()) {
             throw new AssertionError("无法创建截图目录：" + shotDir);
+        }
+        //下载页会请求存储权限；权限弹窗会把 Activity 压到 STOPPED，ActivityScenario 等到超时。
+        //CI 的 host 脚本也会授权，这里再兜底一次，保证本地单跑同样稳。
+        grantStoragePermission("android.permission.READ_EXTERNAL_STORAGE");
+        grantStoragePermission("android.permission.WRITE_EXTERNAL_STORAGE");
+    }
+
+    private void grantStoragePermission(String permission) {
+        if (Build.VERSION.SDK_INT < 28) return;
+        try {
+            InstrumentationRegistry.getInstrumentation().getUiAutomation()
+                    .grantRuntimePermission(context.getPackageName(), permission);
+        } catch (Throwable ignored) {
+            //部分镜像把 WRITE 标成 restricted；授权失败就交给 host 脚本/系统弹窗，不阻断测试
         }
     }
 
@@ -189,6 +211,56 @@ public class UiSmokeTest {
         smokePage("favorites", FavoriteFolderListActivity.class, new Intent(context, FavoriteFolderListActivity.class));
     }
 
+    /**
+     * 收藏夹内容页：未登录时接口通常返回空，先把空态截图；再用反射塞三条假卡片，
+     * 把「听全部/下载全部 + 排序胶囊」头部拉出来，卡住 2026-11-21 反馈的
+     * "头部浮层压住标题栏/列表卡片"。
+     */
+    @Test(timeout = 180000)
+    public void favoriteVideoPage() {
+        Intent intent = new Intent(context, FavoriteVideoListActivity.class);
+        intent.putExtra("mid", 0L);
+        intent.putExtra("fid", 0L);
+        intent.putExtra("name", "默认收藏夹");
+        try (ActivityScenario<Activity> scenario = ActivityScenario.launch(intent)) {
+            assertRootVisible("favorite-video", scenario, 8000);
+            SystemClock.sleep(2500);
+            scenario.onActivity(this::injectFakeFavorites);
+            SystemClock.sleep(800);
+            scenario.onActivity(activity -> assertRoundSafe("favorite-video-header", activity));
+            capture("favorite-video-header");
+        } catch (Throwable t) {
+            capture("favorite-video-header-FAILED");
+            throw t;
+        }
+    }
+
+    /** 测试专用：给收藏夹塞三条假卡片，让头部（入口卡 + 排序胶囊）与列表一起显示 */
+    private void injectFakeFavorites(Activity activity) {
+        if (!(activity instanceof FavoriteVideoListActivity)) return;
+        try {
+            Field listField = FavoriteVideoListActivity.class.getDeclaredField("videoList");
+            listField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<VideoCard> list = (List<VideoCard>) listField.get(activity);
+            Field adapterField = FavoriteVideoListActivity.class.getDeclaredField("videoCardAdapter");
+            adapterField.setAccessible(true);
+            androidx.recyclerview.widget.RecyclerView.Adapter<?> adapter =
+                    (androidx.recyclerview.widget.RecyclerView.Adapter<?>) adapterField.get(activity);
+            if (list == null || adapter == null) return;
+            list.clear();
+            list.add(new VideoCard("圆屏收藏夹测试一：先看标题有没有被头部压住",
+                    "测试UP主", "12.3万", "", 1001, "BV1test001", 1L));
+            list.add(new VideoCard("圆屏收藏夹测试二：再看排序胶囊有没有盖住卡片",
+                    "测试UP主", "8.6万", "", 1002, "BV1test002", 1L));
+            list.add(new VideoCard("圆屏收藏夹测试三：滚到底部不应掉进下巴",
+                    "测试UP主", "3.1万", "", 1003, "BV1test003", 1L));
+            ((FavoriteVideoListActivity) activity).hideEmptyView();
+            adapter.notifyDataSetChanged();
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void smokePage(String name, Class<? extends Activity> activityClass, Intent intent) {
         smokePage(name, intent, true);
     }
@@ -266,6 +338,7 @@ public class UiSmokeTest {
                     assertTrue(name + "：根视图超出屏幕下边界", rect.bottom <= root.getRootView().getHeight());
                     TextView pageName = activity.findViewById(R.id.pageName);
                     if (pageName != null) assertTrue(name + "：pageName 不可见", pageName.isShown());
+                    assertRoundSafe(name, activity);
                 });
                 return;
             }
@@ -273,6 +346,78 @@ public class UiSmokeTest {
         }
         if (destroyed.get()) throw new AssertionError(name + "：Activity 在根视图可见前被销毁（检查页面启动参数/服务状态）");
         throw new AssertionError(name + "：根视图在 " + timeoutMs + "ms 内仍不可见");
+    }
+
+    /**
+     * 圆屏几何门禁：可见文字 / 叶子控件（不可再分的按钮）不得有角落在内接圆外。
+     *
+     * <p>只做几何判定，容忍 2dp——圆边本身有表圈/抗锯齿；超过 2dp 基本就是肉眼可见的裁切。
+     * 容器类（RelativeLayout、RecyclerView、MaterialCardView）不判定，避免把全宽顶栏/卡片背景
+     * 当成"出圆"误报；真正影响可读性的是文字和可点击控件。
+     */
+    private void assertRoundSafe(String name, Activity activity) {
+        if (!activity.getResources().getConfiguration().isScreenRound()) return;
+        View decor = activity.getWindow().getDecorView();
+        int screenW = decor.getWidth();
+        int screenH = decor.getHeight();
+        if (screenW <= 0 || screenH <= 0) return;
+        int cx = screenW / 2;
+        int cy = screenH / 2;
+        int radius = Math.min(screenW, screenH) / 2;
+        float tolerance = 2f * activity.getResources().getDisplayMetrics().density;
+        ArrayList<String> bad = new ArrayList<>();
+        collectRoundBad(decor, activity, cx, cy, radius, tolerance, bad);
+        assertTrue(name + "：圆屏出圆（>2dp）：" + bad, bad.isEmpty());
+    }
+
+    private void collectRoundBad(View view, Activity activity, int cx, int cy, int radius,
+                                 float tolerance, List<String> out) {
+        if (out.size() >= 8 || view.getVisibility() != View.VISIBLE) return;
+        boolean text = view instanceof TextView;
+        boolean leafControl = view.isClickable() && !(view instanceof ViewGroup);
+        if (text || leafControl) {
+            Rect rect = new Rect();
+            if (view.getGlobalVisibleRect(rect) && !rect.isEmpty()) {
+                View root = view.getRootView();
+                //整屏遮罩/根容器（例如教程 scrim）不算"控件出圆"，内容由文字节点自己判定
+                boolean fullScreen = rect.width() >= root.getWidth() * 0.98f
+                        && rect.height() >= root.getHeight() * 0.98f;
+                if (!fullScreen) {
+                    float depth = maxCornerDepth(rect, cx, cy, radius);
+                    if (depth > tolerance) {
+                        String id = "";
+                        try {
+                            id = activity.getResources().getResourceEntryName(view.getId());
+                        } catch (Exception ignored) {
+                        }
+                        float density = activity.getResources().getDisplayMetrics().density;
+                        out.add(view.getClass().getSimpleName() + (id.isEmpty() ? "" : "#" + id)
+                                + rect.toShortString() + " 出圆 " + Math.round(depth / density) + "dp");
+                        return;
+                    }
+                }
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectRoundBad(group.getChildAt(i), activity, cx, cy, radius, tolerance, out);
+                if (out.size() >= 8) return;
+            }
+        }
+    }
+
+    /**
+     * 测试进程不依赖 App 的 util 类：apk 的 secondary dex 在仪器化进程里不一定可见
+     * （实测 test APK 引用 RoundGeometry 会 ClassNotFoundException），这里内联同一套四角判定。
+     */
+    private static float maxCornerDepth(Rect rect, int cx, int cy, int radius) {
+        float max = 0f;
+        max = Math.max(max, (float) Math.hypot(rect.left - cx, rect.top - cy));
+        max = Math.max(max, (float) Math.hypot(rect.right - cx, rect.top - cy));
+        max = Math.max(max, (float) Math.hypot(rect.left - cx, rect.bottom - cy));
+        max = Math.max(max, (float) Math.hypot(rect.right - cx, rect.bottom - cy));
+        return max - radius;
     }
 
     private void capture(String name) {

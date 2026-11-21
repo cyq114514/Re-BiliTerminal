@@ -7,14 +7,13 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
-import com.RobinNotBad.BiliClient.ui.theme.ThemeManager;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
-
+import com.RobinNotBad.BiliClient.ui.widget.PlayerChipStyle;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
+
 import java.util.ArrayList;
 
 public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapter.Holder> {
@@ -46,7 +45,7 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_page_item, parent, false);
+        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_player_chip, parent, false);
         ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
@@ -64,28 +63,21 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
     }
 
     public class Holder extends RecyclerView.ViewHolder {
-        private final TextView pageName;
+        private final TextView chip;
 
         public Holder(View view) {
             super(view);
-            pageName = itemView.findViewById(R.id.page_name);
+            chip = itemView.findViewById(R.id.chip_text);
         }
 
         void bind(int currentIndex, boolean isSelected) {
             if (currentIndex < 0 || pagenames == null || currentIndex >= pagenames.size())
                 return;
 
-            pageName.setText("P" + (currentIndex + 1) + " " + pagenames.get(currentIndex));
+            chip.setText("P" + (currentIndex + 1) + " " + pagenames.get(currentIndex));
+            PlayerChipStyle.apply(chip, isSelected);
 
-            if (isSelected) {
-                pageName.setTextColor(ThemeManager.getPrimary());
-                itemView.setBackgroundResource(R.drawable.background_card);
-            } else {
-                pageName.setTextColor(ContextCompat.getColor(pageName.getContext(), R.color.textwhite));
-                itemView.setBackgroundResource(R.drawable.background_card_borderless);
-            }
-
-            itemView.setOnClickListener(v -> {
+            chip.setOnClickListener(v -> {
                 setSelectedItemIndex(currentIndex);
                 if (listener != null) {
                     listener.onItemClick(currentIndex);

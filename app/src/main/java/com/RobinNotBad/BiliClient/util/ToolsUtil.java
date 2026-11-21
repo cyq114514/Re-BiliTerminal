@@ -49,10 +49,21 @@ public class ToolsUtil {
             view.setImageResource(resId);
             return;
         }
-        Drawable compat = VectorDrawableCompat.create(
-                view.getResources(), resId, view.getContext().getTheme());
-        if (compat != null) view.setImageDrawable(compat);
-        else view.setImageResource(resId);
+        //API 19~23 的兜底：VectorDrawableCompat 内部走 Resources.getXml()，如果这个 ID
+        //在该设备/资源优化下解析成了 PNG（AAPT 会给 fillType 等 API24 属性生成 v24-only
+        //矢量 + 低版本 PNG），会抛 Resources$NotFoundException。图标加载失败绝不能把
+        //整个页面带崩，退回 setImageResource 至少还能显示 PNG。
+        try {
+            Drawable compat = VectorDrawableCompat.create(
+                    view.getResources(), resId, view.getContext().getTheme());
+            if (compat != null) {
+                view.setImageDrawable(compat);
+                return;
+            }
+        } catch (Throwable t) {
+            Logu.e("vector", "compat 加载失败，回退 PNG：" + t);
+        }
+        view.setImageResource(resId);
     }
 
     /**

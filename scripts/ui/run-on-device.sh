@@ -73,6 +73,11 @@ stage "install APKs"
 adb install -r -t "$APP_APK" >/dev/null
 adb install -r -t "$TEST_APK" >/dev/null
 adb shell pm clear "$PKG" >/dev/null
+# 下载页会弹存储权限；权限弹窗把 Activity 压到 STOPPED，ActivityScenario 会等到超时。
+# 测试进程里也有一层 UiAutomation 授权兜底（UiSmokeTest.setUp），这里先给上减少弹窗。
+for perm in READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE; do
+    adb shell pm grant "$PKG" "android.permission.$perm" >/dev/null 2>&1 || true
+done
 
 stage "seed isolated UI prefs (no telemetry, skip setup)"
 ROUND_BOOL=false
@@ -83,6 +88,7 @@ cat > "$REPORT/prefs.xml" <<XML
     <boolean name="setup" value="true" />
     <boolean name="crash_report_enable" value="false" />
     <boolean name="crash_report_asked" value="true" />
+    <boolean name="crash_report_notice_121" value="true" />
     <boolean name="usage_stats_enable" value="false" />
     <boolean name="player_ui_round" value="$ROUND_BOOL" />
     <float name="dpi" value="1.0" />

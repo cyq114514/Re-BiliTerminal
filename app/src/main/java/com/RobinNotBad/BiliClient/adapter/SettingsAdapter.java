@@ -23,6 +23,7 @@ import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.UpdateManager;
 import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
@@ -166,6 +167,11 @@ public class SettingsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             switchMaterial.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (warn == null) {
                     SharedPreferencesUtil.putBoolean(settingSection.id, isChecked);
+                    //重新打开「启动时检查更新」：清掉此前的「忽略此版本」并重置节流，
+                    //否则用户会看到开关拨上去了却仍然没有任何提示（2026-11-21 反馈）
+                    if (isChecked && SharedPreferencesUtil.UPDATE_CHECK_ON_START.equals(settingSection.id)) {
+                        UpdateManager.onAutoCheckEnabled();
+                    }
                     return;
                 }
                 showWarnConfirm(settingSection, isChecked, isChecked ? warn[0] : warn[1]);

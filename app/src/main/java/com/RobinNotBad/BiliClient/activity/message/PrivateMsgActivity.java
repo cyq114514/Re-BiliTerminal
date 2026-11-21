@@ -29,6 +29,7 @@ import com.RobinNotBad.BiliClient.api.PrivateMsgApi;
 import com.RobinNotBad.BiliClient.model.PrivateMessage;
 import com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.ClickGuard;
 import com.RobinNotBad.BiliClient.util.SendGuard;
@@ -79,7 +80,8 @@ public class PrivateMsgActivity extends BaseActivity {
     //相册选图；回调在主线程，IO 与网络在 sendPic 里转后台线程
     private final ActivityResultLauncher<String> pickImageLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
-                if (uri != null) sendPic(uri);
+                //选图后不直接上传：先让用户确认，避免手滑把图片发出去
+                if (uri != null) confirmSendPic(uri);
             });
 
     //表情面板：选中表情码（如 [dog]）追加进输入框，随文本一起发送；
@@ -170,6 +172,8 @@ public class PrivateMsgActivity extends BaseActivity {
         Intent intent = getIntent();
         uid = intent.getLongExtra("uid", 114514);
         Log.e("", String.valueOf(uid));
+        //恢复上次退出时留下的草稿（按 uid 隔离），光标放到末尾
+        restoreDraft();
 
         //拦截风险提示改成可关闭的弹窗（用户反馈 2026-11-07）：点「不再提醒」写偏好，
         //也可以在 设置 → 偏好设置 → 功能 →「私信拦截提示」里重新打开
@@ -186,6 +190,15 @@ public class PrivateMsgActivity extends BaseActivity {
 
         CenterThreadPool.run(() -> {
             try {
+                //先把会话标记已读，再拉消息：此前放在拉取之后，用户快速返回消息页时
+                //服务端还没收到 ack，列表仍显示未读（2026-11-21 反馈）。
+                if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PRIVATE_MSG_AUTO_READ_ENABLE, true)) {
+                    try {
+                        PrivateMsgApi.updateAck(uid, 1, 0);
+                    } catch (Exception e) {
+                        Log.e("PrivateMsgActivity", "标记已读失败", e);
+                    }
+                }
                 allMsg = PrivateMsgApi.getPrivateMsg(uid, 50, 0, 0);
                 if (allMsg == null || allMsg.length() == 0) {
                     runOnUiThread(() -> MsgUtil.showMsg("无法加载私信，请检查网络或登录状态"));
@@ -195,15 +208,6 @@ public class PrivateMsgActivity extends BaseActivity {
                 Collections.reverse(list);
                 emoteArray = PrivateMsgApi.getEmoteJsonArray(allMsg);
                 adapter = new PrivateMsgAdapter(list, emoteArray, this);
-                
-                // PiliPlus 式自动标记已读
-                if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PRIVATE_MSG_AUTO_READ_ENABLE, true)) {
-                    try {
-                        PrivateMsgApi.updateAck(uid, 1, 0);
-                    } catch (Exception e) {
-                        Log.e("PrivateMsgActivity", "标记已读失败", e);
-                    }
-                }
                 
                 runOnUiThread(() -> {
                     CustomLinearManager manager = new CustomLinearManager(this);
@@ -296,6 +300,7 @@ public class PrivateMsgActivity extends BaseActivity {
                         if (result.optInt("code", -1) == 0) {
                             //成功才清空；失败保留原文，避免用户辛苦打的字被丢掉
                             contentEt.setText("");
+                            SharedPreferencesUtil.removeValue(draftKey());
                             MsgUtil.showMsg("发送成功");
                             refresh();
                         } else {
@@ -313,6 +318,38 @@ public class PrivateMsgActivity extends BaseActivity {
                 runOnUiThread(() -> MsgUtil.showMsg("发送失败：" + e.getMessage()));
             }
         }));
+    }
+
+    /** 发图前的确认：选图后不再直接上传，避免手滑发出。 */
+    private void confirmSendPic(Uri uri) {
+        new AdaptiveDialog.Builder(this)
+                .setTitle("发送图片")
+                .setMessage("确定发送这张图片吗？")
+                .setPositiveButton("发送", (dialog, which) -> sendPic(uri))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private String draftKey() {
+        return "private_msg_draft_" + uid;
+    }
+
+    /** 按会话保存草稿；空白输入视为没有草稿，直接清键。 */
+    private void saveDraft() {
+        if (contentEt == null || uid <= 0) return;
+        String text = contentEt.getText().toString();
+        if (text.trim().isEmpty()) SharedPreferencesUtil.removeValue(draftKey());
+        else SharedPreferencesUtil.putString(draftKey(), text);
+    }
+
+    private void restoreDraft() {
+        if (contentEt == null || uid <= 0) return;
+        String text = SharedPreferencesUtil.getString(draftKey(), "");
+        if (!text.isEmpty()) {
+            contentEt.setText(text);
+            contentEt.setSelection(text.length());
+        }
+        updateHintMarquee();
     }
 
     private void sendPic(Uri uri) {
@@ -375,7 +412,15 @@ public class PrivateMsgActivity extends BaseActivity {
     }
 
     @Override
+    protected void onPause() {
+        //正常返回/切后台都会走这里，把没发出去的文本留下来
+        saveDraft();
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
+        saveDraft();
         destroyed = true;
         if (refreshTimer != null) refreshTimer.cancel();
         refreshTimer = null;

@@ -33,7 +33,8 @@ public class RecommendSearchSettingsActivity extends RefreshListActivity {
                         "按官方客户端方式给请求加 appkey/ts/sign（参数不变）。关掉后退回不签名请求，"
                                 + "用于排查签名被拒导致推荐变少的情况", "true"));
                 add(new SettingSection("switch", "推荐请求携带登录凭证", RecommendApi.KEY_APP_RECOMMEND_ACCESS_KEY,
-                        "默认关闭。开启后推荐请求会带上登录凭证（需已通过扫码换到过），失败不影响匿名推荐", "false"));
+                        "默认开启。推荐请求会带上登录凭证（需已通过扫码换到过），让推荐更贴近账号兴趣；"
+                                + "未登录或凭证失效时自动退回匿名推荐，不影响加载", "true"));
                 add(new SettingSection("input_string", "推荐屏蔽的 UP 主", RecommendApi.KEY_BLOCK_MIDS,
                         "填 UP 主 mid（数字），多个用逗号或换行分隔；命中就不在首页推荐里出现。填错的行会被忽略", ""));
                 add(new SettingSection("input_string", "推荐屏蔽的关键词", RecommendApi.KEY_BLOCK_WORDS,

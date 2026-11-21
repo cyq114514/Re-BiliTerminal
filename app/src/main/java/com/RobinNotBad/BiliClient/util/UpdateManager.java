@@ -82,8 +82,9 @@ public class UpdateManager {
     /**旧版本使用的固定文件名（升级后一次性清理遗留）*/
     private static final String LEGACY_APK_FILE_NAME = "Re-BiliTerminal-update.apk";
 
-    /**内置镜像预设（前缀 + 直连）；公共镜像可用性经常变化，用户可在检查更新页切换或自定义*/
-    public static final String[] MIRROR_PRESETS = {"", "https://ghfast.top/", "https://gh-proxy.com/"};
+    /**内置镜像预设（前缀 + 直连）；公共镜像可用性经常变化，用户可在检查更新页切换或自定义。
+     * ghfast.top 近期实测 TLS 握手不稳定，排到最后，避免每次自动检查都先等它超时。*/
+    public static final String[] MIRROR_PRESETS = {"", "https://gh-proxy.com/", "https://ghfast.top/"};
     private static final String KEY_MIRROR_PREFIX = "update_mirror_prefix";
     /**用户点过"忽略此版本"的版本名（每次发现新版本只会提示一次）*/
     private static final String KEY_SKIPPED_VERSION = "update_skipped_version";
@@ -94,7 +95,16 @@ public class UpdateManager {
     private static volatile OkHttpClient updateClient;
     private static volatile OkHttpClient metadataClient;
     private static volatile boolean downloadCanceled = false;
-    private static volatile boolean autoChecked = false;   //每次进程生命周期只静默检查一次
+    /**上次成功拿到可用更新元数据（无论是否有新版）的时间；持久化，进程重启后仍生效*/
+    private static final String KEY_LAST_AUTO_CHECK_MS = "update_last_auto_check_ms";
+    /**前台两次自动检查的最小间隔：6 小时。只在前台页 resumed 时触发，不额外起定时器*/
+    private static final long AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L;
+    /**失败后的重试冷却：网络恢复后最多等 30 分钟，避免每次回前台都立刻重试*/
+    private static final long AUTO_CHECK_RETRY_MS = 30 * 60 * 1000L;
+    private static volatile boolean autoCheckInFlight = false;
+    private static volatile long lastAutoAttemptMs = 0L;
+    /**已发现新版但宿主页面已结束/被盖住：下次前台先补弹，不重新联网*/
+    private static volatile boolean pendingPrompt = false;
     private static volatile UpdateInfo cachedInfo = null;
 
     public interface ProgressListener {
@@ -226,12 +236,15 @@ public class UpdateManager {
         //安装前的签名校验（verifyApkSignature）仍会拦下伪造包。
         //候选源：直连 → 用户选择的镜像 → 没选镜像时依次试内置镜像
         //（国内默认配置下直连几乎必然失败，不探测镜像的话"启动检查更新"等于不可用）
+        String lastSourceError = "无可用 update.json";
         for (String prefix : checkSources()) {
             if (listener != null) listener.onTrying(sourceName(prefix));
             try {
                 info = fetchViaUpdateJson(prefix);
-            } catch (IOException ignored) {
-                //该源不可达：换下一个
+            } catch (IOException e) {
+                //该源不可达：记下最后一条，换下一个；最终错误会带进自动检查日志
+                lastSourceError = sourceName(prefix) + ": " + e.getMessage();
+                Logu.d("update", "源 " + sourceName(prefix) + " 失败：" + e.getMessage());
             }
             if (info != null) break;
         }
@@ -240,7 +253,11 @@ public class UpdateManager {
             return info;
         }
         if (listener != null) listener.onTrying("GitHub API");
-        info = fetchViaApi();
+        try {
+            info = fetchViaApi();
+        } catch (IOException e) {
+            throw new IOException(e.getMessage() + "（update.json 源均失败，最后：" + lastSourceError + "）", e);
+        }
         cachedInfo = info;
         return info;
     }
@@ -386,40 +403,104 @@ public class UpdateManager {
     }
 
     /**
-     * 启动时的静默自动检查：进程内只执行一次；网络失败完全静默；
-     * 发现新版本且用户没有忽略过该版本时，在当前页面弹一次性提示。
+     * 前台静默自动检查：由推荐页 / 主菜单的 onResume 在回到首页时调用。
+     *
+     * <p>触发规则（修 2026-11-21 反馈「开了自动更新仍收不到」）：
+     * - 开关在方法内统一判断，任何调用方都不能绕过「启动时检查更新」；
+     * - 上次成功检查 6 小时内不重复联网；失败不写成功时间，下次前台（30 分钟冷却后）自动重试；
+     * - 失败只写 Logu，不弹提示；发现新版但宿主页面已结束时，缓存提示等下次前台补弹。
      */
     public static void autoCheck(final Activity activity) {
-        if (autoChecked) return;
-        autoChecked = true;
+        if (activity == null) return;
+        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.UPDATE_CHECK_ON_START, true)) return;
+
+        //上次已经查到新版但没弹出来（宿主页在请求返回前结束/被盖住）：先补弹，不重新联网
+        if (pendingPrompt && cachedInfo != null && isNewer(cachedInfo)) {
+            String skipped = SharedPreferencesUtil.getString(KEY_SKIPPED_VERSION, "");
+            if (cachedInfo.versionName.equals(skipped)) {
+                pendingPrompt = false;
+            } else {
+                pendingPrompt = false;
+                showPrompt(activity, cachedInfo);
+                return;
+            }
+        }
+
+        long now = System.currentTimeMillis();
+        long lastSuccess = SharedPreferencesUtil.getLong(KEY_LAST_AUTO_CHECK_MS, 0L);
+        if (!shouldCheck(true, autoCheckInFlight, now, lastSuccess, lastAutoAttemptMs)) return;
+
+        autoCheckInFlight = true;
+        lastAutoAttemptMs = now;
         CenterThreadPool.run(() -> {
             try {
                 UpdateInfo info = fetchLatest();
+                if (info == null || !info.isUsable()) {
+                    //元数据拿到但不可用（缺 versionName/APK）：不算成功，下次前台重试
+                    Logu.e("update", "自动检查未拿到可用版本信息（versionName / APK 资产缺失）");
+                    return;
+                }
+                SharedPreferencesUtil.putLong(KEY_LAST_AUTO_CHECK_MS, System.currentTimeMillis());
                 if (!isNewer(info)) {
                     deleteOldApkFile();   //已是最新：顺手清理残留的更新包
                     return;
                 }
-                String versionName = info.versionName;
-                if (versionName.equals(SharedPreferencesUtil.getString(KEY_SKIPPED_VERSION, ""))) return;
+                if (info.versionName.equals(SharedPreferencesUtil.getString(KEY_SKIPPED_VERSION, ""))) return;
 
                 activity.runOnUiThread(() -> {
-                    if (activity.isDestroyed() || activity.isFinishing()) return;
-                    //自适应弹窗：更新说明是多行长文本且带三个按钮，系统弹窗在放大界面后
-                    //按钮会被顶出屏幕（三按钮还会被系统改成竖排，进一步挤掉正文）
-                    new AdaptiveDialog.Builder(activity)
-                            .setTitle("发现新版本 " + info.versionName)
-                            .setMessage(buildShortNotes(info))
-                            .setPositiveButton("立即更新", (dialog, which) ->
-                                    activity.startActivity(new Intent(activity, UpdateActivity.class)))
-                            .setNeutralButton("忽略此版本", (dialog, which) ->
-                                    SharedPreferencesUtil.putString(KEY_SKIPPED_VERSION, versionName))
-                            .setNegativeButton("以后再说", null)
-                            .show();
+                    if (activity.isDestroyed() || activity.isFinishing()) {
+                        pendingPrompt = true;   //留住，下次前台补弹
+                        return;
+                    }
+                    showPrompt(activity, info);
                 });
-            } catch (Exception ignored) {
-                //自动检查不打扰用户：网络不通/接口异常就当没检查过
+            } catch (Exception e) {
+                //自动检查不打扰用户，但必须留日志：此前完全静默，线上无法判断是网络还是元数据问题
+                Logu.e("update", "自动检查失败：" + e);
+            } finally {
+                autoCheckInFlight = false;
             }
         });
+    }
+
+    private static void showPrompt(final Activity activity, final UpdateInfo info) {
+        if (activity.isDestroyed() || activity.isFinishing()) {
+            pendingPrompt = true;
+            return;
+        }
+        //自适应弹窗：更新说明是多行长文本且带三个按钮，系统弹窗在放大界面后
+        //按钮会被顶出屏幕（三按钮还会被系统改成竖排，进一步挤掉正文）
+        new AdaptiveDialog.Builder(activity)
+                .setTitle("发现新版本 " + info.versionName)
+                .setMessage(buildShortNotes(info))
+                .setPositiveButton("立即更新", (dialog, which) ->
+                        activity.startActivity(new Intent(activity, UpdateActivity.class)))
+                .setNeutralButton("忽略此版本", (dialog, which) ->
+                        SharedPreferencesUtil.putString(KEY_SKIPPED_VERSION, info.versionName))
+                .setNegativeButton("以后再说", null)
+                .show();
+    }
+
+    /**
+     * 自动检查的节流判定（抽成纯函数便于 JVM 单测）。
+     *
+     * @param lastSuccessMs 上次成功检查时间；0 表示从未成功
+     * @param lastAttemptMs 上次尝试时间；失败后 30 分钟内不再重试
+     */
+    static boolean shouldCheck(boolean enabled, boolean inFlight, long now,
+                               long lastSuccessMs, long lastAttemptMs) {
+        if (!enabled || inFlight) return false;
+        if (lastSuccessMs > now) return true;   //系统时间回拨：当作需要检查
+        if (lastAttemptMs > 0 && now - lastAttemptMs < AUTO_CHECK_RETRY_MS) return false;
+        return lastSuccessMs <= 0 || now - lastSuccessMs >= AUTO_CHECK_INTERVAL_MS;
+    }
+
+    /** 用户重新打开「启动时检查更新」时调用：清掉忽略版本、重置节流，下一次前台立即检查。 */
+    public static void onAutoCheckEnabled() {
+        SharedPreferencesUtil.putString(KEY_SKIPPED_VERSION, "");
+        SharedPreferencesUtil.putLong(KEY_LAST_AUTO_CHECK_MS, 0L);
+        lastAutoAttemptMs = 0L;
+        pendingPrompt = false;
     }
 
     private static String buildShortNotes(UpdateInfo info) {

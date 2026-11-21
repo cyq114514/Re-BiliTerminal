@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity;
 import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
 import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter;
+import com.RobinNotBad.BiliClient.adapter.video.VideoCardWithHeaderAdapter;
 import com.RobinNotBad.BiliClient.api.AudioQueueApi;
 import com.RobinNotBad.BiliClient.api.FavoriteApi;
 import com.RobinNotBad.BiliClient.model.VideoCard;
@@ -54,12 +55,8 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
     private boolean managing = false;
     private boolean loading = false;
 
-    /** 排序栏容器：随列表滚动收起/展开（不再焊死在页面顶端） */
+    /** 排序栏容器：作为列表头部 item 的一部分，随列表一起滚走 */
     private View sortBar;
-    /** 头部容器（听全部 + 排序栏）：两者一起收起 */
-    private View headerBar;
-    /** 头部实测高度，-1 表示尚未量到（跟手位移与列表 paddingTop 都用它） */
-    private int sortBarFullHeight = -1;
 
     @SuppressLint("MissingInflatedId")
     @Override
@@ -81,62 +78,40 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         videoCardAdapter = new VideoCardAdapter(this, videoList);
         bindLongClickDelete();
         setOnLoadMoreListener(this::continueLoading);
-        setAdapter(videoCardAdapter);
 
         setupSortBar();
         setupAudioQueueEntry();
-        //头部容器（听全部 + 排序栏）建好后才能挂滚动收起
-        attachSortBarCollapse();
         reloadFromFirst();
     }
 
     /** 音频播放入口：独立一行放在排序条上方（不改通用布局，仅本页面态可见） */
     private void setupAudioQueueEntry() {
         LinearLayout container = findViewById(R.id.listContainer);
-        android.view.ViewGroup root = findViewById(R.id.refresh_root);
-        if (container == null || root == null || sortBar == null) return;
+        if (container == null || sortBar == null) return;
 
-        //把「听全部」与排序栏装进同一个头部容器：两者一起随列表滚动，且「听全部」不再是裸文字。
+        //把「听全部 / 下载全部」与排序栏做成 RecyclerView 的第一个 item。
         //
-        //挂载方式（用户反馈 2026-11-08：头部不会跟着列表一起滑，要滚过一整屏才突然收起）：
-        //原来是插进 listContainer 这个竖排 LinearLayout 里，头部只能占位、靠定时动画收起，天生不跟手。
-        //改成浮在列表上方的一层（锚在 listContainer 顶部），列表用 paddingTop 给它让位，
-        //滚动时按滚动偏移整块 translationY 上移——真跟手，且不会出现"条目 2 倍速上移"
-        //（列表自身不再做补偿滚动）。
+        //历史：先插在 listContainer 里（不跟手）→ 改成浮层 + translationY（能跟手，但 2026-11-21
+        //反馈滚动后入口卡和 sortBar 被顶到标题栏位置，压住标题；clipChildren 实测裁不住）。
+        //现在交给 RecyclerView：item 滚动天然跟手，超出列表上沿的内容由 RecyclerView 自己裁剪，
+        //结构上不可能再画到固定的标题栏上。
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
-        int index = container.indexOfChild(sortBar);
-        container.removeView(sortBar);
-        if (index < 0) index = 0;
-        //头部要能随列表滚出可视区，但不能画到上面固定的标题栏上——2026-11-21 反馈
-        //（sdk21）「收藏界面 UI 遮挡」：滚动后两张入口卡/sortBar 被 translationY 顶到
-        //标题栏位置，标题文字被压在下面。加一层与 listContainer 等高的裁剪容器，
-        //超出容器顶部的内容直接裁掉；容器本身不消费触摸，列表手势照常。
-        android.widget.FrameLayout clip = new android.widget.FrameLayout(this);
-        clip.setClipChildren(true);
-        clip.setClickable(false);
-        android.widget.RelativeLayout.LayoutParams clipLp =
-                new android.widget.RelativeLayout.LayoutParams(
-                        android.widget.RelativeLayout.LayoutParams.MATCH_PARENT,
-                        android.widget.RelativeLayout.LayoutParams.MATCH_PARENT);
-        clipLp.addRule(android.widget.RelativeLayout.ALIGN_TOP, R.id.listContainer);
-        clipLp.addRule(android.widget.RelativeLayout.ALIGN_BOTTOM, R.id.listContainer);
-        clipLp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_START);
-        root.addView(clip, clipLp);
-        clip.addView(header, new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
-        header.addView(sortBar, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        ViewGroup sortParent = (ViewGroup) sortBar.getParent();
+        if (sortParent != null) sortParent.removeView(sortBar);
 
         //与视频卡片同款半透明卡片：直接 inflate 卡片布局（card_bg_new #4D262626 + 描边 + 零投影 + 同款外边距），
         //不再用自绘背景，保证与列表里的视频卡片视觉完全一致
         header.addView(buildAudioEntryCard("听全部（纯音频）", "按当前列表顺序连续播放",
-                view -> startAudioQueue()), 0);
+                view -> startAudioQueue()));
         header.addView(buildAudioEntryCard("下载全部（音频）", "整夹加入下载队列，可后台继续",
-                view -> confirmDownloadAll()), 1);
+                view -> confirmDownloadAll()));
+        header.addView(sortBar, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        headerBar = header;
+        //包一层 VideoCardWithHeaderAdapter：委托方的 notify 会自动 +1 偏移，
+        //收藏夹自己的多选/长按/分页位置语义不变（仍按列表内位置传回）
+        setAdapter(new VideoCardWithHeaderAdapter(header, videoCardAdapter));
     }
 
     /** 「听全部」「下载全部」共用的入口卡片：图标跟随主题色，文案由调用方给 */
@@ -151,8 +126,15 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         //可用高度不足时隐藏副标题、图标再收一档，只留一行标题，两张卡合计高度约减半
         float density = getResources().getDisplayMetrics().density;
         int screenHeightDp = (int) (getResources().getDisplayMetrics().heightPixels / density);
-        if (screenHeightDp < 420) {
+        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+        //宽度也要看：此前只按高度判断，窄屏（或大字号把可用宽度挤小）时卡片标题仍会被截。
+        if (screenHeightDp < 420 || screenWidthDp < 360) {
             if (subView != null) subView.setVisibility(View.GONE);
+            //手表宽度下两条入口卡标题会截成"听全部（纯…"：小屏去掉括号里的说明，
+            //只留动作名，配一行卡片本身已经足够表达
+            if (titleView != null) {
+                titleView.setText(title.replace("（纯音频）", "").replace("（音频）", ""));
+            }
             if (icon != null) {
                 ViewGroup.LayoutParams lp = icon.getLayoutParams();
                 int side = (int) (24 * density + 0.5f);
@@ -184,7 +166,7 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
                         + " 条，剩余在后台自动拉取。\n\n"
                         + "按每首约 6MB 估算，100 首约 600MB，请留意剩余空间。"
                         + "下载在后台进行，可在「我的 → 下载」查看进度，可随时取消。")
-                .setPositiveButton("开始下载", (dialog, which) -> downloadAll())
+                .setPositiveButton("下载", (dialog, which) -> downloadAll())
                 .setNegativeButton("取消", null)
                 .show();
     }
@@ -311,52 +293,6 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         chip.setTextColor(selected ? android.graphics.Color.WHITE : unselectedSortColor);
     }
 
-    /**
-     * 头部（听全部 / 下载全部 + 排序栏）随列表 1:1 跟手滑动。
-     *
-     * <p>实现要点：头部是浮在列表上方的一层（不参与 LinearLayout 流式排布），列表用
-     * {@code paddingTop} 给它让位，滚动时按 {@code computeVerticalScrollOffset()} 移 {@code translationY}。
-     * 这样头部移走多少、内容就顶上来多少，天然同步。
-     *
-     * <p>为什么不直接把头部当列表的 header item：{@code VideoCardAdapter} 被 10 多个页面共用，
-     * 加 header 会挪动所有 position，波及多选、长按删除、分页插入等一批调用点，回归面太大。
-     *
-     * <p>也不再用"滚过一整屏再播 150ms 收起动画"那一套：动画期间头部是静止的，
-     * 放大/小屏上表现为"不跟着滑、然后突然跳走"（用户反馈 2026-11-08），已整段移除。
-     */
-    private void attachSortBarCollapse() {
-        final View header = headerBar != null ? headerBar : sortBar;
-        if (header == null || recyclerView == null) return;
-
-        //列表给头部让位：paddingTop = 头部高度，内容从头部下方开始；
-        //clipToPadding=false 让内容能画进 padding 区，滚上来时正好接在头部后面
-        recyclerView.setClipToPadding(false);
-        header.addOnLayoutChangeListener((v, left, top, right, bottom,
-                                          oldLeft, oldTop, oldRight, oldBottom) -> {
-            int h = bottom - top;
-            if (h <= 0 || h == sortBarFullHeight) return;
-            sortBarFullHeight = h;
-            recyclerView.setPadding(recyclerView.getPaddingLeft(), h,
-                    recyclerView.getPaddingRight(), recyclerView.getPaddingBottom());
-            header.setTranslationY(-Math.min(
-                    Math.max(recyclerView.computeVerticalScrollOffset(), 0), h));
-        });
-
-        //1:1 跟手：滚多少头部上移多少，偏移到自身高度时完全移出屏幕顶部。
-        //不再做"滚过一整屏再播放 150ms 收起动画"——那套在放大/小屏上表现为头部长时间不动、
-        //然后突然跳走（用户反馈 2026-11-08）。列表自身不做补偿滚动，也不会出现 2 倍速位移。
-        recyclerView.addOnScrollListener(new androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@androidx.annotation.NonNull androidx.recyclerview.widget.RecyclerView rv,
-                                   int dx, int dy) {
-                if (sortBarFullHeight <= 0) return;
-                int offset = Math.max(rv.computeVerticalScrollOffset(), 0);
-                header.setTranslationY(-Math.min(offset, sortBarFullHeight));
-            }
-        });
-    }
-
-
     private void switchOrder(String target) {
         if (order.equals(target)) {
             updateSortColors();
@@ -394,7 +330,7 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         new AdaptiveDialog.Builder(this)
                 .setTitle("取消收藏")
                 .setMessage("将取消收藏选中的 " + count + " 个稿件，此操作不可撤销。")
-                .setPositiveButton("取消收藏", (dialog, which) -> deleteSelected(videoCardAdapter.getSelectedAids()))
+                .setPositiveButton("确认", (dialog, which) -> deleteSelected(videoCardAdapter.getSelectedAids()))
                 .setNegativeButton("取消", null)
                 .show();
     }

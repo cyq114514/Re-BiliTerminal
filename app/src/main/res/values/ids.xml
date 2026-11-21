@@ -5,4 +5,14 @@
     <item name="tag_child_rpid" type="id" />
     <!-- 子评论行 → 正在播放的高亮动画，复用时先取消，避免动画改到别人的背景 -->
     <item name="tag_color_anim" type="id" />
+    <!-- 顶栏动作被圆屏「更多」收纳时打的标记：区分"页面自己 GONE"和"我们收走了" -->
+    <item name="round_overflow_hidden" type="id" />
+    <!-- 卡片/胶囊透明度：保存原始颜色与已应用百分比，设置改小后才能恢复/重算 -->
+    <item name="ui_alpha_base_color" type="id" />
+    <item name="ui_alpha_base_stroke" type="id" />
+    <item name="ui_alpha_base_alpha" type="id" />
+    <item name="ui_alpha_base_tint" type="id" />
+    <item name="ui_alpha_applied" type="id" />
+    <!-- RecyclerView 只装一次子项 attach 监听 -->
+    <item name="ui_alpha_list_installed" type="id" />
 </resources>

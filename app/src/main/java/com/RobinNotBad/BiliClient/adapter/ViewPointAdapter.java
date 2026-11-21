@@ -4,18 +4,17 @@ import android.annotation.SuppressLint;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
-import androidx.appcompat.content.res.AppCompatResources;
-import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
 import com.RobinNotBad.BiliClient.model.ViewPoint;
+import com.RobinNotBad.BiliClient.ui.widget.PlayerChipStyle;
 import com.RobinNotBad.BiliClient.util.StringUtil;
-import com.google.android.material.button.MaterialButton;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import java.util.List;
 
@@ -39,14 +38,14 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
         if (this.currentPosition == positionInSeconds) {
             return;
         }
-        
+
         this.currentPosition = positionInSeconds;
-        
+
         int newCurrentIndex = getCurrentSegmentIndex();
         if (newCurrentIndex != lastCurrentIndex) {
             int oldIndex = lastCurrentIndex;
             lastCurrentIndex = newCurrentIndex;
-            
+
             if (oldIndex != -1 && oldIndex < getItemCount()) {
                 notifyItemChanged(oldIndex);
             }
@@ -55,7 +54,7 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
             }
         }
     }
-    
+
     private int getCurrentSegmentIndex() {
         if (viewPoints == null || currentPosition < 0) {
             return -1;
@@ -73,7 +72,8 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
     @Override
     public ViewPointHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.cell_episode, parent, false);
+                .inflate(R.layout.cell_player_chip, parent, false);
+        ToolsUtil.applyPressScale(view);
         return new ViewPointHolder(view);
     }
 
@@ -94,11 +94,11 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
 
     public class ViewPointHolder extends RecyclerView.ViewHolder {
         private OnItemClickListener listener;
-        private final MaterialButton button;
+        private final TextView chip;
 
         public ViewPointHolder(View view) {
             super(view);
-            button = itemView.findViewById(R.id.btn);
+            chip = itemView.findViewById(R.id.chip_text);
         }
 
         void bind(int currentIndex) {
@@ -106,22 +106,12 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
                 return;
             ViewPoint viewPoint = viewPoints.get(currentIndex);
             String timeStr = StringUtil.toTime(viewPoint.from) + "-" + StringUtil.toTime(viewPoint.to);
-            String displayText = viewPoint.content + "\n" + timeStr;
-            button.setText(displayText);
-            
+            chip.setText(viewPoint.content + "\n" + timeStr);
+
             boolean isCurrent = currentPosition >= viewPoint.from && currentPosition < viewPoint.to;
-            
-            if (isCurrent) {
-                button.setTextColor(0xcc262626);
-                ViewCompat.setBackgroundTintList(button,
-                        AppCompatResources.getColorStateList(itemView.getContext(), R.color.background_button_selected));
-            } else {
-                button.setTextColor(ContextCompat.getColor(button.getContext(), R.color.textwhite));
-                ViewCompat.setBackgroundTintList(button,
-                        AppCompatResources.getColorStateList(itemView.getContext(), R.color.background_button));
-            }
-            
-            button.setOnClickListener(v -> {
+            PlayerChipStyle.apply(chip, isCurrent);
+
+            chip.setOnClickListener(v -> {
                 if (listener != null) {
                     listener.onItemClick(currentIndex);
                 }
@@ -129,4 +119,3 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
         }
     }
 }
-

@@ -9,6 +9,7 @@
     android:orientation="vertical">
 
     <com.google.android.material.card.MaterialCardView
+        android:id="@+id/downloadListCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
@@ -29,5 +30,18 @@
     <include
         android:id="@+id/local_audio_entry"
         layout="@layout/view_audio_entry_card" />
+
+    <!-- 空态放在列表头内部：外部 emptyTip 是 centerVertical，会和固定的下载/听歌入口叠在一起 -->
+    <TextView
+        android:id="@+id/local_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:text="还没有视频缓存~"
+        android:textColor="@color/text_gray"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
 </LinearLayout>

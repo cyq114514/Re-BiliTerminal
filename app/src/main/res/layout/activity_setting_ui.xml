@@ -206,6 +206,36 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_quick_swipe"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:text="右边缘左滑快捷面板" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="6dp"
+                        android:layout_marginTop="1dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.9"
+                        android:text="从屏幕右边缘向左滑，弹出 最近观看 / 播放历史 / 稍后再看 / 搜索。只在普通页面生效，播放器、看图、短视频页不响应；误触多可关闭"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
                     android:paddingStart="6dp"
                     android:paddingEnd="6dp"
                     android:paddingTop="4dp"
@@ -485,6 +515,42 @@
                         android:layout_height="wrap_content"
                         android:layout_marginHorizontal="2dp"
                         android:text="@string/desc_setting_ui_density"
+                        android:textSize="11sp" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="卡片 / 胶囊透明度（0-100）"
+                        android:textSize="14sp" />
+
+                    <EditText
+                        android:id="@+id/ui_panel_alpha_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:minWidth="50dp"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="2dp"
+                        android:text="0 = 当前效果，100 = 完全透明。只改卡片和胶囊按钮的背景，文字/图标保持不透明；返回其他页面后生效。"
                         android:textSize="11sp" />
 
                 </LinearLayout>

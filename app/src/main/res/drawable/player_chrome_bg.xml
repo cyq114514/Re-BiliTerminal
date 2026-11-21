@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    播放器控制层卡片（顶栏/底栏）。
+    不另造视觉体系：描边/圆角/结构走全站卡片 token；底用 player_chrome_bg
+    （70% 深色）而不是 card_bg_nested——视频画面亮度不可控，30% 灰在亮画面上白字读不清。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/player_chrome_bg" />
+    <stroke
+        android:width="@dimen/card_stroke_new"
+        android:color="@color/card_border_new" />
+    <corners android:radius="@dimen/card_round_new" />
+</shape>

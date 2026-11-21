@@ -2,8 +2,8 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_height="match_parent"
     android:layout_width="match_parent"
+    android:layout_height="match_parent"
     tools:context=".activity.message.MessageActivity">
 
     <RelativeLayout
@@ -14,7 +14,6 @@
 
         <TextView
             android:id="@+id/pageName"
-            android:textSize="14sp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
@@ -23,6 +22,7 @@
             android:layout_marginStart="8dp"
             android:lines="1"
             android:text="@string/pagename_message"
+            android:textSize="14sp"
             android:textStyle="bold"
             app:drawableStartCompat="@drawable/arrow_down" />
 
@@ -30,10 +30,10 @@
             android:id="@+id/timeText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:layout_marginVertical="3dp"
+            android:layout_alignParentEnd="true"
             android:layout_alignParentRight="true"
-            android:layout_alignParentEnd="true" />
+            android:layout_marginVertical="3dp"
+            android:layout_marginEnd="8dp" />
 
     </RelativeLayout>
 
@@ -53,286 +53,273 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <LinearLayout
+                <!-- 2×2 入口卡：回复我的 / @我 / 收到的赞 / 消息设置。
+                     四张全宽卡竖排会吃掉手表大半屏；合并成一张卡的 2×2 后高度减半，
+                     每个格子仍有 56dp 触摸区。system 行默认隐藏，保留给后续系统通知入口。 -->
+                <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:divider="@drawable/empty"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="@dimen/activity_padding_horizontal"
-                    android:paddingVertical="2dp"
-                    android:showDividers="middle">
+                    android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+                    android:layout_marginTop="4dp">
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/reply"
+                    <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:id="@+id/reply_go"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="9dp"
-                                android:layout_marginEnd="8dp"
-                                android:layout_marginBottom="9dp"
-                                android:src="@drawable/arrow_forward"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
-
-                            <ImageView
-                                android:id="@+id/reply_icon"
-                                android:layout_width="wrap_content"
-                                android:layout_height="0dp"
-                                android:layout_marginStart="8dp"
-                                android:adjustViewBounds="true"
-                                android:src="@drawable/icon_reply"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintHeight_percent="0.4"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintVertical_bias="0.5" />
-
-                            <TextView
-                                android:id="@+id/reply_text"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:ellipsize="end"
-                                android:lines="1"
-                                android:text="回复我的"
-                                android:textColor="@color/textwhite"
-                                android:textSize="12sp"
-                                app:layout_constraintBottom_toBottomOf="@id/reply_icon"
-                                app:layout_constraintEnd_toStartOf="@+id/reply_go"
-                                app:layout_constraintStart_toEndOf="@+id/reply_icon"
-                                app:layout_constraintTop_toTopOf="@id/reply_icon" />
-
-                        </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/at"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:id="@+id/at_go"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="9dp"
-                                android:layout_marginEnd="8dp"
-                                android:layout_marginBottom="9dp"
-                                android:src="@drawable/arrow_forward"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
-
-                            <ImageView
-                                android:id="@+id/at_icon"
-                                android:layout_width="wrap_content"
-                                android:layout_height="0dp"
-                                android:layout_marginStart="8dp"
-                                android:adjustViewBounds="true"
-                                android:src="@drawable/icon_at"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintHeight_percent="0.4"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintVertical_bias="0.5" />
-
-                            <TextView
-                                android:id="@+id/at_text"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:ellipsize="end"
-                                android:lines="1"
-                                android:text="\@我"
-                                android:textColor="@color/textwhite"
-                                android:textSize="12sp"
-                                app:layout_constraintBottom_toBottomOf="@id/at_icon"
-                                app:layout_constraintEnd_toStartOf="@+id/at_go"
-                                app:layout_constraintStart_toEndOf="@+id/at_icon"
-                                app:layout_constraintTop_toTopOf="@id/at_icon" />
-
-                        </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/like"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:id="@+id/like_go"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="9dp"
-                                android:layout_marginEnd="8dp"
-                                android:layout_marginBottom="9dp"
-                                android:src="@drawable/arrow_forward"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
-
-                            <ImageView
-                                android:id="@+id/like_icon"
-                                android:layout_width="wrap_content"
-                                android:layout_height="0dp"
-                                android:layout_marginStart="8dp"
-                                android:adjustViewBounds="true"
-                                android:src="@drawable/icon_reply_like0"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintHeight_percent="0.4"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintVertical_bias="0.5" />
-
-                            <TextView
-                                android:id="@+id/like_text"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:ellipsize="end"
-                                android:lines="1"
-                                android:text="收到的赞"
-                                android:textColor="@color/textwhite"
-                                android:textSize="12sp"
-                                app:layout_constraintBottom_toBottomOf="@id/like_icon"
-                                app:layout_constraintEnd_toStartOf="@+id/like_go"
-                                app:layout_constraintStart_toEndOf="@+id/like_icon"
-                                app:layout_constraintTop_toTopOf="@id/like_icon" />
-
-                        </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/system"
-                        android:visibility="gone"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:id="@+id/system_go"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="9dp"
-                                android:layout_marginEnd="8dp"
-                                android:layout_marginBottom="9dp"
-                                android:src="@drawable/arrow_forward"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
-
-                            <ImageView
-                                android:id="@+id/system_icon"
-                                android:layout_width="wrap_content"
-                                android:layout_height="0dp"
-                                android:layout_marginStart="8dp"
-                                android:adjustViewBounds="true"
-                                android:src="@drawable/icon_info"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintHeight_percent="0.4"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintVertical_bias="0.5" />
-
-                            <TextView
-                                android:id="@+id/system_text"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:ellipsize="end"
-                                android:lines="1"
-                                android:text="系统通知"
-                                android:textColor="@color/textwhite"
-                                android:textSize="12sp"
-                                app:layout_constraintBottom_toBottomOf="@id/system_icon"
-                                app:layout_constraintEnd_toStartOf="@+id/system_go"
-                                app:layout_constraintStart_toEndOf="@+id/system_icon"
-                                app:layout_constraintTop_toTopOf="@id/system_icon" />
-
-                        </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/setting_btn"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:id="@+id/setting_go"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="9dp"
-                                android:layout_marginEnd="8dp"
-                                android:layout_marginBottom="9dp"
-                                android:src="@drawable/arrow_forward"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
-
-                            <ImageView
-                                android:id="@+id/setting_icon"
-                                android:layout_width="wrap_content"
-                                android:layout_height="0dp"
-                                android:layout_marginStart="8dp"
-                                android:adjustViewBounds="true"
-                                android:src="@drawable/icon_setting"
-                                app:layout_constraintBottom_toBottomOf="parent"
-                                app:layout_constraintHeight_percent="0.4"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintVertical_bias="0.5" />
-
-                            <TextView
-                                android:id="@+id/setting_text"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:ellipsize="end"
-                                android:lines="1"
-                                android:text="消息设置"
-                                android:textColor="@color/textwhite"
-                                android:textSize="12sp"
-                                app:layout_constraintBottom_toBottomOf="@id/setting_icon"
-                                app:layout_constraintEnd_toStartOf="@+id/setting_go"
-                                app:layout_constraintStart_toEndOf="@+id/setting_icon"
-                                app:layout_constraintTop_toTopOf="@id/setting_icon" />
-
-                        </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <TextView
-                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="私信列表" />
-                </LinearLayout>
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:id="@+id/reply"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="8dp">
+
+                                <ImageView
+                                    android:id="@+id/reply_icon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:adjustViewBounds="true"
+                                    android:src="@drawable/icon_reply" />
+
+                                <TextView
+                                    android:id="@+id/reply_text"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:layout_weight="1"
+                                    android:ellipsize="end"
+                                    android:lines="1"
+                                    android:text="回复我的"
+                                    android:textColor="@color/textwhite"
+                                    android:textSize="11sp" />
+
+                                <ImageView
+                                    android:id="@+id/reply_go"
+                                    android:layout_width="12dp"
+                                    android:layout_height="12dp"
+                                    android:src="@drawable/arrow_forward"
+                                    app:tint="@color/text_dim" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginVertical="10dp"
+                                android:background="@color/card_border_new" />
+
+                            <LinearLayout
+                                android:id="@+id/at"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="8dp">
+
+                                <ImageView
+                                    android:id="@+id/at_icon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:adjustViewBounds="true"
+                                    android:src="@drawable/icon_at" />
+
+                                <TextView
+                                    android:id="@+id/at_text"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:layout_weight="1"
+                                    android:ellipsize="end"
+                                    android:lines="1"
+                                    android:text="\@我"
+                                    android:textColor="@color/textwhite"
+                                    android:textSize="11sp" />
+
+                                <ImageView
+                                    android:id="@+id/at_go"
+                                    android:layout_width="12dp"
+                                    android:layout_height="12dp"
+                                    android:src="@drawable/arrow_forward"
+                                    app:tint="@color/text_dim" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/card_border_new" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:id="@+id/like"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="8dp">
+
+                                <ImageView
+                                    android:id="@+id/like_icon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:adjustViewBounds="true"
+                                    android:src="@drawable/icon_reply_like0" />
+
+                                <TextView
+                                    android:id="@+id/like_text"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:layout_weight="1"
+                                    android:ellipsize="end"
+                                    android:lines="1"
+                                    android:text="收到的赞"
+                                    android:textColor="@color/textwhite"
+                                    android:textSize="11sp" />
+
+                                <ImageView
+                                    android:id="@+id/like_go"
+                                    android:layout_width="12dp"
+                                    android:layout_height="12dp"
+                                    android:src="@drawable/arrow_forward"
+                                    app:tint="@color/text_dim" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginVertical="10dp"
+                                android:background="@color/card_border_new" />
+
+                            <LinearLayout
+                                android:id="@+id/setting_btn"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="8dp">
+
+                                <ImageView
+                                    android:id="@+id/setting_icon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:adjustViewBounds="true"
+                                    android:src="@drawable/icon_setting" />
+
+                                <TextView
+                                    android:id="@+id/setting_text"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:layout_weight="1"
+                                    android:ellipsize="end"
+                                    android:lines="1"
+                                    android:text="消息设置"
+                                    android:textColor="@color/textwhite"
+                                    android:textSize="11sp" />
+
+                                <ImageView
+                                    android:id="@+id/setting_go"
+                                    android:layout_width="12dp"
+                                    android:layout_height="12dp"
+                                    android:src="@drawable/arrow_forward"
+                                    app:tint="@color/text_dim" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/system"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="@color/card_border_new" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="?attr/selectableItemBackground"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="8dp">
+
+                                <ImageView
+                                    android:id="@+id/system_icon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:adjustViewBounds="true"
+                                    android:src="@drawable/icon_info" />
+
+                                <TextView
+                                    android:id="@+id/system_text"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:layout_weight="1"
+                                    android:ellipsize="end"
+                                    android:lines="1"
+                                    android:text="系统通知"
+                                    android:textColor="@color/textwhite"
+                                    android:textSize="11sp" />
+
+                                <ImageView
+                                    android:id="@+id/system_go"
+                                    android:layout_width="12dp"
+                                    android:layout_height="12dp"
+                                    android:src="@drawable/arrow_forward"
+                                    app:tint="@color/text_dim" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/activity_padding_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="2dp"
+                    android:text="私信列表"
+                    android:textColor="@color/text_gray"
+                    android:textSize="12sp" />
 
                 <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
                     android:id="@+id/sessions_list"
@@ -344,6 +331,5 @@
         </com.RobinNotBad.BiliClient.ui.widget.RotaryNestedScrollView>
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-
 
 </RelativeLayout>

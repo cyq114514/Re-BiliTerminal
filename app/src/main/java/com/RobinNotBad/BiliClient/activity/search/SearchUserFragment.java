@@ -61,7 +61,11 @@ public class SearchUserFragment extends SearchFragment {
                     if (result.isJsonArray()) {
                         List<UserInfo> list = new ArrayList<>();
                         SearchApi.getUsersFromSearchResult(new org.json.JSONArray(result.getAsJsonArray().toString()), list);
-                        if (list.size() == 0) setBottom(true);
+                        if (list.size() == 0) {
+                            setBottom(true);
+                            //空结果是正常状态，不要复用网络失败文案
+                            if (page == 1) showEmptyView("没有找到相关用户~");
+                        }
                         CenterThreadPool.runOnUiThread(() -> {
                         if (myGeneration != loadGeneration) return;
                         int lastSize = userInfoList.size();

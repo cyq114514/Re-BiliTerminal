@@ -94,7 +94,8 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
             sectionList.add(new SettingSection("choose", "低电量阈值", "battery_low_threshold",
                     "电量掉到这个值以下才提醒", "3", new String[]{"5%", "10%", "15%", "20%", "30%"}));
             sectionList.add(new SettingSection("switch", "启动时检查更新", SharedPreferencesUtil.UPDATE_CHECK_ON_START,
-                    "每次冷启动在首屏之后从 GitHub（直连失败会依次尝试内置镜像）检查新版本，发现更新时弹窗提示；默认开启，不想让它联网可以关掉",
+                    "启动或回到前台时从 GitHub（直连失败会依次尝试内置镜像）检查新版本，最短间隔 6 小时；"
+                            + "网络失败会自动重试，发现更新时弹窗提示。默认开启，不想联网可以关掉",
                     "true"));
 
             sectionList.add(new SettingSection("title", "视觉与动画", "", "", ""));
@@ -111,10 +112,11 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
             sectionList.add(new SettingSection("switch", "提示样式（气泡/横条）", SharedPreferencesUtil.SNACKBAR_ENABLE,
                     "打开此选项，会启用新提示信息显示方式", "true"));
             sectionList.add(new SettingSection("switch", "新版开屏动画", SharedPreferencesUtil.SPLASH_NEW_UI,
-                    "新版开屏为「图标+粉色短线+氛围光晕」，觉得图标不协调可关闭，回到纯黑+文字的旧开屏", "true"));
+                    "新版开屏为「图标+粉色短线+氛围光晕」，觉得图标不协调可关闭，回到纯黑+文字的旧开屏；"
+                            + "仅在打开「启动时等待请求完成」时完整播放", "true"));
             sectionList.add(new SettingSection("switch", "启动时等待请求完成", "splash_wait_requests",
                     "打开后启动会先等 Cookie 续期/刷新与终端接口返回、并等开屏打字动画播完再进首页，"
-                            + "开屏动画能完整看到；弱网最多多等 6 秒。默认关闭（开屏立刻进入）", "false"));
+                            + "开屏动画能完整看到；弱网最多多等 6 秒。默认关闭（直接沿用系统首帧图标，开屏立刻进入）", "false"));
         }
         return sectionList;
     }

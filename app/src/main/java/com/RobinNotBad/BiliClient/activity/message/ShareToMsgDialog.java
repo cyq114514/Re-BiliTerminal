@@ -132,8 +132,10 @@ public class ShareToMsgDialog extends BottomSheetDialogFragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.dialog_share_to_msg, container, false);
-        //对话框不在 Activity 的 setContentView 路径上，需要单独应用一次主题色
+        //对话框不在 Activity 的 setContentView 路径上，需要单独应用一次主题色/透明度
         ThemeApplier.apply(view);
+        com.RobinNotBad.BiliClient.ui.theme.UiAlpha.apply(view);
+        com.RobinNotBad.BiliClient.ui.theme.UiAlpha.installOnLists(view);
         return view;
     }
 
@@ -152,7 +154,10 @@ public class ShareToMsgDialog extends BottomSheetDialogFragment {
             android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
             int insetH = (int) (dm.widthPixels * 0.08);
             int insetV = (int) (dm.heightPixels * 0.06);
-            view.setPadding(insetH, insetV, insetH, insetV);
+            //底部比顶部多留一点：发送键已经居中，但圆屏底部弦宽很窄，6% 时按钮
+            //右下角仍会压到弧线上（用户反馈只露一条边）。10% 让居中按钮四角都进圆。
+            int insetB = (int) (dm.heightPixels * 0.10);
+            view.setPadding(insetH, insetV, insetH, insetB);
         }
 
         RecyclerView userList = view.findViewById(R.id.share_user_list);

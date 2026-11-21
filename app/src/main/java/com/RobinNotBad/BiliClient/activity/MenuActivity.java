@@ -2,8 +2,10 @@ package com.RobinNotBad.BiliClient.activity;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Process;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -39,6 +41,7 @@ import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity;
 import com.RobinNotBad.BiliClient.adapter.MenuGridAdapter;
 import com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
@@ -61,6 +64,26 @@ public class MenuActivity extends BaseActivity {
     private MaterialButton dynamicButton;
     private MaterialButton messageButton;
     private MenuGridAdapter menuGridAdapter;
+    /** 根菜单双击返回：第一次提示，2 秒内第二次才退出（兼容手表右滑模拟返回键） */
+    private long lastBackPressedAt;
+
+    /**
+     * 动态/消息未读数由启动后的后台任务写入 SharedPreferences。
+     *
+     * <p>用户可能在应用刚进来（请求还没回来）就点标题栏开菜单：此时 onCreate/onResume
+     * 读到的都是旧值（通常是 0），之后请求完成也没有任何东西通知菜单，红点就一直不出现。
+     * 监听这两个 key，请求一回来就把角标补上；新旧两版菜单共用 {@link #refreshBadges()}。
+     */
+    private final SharedPreferences.OnSharedPreferenceChangeListener badgePrefListener =
+            new SharedPreferences.OnSharedPreferenceChangeListener() {
+                @Override
+                public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
+                    if (SharedPreferencesUtil.DYNAMIC_UPDATE_NUM.equals(key)
+                            || SharedPreferencesUtil.MESSAGE_UPDATE_NUM.equals(key)) {
+                        runOnUiThread(MenuActivity.this::refreshBadges);
+                    }
+                }
+            };
 
     /**
      * 在排序设置和Splash中使用到的，
@@ -92,6 +115,10 @@ public class MenuActivity extends BaseActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_menu);
+
+        //先注册再读未读数：后台任务可能在 onCreate 期间就把新值写进来，避免读到旧值又漏掉通知
+        SharedPreferences badgePrefs = SharedPreferencesUtil.getSharedPreferences();
+        if (badgePrefs != null) badgePrefs.registerOnSharedPreferenceChangeListener(badgePrefListener);
 
 
         time = System.currentTimeMillis();
@@ -214,6 +241,9 @@ public class MenuActivity extends BaseActivity {
             }
         }
 
+        //把 onCreate 期间可能刚刚返回的未读数补到菜单上（旧版按钮/新版徽章都走这里）
+        refreshBadges();
+
         //首次安装/升级到新版本后，首次进入主菜单时自动打开当前版本的更新日志
         String lastVersion = SharedPreferencesUtil.getString(SharedPreferencesUtil.last_version, "");
         if (!BuildConfig.VERSION_NAME.equals(lastVersion)) {
@@ -225,10 +255,6 @@ public class MenuActivity extends BaseActivity {
                 startActivity(logIntent);
             }
         }
-
-        //应用内自动检查更新：静默执行（进程内一次），发现新版本且未被忽略时弹一次性提示；
-        //网络不通/接口异常时完全静默，不打扰使用
-        UpdateManager.autoCheck(this);
 
         Log.e("debug", "MenuActivity onCreate in: " + (System.currentTimeMillis() - time));
     }
@@ -242,28 +268,42 @@ public class MenuActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        //自动检查更新：回到主菜单才触发（UpdateManager 内部读开关、6h 节流、失败重试），
+        //不在播放/看图页弹更新框，避免打断正在做的事；常驻进程回前台也能重新检查
+        UpdateManager.autoCheck(this);
         Log.e("debug", "MenuActivity onResume in: " + (System.currentTimeMillis() - time));
+        refreshBadges();
+    }
+
+    /** 把最新的动态/消息未读数刷到菜单（新版徽章与旧版按钮共用）。 */
+    private void refreshBadges() {
+        if (isFinishing() || isDestroyed()) return;
+
+        int dynamicNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
+        int messageNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
+
         if (menuGridAdapter != null) {
             //新版菜单：更新数以徽章形式刷新
-            menuGridAdapter.updateBadge("dynamic", SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0));
-            menuGridAdapter.updateBadge("message", SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0));
+            menuGridAdapter.updateBadge("dynamic", dynamicNum);
+            menuGridAdapter.updateBadge("message", messageNum);
         }
         if (dynamicButton != null) {
             String btnText = Objects.requireNonNull(btnNames.get("dynamic")).first;
-            int updateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
-            if (updateNum > 0) {
-                btnText = btnText + " (" + updateNum + ")";
-            }
+            if (dynamicNum > 0) btnText = btnText + " (" + dynamicNum + ")";
             dynamicButton.setText(btnText);
         }
         if (messageButton != null) {
             String messageBtnText = Objects.requireNonNull(btnNames.get("message")).first;
-            int messageUpdateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
-            if (messageUpdateNum > 0) {
-                messageBtnText = messageBtnText + " (" + messageUpdateNum + ")";
-            }
+            if (messageNum > 0) messageBtnText = messageBtnText + " (" + messageNum + ")";
             messageButton.setText(messageBtnText);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        SharedPreferences badgePrefs = SharedPreferencesUtil.getSharedPreferences();
+        if (badgePrefs != null) badgePrefs.unregisterOnSharedPreferenceChangeListener(badgePrefListener);
+        super.onDestroy();
     }
 
     //长按"推荐"刷新视频（新旧两版菜单共用）
@@ -323,7 +363,43 @@ public class MenuActivity extends BaseActivity {
         }
     }
 
+    @Override
+    public void onBackPressed() {
+        //沿用「禁用返回键」开关：开启时返回仍然不退出，只能用菜单里的退出按钮
+        if (SharedPreferencesUtil.getBoolean("back_disable", false)) return;
+        long now = SystemClock.uptimeMillis();
+        if (now - lastBackPressedAt < 2000) {
+            super.onBackPressed();
+            return;
+        }
+        lastBackPressedAt = now;
+        MsgUtil.showMsg("再滑一次退出应用");
+    }
+
+    /** 菜单里的「退出」：先确认再杀进程。 */
+    private void confirmExit() {
+        new AdaptiveDialog.Builder(this)
+                .setTitle("退出应用")
+                .setMessage("确定要退出 Re：哔哩终端 吗？")
+                .setPositiveButton("退出", (dialog, which) -> doExit())
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void doExit() {
+        InstanceActivity instance = BiliTerminal.getInstanceActivityOnTop();
+        if (instance != null && !instance.isDestroyed()) instance.finish();
+        //主动退出属于正常退出任务，onDestroy 来不及执行（进程被杀），
+        //这里必须先清掉冷启动恢复记录，否则下次打开会回到退出前的页面
+        ResumePageUtil.clear();
+        Process.killProcess(Process.myPid());
+    }
+
     private void killAndJump(String name) {
+        if ("exit".equals(name)) {
+            confirmExit();
+            return;
+        }
         if (btnNames.containsKey(name)) {
             Class<? extends InstanceActivity> target = Objects.requireNonNull(btnNames.get(name)).second;
             InstanceActivity top = BiliTerminal.getInstanceActivityOnTop();
@@ -345,13 +421,7 @@ public class MenuActivity extends BaseActivity {
             }
         } else {
             switch (name) {
-                case "exit": //退出按钮
-                    InstanceActivity instance = BiliTerminal.getInstanceActivityOnTop();
-                    if (instance != null && !instance.isDestroyed()) instance.finish();
-                    //主动退出属于正常退出任务，onDestroy 来不及执行（进程被杀），
-                    //这里必须先清掉冷启动恢复记录，否则下次打开会回到退出前的页面
-                    ResumePageUtil.clear();
-                    Process.killProcess(Process.myPid());
+                case "exit": //退出按钮已在方法入口二次确认
                     break;
                 case "login": //登录按钮
                     Intent intent = new Intent();

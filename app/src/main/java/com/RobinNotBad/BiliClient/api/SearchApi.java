@@ -180,9 +180,13 @@ public class SearchApi {
         url.append("&seid=").append(seidFor(keyword));
         String json = NetWorkUtil.getJson(ConfInfoApi.signWBI(url.toString())).toString();
         ApiResponse<SearchTypeData> resp = GsonUtil.fromJson(json, new com.google.gson.reflect.TypeToken<ApiResponse<SearchTypeData>>(){}.getType());
-        if (resp == null || !resp.isSuccess() || resp.data == null) return null;
+        //语义：null = 请求/接口失败；空 JsonArray = 请求成功但没有结果。
+        //B 站分类搜索在“搜不到”时经常返回 data/result 为空而不是空数组，调用方此前
+        //把 null 一律当网络错误，于是搜一个不存在的用户会显示“请检查网络”。
+        if (resp == null || !resp.isSuccess()) return null;
+        if (resp.data == null) return new com.google.gson.JsonArray();
         saveSeid(keyword, resp.data.seid);
-        return resp.data.result;
+        return resp.data.result != null ? resp.data.result : new com.google.gson.JsonArray();
     }
 
     /**

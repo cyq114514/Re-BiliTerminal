@@ -1,0 +1,19 @@
+# Netlify 站点配置（官网）
+#
+# 部署策略：官网只在推 tag 发版时更新，普通 commit / PR 不更新线上站点。
+#   - 普通 push / PR：ignore 命令以 0 退出，Netlify 跳过构建（不更新线上）。
+#   - 发版：CI 的 deploy-site job（.github/workflows/ci.yml）在 tag 上直接用
+#     Netlify CLI 上传 site/ + netlify/functions/，不经过这里的自动构建。
+#   - 建议同时在 Netlify 后台把 Build status 设为 Stopped builds（双保险），
+#     CLI 手动部署不受影响。
+
+[build]
+  # 纯静态站，没有构建命令；publish 目录与后台设置保持一致
+  publish = "site"
+  command = ""
+  # ignore 退出码 0 = 跳过本次构建。始终跳过，避免任何 push 自动发布官网。
+  ignore = "exit 0"
+
+# /api/update.json 由 Functions 同源代理 GitHub Release（见 site/_redirects）
+[functions]
+  directory = "netlify/functions"

@@ -1,20 +1,18 @@
 package com.RobinNotBad.BiliClient.adapter;
 
 import android.annotation.SuppressLint;
-import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
-import androidx.appcompat.content.res.AppCompatResources;
-import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.listener.OnItemClickListener;
-import com.google.android.material.button.MaterialButton;
+import com.RobinNotBad.BiliClient.ui.widget.PlayerChipStyle;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelectorAdapter.QualityHolder> {
     private String[] qualityNames;
@@ -56,9 +54,9 @@ public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelector
     @NonNull
     @Override
     public QualityHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        ContextThemeWrapper contextWrapper = new ContextThemeWrapper(parent.getContext(), R.style.Theme_BiliClient);
-        View view = LayoutInflater.from(contextWrapper)
-                .inflate(R.layout.cell_episode, parent, false);
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.cell_player_chip, parent, false);
+        ToolsUtil.applyPressScale(view);
         return new QualityHolder(view);
     }
 
@@ -79,27 +77,19 @@ public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelector
 
     public class QualityHolder extends RecyclerView.ViewHolder {
         private OnItemClickListener listener;
-        private final MaterialButton button;
+        private final TextView chip;
 
         public QualityHolder(View view) {
             super(view);
-            button = itemView.findViewById(R.id.btn);
+            chip = itemView.findViewById(R.id.chip_text);
         }
 
         void bind(int currentIndex, boolean isSelected) {
             if (currentIndex < 0 || qualityNames == null || currentIndex >= qualityNames.length)
                 return;
-            button.setText(qualityNames[currentIndex]);
-            if (isSelected) {
-                button.setTextColor(0xcc262626);
-                ViewCompat.setBackgroundTintList(button, AppCompatResources.getColorStateList(itemView.getContext(),
-                        R.color.background_button_selected));
-            } else {
-                button.setTextColor(ContextCompat.getColor(button.getContext(), R.color.textwhite));
-                ViewCompat.setBackgroundTintList(button,
-                        AppCompatResources.getColorStateList(itemView.getContext(), R.color.background_button));
-            }
-            button.setOnClickListener(v -> {
+            chip.setText(qualityNames[currentIndex]);
+            PlayerChipStyle.apply(chip, isSelected);
+            chip.setOnClickListener(v -> {
                 setSelectedItemIndex(currentIndex);
                 if (listener != null) {
                     listener.onItemClick(currentIndex);

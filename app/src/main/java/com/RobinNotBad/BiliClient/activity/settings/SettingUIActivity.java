@@ -29,6 +29,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 public class SettingUIActivity extends BaseActivity {
 
     private EditText uiScaleInput, uiPaddingH, uiPaddingV, density_input;
+    private EditText panelAlphaInput;
     private EditText bgDimInput;
     private SwitchMaterial bgSwitch;
     private TextView bgImageState;
@@ -76,6 +77,10 @@ public class SettingUIActivity extends BaseActivity {
             DisplayMetrics displayMetrics = new DisplayMetrics();
             getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
             density_input.setText(String.valueOf((density == -1 ? displayMetrics.densityDpi + "(默认)" : density)));
+
+            panelAlphaInput = findViewById(R.id.ui_panel_alpha_input);
+            panelAlphaInput.setText(String.valueOf(
+                    SharedPreferencesUtil.getInt(SharedPreferencesUtil.UI_PANEL_ALPHA, 0)));
 
             SwitchMaterial newUi = findViewById(R.id.switch_new_ui);
             newUi.setChecked(SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.NEW_UI_DESIGN, true));
@@ -142,6 +147,12 @@ public class SettingUIActivity extends BaseActivity {
                 SharedPreferencesUtil.putBoolean("titlebar_fade", isChecked);
                 MsgUtil.showMsg(isChecked ? "顶栏渐隐黑已开启\n返回页面即生效" : "顶栏渐隐黑已关闭\n返回页面即生效");
             });
+
+            SwitchMaterial quickSwipe = findViewById(R.id.switch_quick_swipe);
+            quickSwipe.setChecked(SharedPreferencesUtil.getBoolean(
+                    SharedPreferencesUtil.QUICK_SWIPE_ENABLE, true));
+            quickSwipe.setOnCheckedChangeListener((buttonView, isChecked) ->
+                    SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.QUICK_SWIPE_ENABLE, isChecked));
 
             bgSwitch = findViewById(R.id.switch_bg_image);
             bgSwitch.setChecked(BackgroundManager.isEnabled());
@@ -293,6 +304,18 @@ public class SettingUIActivity extends BaseActivity {
                 SharedPreferencesUtil.putInt(BackgroundManager.KEY_DIM, Math.max(0, Math.min(100, dim)));
             } catch (NumberFormatException e) {
                 Logu.i("bg_dim", "非法输入已忽略：" + bgDimInput.getText().toString());
+            }
+        }
+
+        //卡片/胶囊透明度：0 = 当前效果，100 = 完全透明；越界不保存
+        if (panelAlphaInput != null && !panelAlphaInput.getText().toString().isEmpty()) {
+            try {
+                int alpha = Integer.parseInt(panelAlphaInput.getText().toString());
+                if (alpha >= 0 && alpha <= 100) {
+                    SharedPreferencesUtil.putInt(SharedPreferencesUtil.UI_PANEL_ALPHA, alpha);
+                }
+            } catch (NumberFormatException e) {
+                Logu.i("ui_alpha", "非法输入已忽略：" + panelAlphaInput.getText().toString());
             }
         }
     }

@@ -32,6 +32,11 @@ import java.util.HashMap;
 public class MessageActivity extends InstanceActivity {
     private RecyclerView sessionsView;
     private SwipeRefreshLayout swipeRefreshLayout;
+    private PrivateMsgSessionsAdapter sessionsAdapter;
+    private boolean viewReady;
+    private boolean firstResume = true;
+    private boolean loadingSessions;
+    private boolean loadingUnread;
 
     @SuppressLint({"SetTextI18n", "InflateParams"})
     @Override
@@ -41,16 +46,18 @@ public class MessageActivity extends InstanceActivity {
         asyncInflate(R.layout.activity_message, (layoutView, resId) -> {
             SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
             this.swipeRefreshLayout = swipeRefreshLayout;
-            swipeRefreshLayout.setEnabled(false);
+            //此前禁用下拉刷新，会话/未读只能靠重进页面更新；打开后返回消息页也能手动刷
+            swipeRefreshLayout.setEnabled(true);
+            swipeRefreshLayout.setOnRefreshListener(this::refreshAll);
             swipeRefreshLayout.setRefreshing(true);
 
-            MaterialCardView settingBtn = findViewById(R.id.setting_btn);
+            View settingBtn = findViewById(R.id.setting_btn);
             settingBtn.setOnClickListener(view -> {
                 Intent intent = new Intent(this, MessageSettingsActivity.class);
                 startActivity(intent);
             });
 
-            MaterialCardView reply = findViewById(R.id.reply);
+            View reply = findViewById(R.id.reply);
             reply.setOnClickListener(view -> {
                 Intent intent = new Intent();
                 intent.setClass(this, NoticeActivity.class);
@@ -59,7 +66,7 @@ public class MessageActivity extends InstanceActivity {
                 ((TextView) findViewById(R.id.reply_text)).setText("回复我的");
             });
 
-            MaterialCardView like = findViewById(R.id.like);
+            View like = findViewById(R.id.like);
             like.setOnClickListener(view -> {
                 Intent intent = new Intent();
                 intent.setClass(this, NoticeActivity.class);
@@ -68,7 +75,7 @@ public class MessageActivity extends InstanceActivity {
                 ((TextView) findViewById(R.id.like_text)).setText("收到的赞");
             });
 
-            MaterialCardView at = findViewById(R.id.at);
+            View at = findViewById(R.id.at);
             at.setOnClickListener(view -> {
                 Intent intent = new Intent();
                 intent.setClass(this, NoticeActivity.class);
@@ -77,7 +84,7 @@ public class MessageActivity extends InstanceActivity {
                 ((TextView) findViewById(R.id.at_text)).setText("@我");
             });
 
-            MaterialCardView system = findViewById(R.id.system);
+            View system = findViewById(R.id.system);
             system.setOnClickListener(view -> {
                 Intent intent = new Intent();
                 intent.setClass(this, NoticeActivity.class);
@@ -88,37 +95,76 @@ public class MessageActivity extends InstanceActivity {
             sessionsView = findViewById(R.id.sessions_list);
             sessionsView.setNestedScrollingEnabled(false);
 
-            CenterThreadPool.run(() -> {
-                try {
-                    JSONObject stats = MessageApi.getUnread();
-                    runOnUiThread(() -> {
-                        try {
-                            if (stats != null) {
-                                ((TextView) findViewById(R.id.reply_text)).setText("回复我的"
-                                        + ((stats.getInt("reply") > 0) ? ("(" + stats.getInt("reply") + "未读)") : ""));
-                                ((TextView) findViewById(R.id.like_text)).setText(
-                                        "收到的赞" + ((stats.getInt("like") > 0) ? ("(" + stats.getInt("like") + "未读)") : ""));
-                                ((TextView) findViewById(R.id.at_text)).setText(
-                                        "@我" + ((stats.getInt("at") > 0) ? ("(" + stats.getInt("at") + "未读)") : ""));
-                            }
-                        } catch (Exception e) {
-                            MsgUtil.err(e);
-                        }
+            viewReady = true;
+            loadUnread();
+            loadSessions();
 
-                        View scrollView = findViewById(R.id.scrollView);
-                        scrollView.setFocusable(true);
-                        scrollView.setFocusableInTouchMode(true);
-                        scrollView.requestFocus();
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() -> MsgUtil.err(e));
-                }
-
-                loadSessions();
-            });
+            View scrollView = findViewById(R.id.scrollView);
+            scrollView.setFocusable(true);
+            scrollView.setFocusableInTouchMode(true);
+            scrollView.requestFocus();
 
             TutorialHelper.showTutorialList(this, R.array.tutorial_message, 5);
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        //首次 onResume 由 onCreate 的 loadUnread/loadSessions 负责；
+        //从私信页返回时再拉一次，会话未读徽章立即消失。
+        if (firstResume) {
+            firstResume = false;
+            return;
+        }
+        if (viewReady) refreshAll();
+    }
+
+    private void refreshAll() {
+        if (swipeRefreshLayout != null) swipeRefreshLayout.setRefreshing(true);
+        loadUnread();
+        loadSessions();
+    }
+
+    /** 顶部三个未读数；与会话列表分开请求，任何一个失败不影响另一个。 */
+    private void loadUnread() {
+        if (loadingUnread) return;
+        loadingUnread = true;
+        CenterThreadPool.run(() -> {
+            JSONObject stats = null;
+            Exception error = null;
+            try {
+                stats = MessageApi.getUnread();
+            } catch (Exception e) {
+                error = e;
+            }
+            final JSONObject finalStats = stats;
+            final Exception finalError = error;
+            runOnUiThread(() -> {
+                loadingUnread = false;
+                if (!viewReady || isFinishing() || isDestroyed()) return;
+                if (finalError != null) {
+                    MsgUtil.err(finalError);
+                    return;
+                }
+                if (finalStats == null) return;
+                try {
+                    //2×2 卡片每格只有半屏宽，未读数用紧凑的 (n)，不再写「n未读」
+                    ((TextView) findViewById(R.id.reply_text)).setText(
+                            "回复我的" + unreadSuffix(finalStats.optInt("reply", 0)));
+                    ((TextView) findViewById(R.id.like_text)).setText(
+                            "收到的赞" + unreadSuffix(finalStats.optInt("like", 0)));
+                    ((TextView) findViewById(R.id.at_text)).setText(
+                            "@我" + unreadSuffix(finalStats.optInt("at", 0)));
+                } catch (Exception e) {
+                    MsgUtil.err(e);
+                }
+            });
+        });
+    }
+
+    private static String unreadSuffix(int count) {
+        return count > 0 ? ("(" + count + ")") : "";
     }
 
     /**
@@ -126,8 +172,13 @@ public class MessageActivity extends InstanceActivity {
      * <p>排序：置顶优先（置顶时间晚的靠前）→ 未读优先 → 维持服务端原序。原先只按「未读优先」排，
      * 置顶但没未读的会话会被挤到未读会话后面，表现为「点了置顶、提示已置顶，位置却没变」。
      * Collections.sort 是稳定排序，同档内不打乱服务端给出的时间顺序。
+     *
+     * <p>刷新时复用已有 adapter（原地 submit），不重建 RecyclerView：从私信页返回时
+     * 会话列表不会跳回顶部。并发请求由 loadingSessions 挡掉，避免 onCreate 与 onResume 双发。
      */
     private void loadSessions() {
+        if (loadingSessions) return;
+        loadingSessions = true;
         CenterThreadPool.run(() -> {
             try {
                 ArrayList<PrivateMsgSession> sessionsList = PrivateMsgApi.getNewSessionsList(0, 20, 0, "web");
@@ -155,18 +206,27 @@ public class MessageActivity extends InstanceActivity {
                     }
                 } catch (Exception ignored) {}
 
-                PrivateMsgSessionsAdapter adapter = new PrivateMsgSessionsAdapter(this, sessionsList, userMap);
-                adapter.setOnSessionsChanged(this::loadSessions);
+                final ArrayList<PrivateMsgSession> finalSessions = sessionsList;
+                final HashMap<Long, UserInfo> finalUsers = userMap;
                 runOnUiThread(() -> {
-                    swipeRefreshLayout.setRefreshing(false);
-                    sessionsView.setLayoutManager(new CustomLinearManager(this));
-                    sessionsView.setAdapter(adapter);
+                    loadingSessions = false;
+                    if (swipeRefreshLayout != null) swipeRefreshLayout.setRefreshing(false);
+                    if (!viewReady || isFinishing() || isDestroyed()) return;
+                    if (sessionsAdapter == null) {
+                        sessionsAdapter = new PrivateMsgSessionsAdapter(this, finalSessions, finalUsers);
+                        sessionsAdapter.setOnSessionsChanged(this::loadSessions);
+                        sessionsView.setLayoutManager(new CustomLinearManager(this));
+                        sessionsView.setAdapter(sessionsAdapter);
+                    } else {
+                        sessionsAdapter.submit(finalSessions, finalUsers);
+                    }
                     SharedPreferencesUtil.putInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    swipeRefreshLayout.setRefreshing(false);
-                    MsgUtil.err(e);
+                    loadingSessions = false;
+                    if (swipeRefreshLayout != null) swipeRefreshLayout.setRefreshing(false);
+                    if (viewReady && !isFinishing() && !isDestroyed()) MsgUtil.err(e);
                 });
             }
         });

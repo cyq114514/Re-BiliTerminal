@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.View;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -40,9 +41,15 @@ import java.util.ArrayList;
 
 public class LocalListActivity extends InstanceActivity {
 
+    /** 二级「听歌模式」：只列纯音频缓存，主缓存页不再混入音频卡 */
+    public static final String EXTRA_AUDIO_ONLY = "audio_only";
+
     private SwipeRefreshLayout swipeRefreshLayout;
     private RecyclerView recyclerView;
     private final ArrayList<LocalVideo> videoList = new ArrayList<>(10);
+    /** 全量扫描里的纯音频条目；主页面只把它作为队列来源，二级页才显示 */
+    private final ArrayList<LocalVideo> audioList = new ArrayList<>(10);
+    private boolean audioOnlyMode;
     private LocalVideoAdapter adapter;
     private TextView emptyTip;
 
@@ -69,6 +76,7 @@ public class LocalListActivity extends InstanceActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        audioOnlyMode = getIntent().getBooleanExtra(EXTRA_AUDIO_ONLY, false);
         setContentView(R.layout.activity_simple_main_refresh);
         setMenuClick();
 
@@ -80,15 +88,24 @@ public class LocalListActivity extends InstanceActivity {
         emptyTip = findViewById(R.id.emptyTip);
 
         TextView pageName = findViewById(R.id.pageName);
-        pageName.setText("缓存");
+        pageName.setText(audioOnlyMode ? "听歌模式" : "缓存");
 
-        //听歌模式入口（1.3.3 反馈：缓存的音频不利用可惜）：把下载目录的 media 文件
-        //按缓存文件夹顺序灌进音频队列，复用收藏夹「听全部」的全屏听歌页与服务
+        //音频入口统一收进列表头的「听歌模式」二级页；主缓存页不再放顶部「听歌」chip，
+        //避免和二级入口重复，也给标题让出宽度。二级页里才显示「播放全部」。
         View localAudioBtn = findViewById(R.id.local_audio_btn);
-        localAudioBtn.setVisibility(View.VISIBLE);
-        //本地视频播放入口（2026-11-15 反馈）：SAF 挑一个视频文件直接播
+        localAudioBtn.setVisibility(View.GONE);
+        //本地视频播放入口（2026-11-15 反馈）：SAF 挑一个视频文件直接播；听歌模式页不需要
         View localVideoBtn = findViewById(R.id.local_video_btn);
-        localVideoBtn.setVisibility(View.VISIBLE);
+        localVideoBtn.setVisibility(audioOnlyMode ? View.GONE : View.VISIBLE);
+        //听歌 chip 收起后不能继续让「视频」chip 锚在它左边：GONE 锚点会把 chip 甩到屏幕左缘
+        if (localVideoBtn.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams vlp = (RelativeLayout.LayoutParams) localVideoBtn.getLayoutParams();
+            vlp.removeRule(RelativeLayout.START_OF);
+            vlp.removeRule(RelativeLayout.LEFT_OF);
+            vlp.addRule(RelativeLayout.START_OF, R.id.timeText);
+            vlp.addRule(RelativeLayout.LEFT_OF, R.id.timeText);
+            localVideoBtn.setLayoutParams(vlp);
+        }
         localVideoBtn.setOnClickListener(v -> {
             //先走统一安全入口；无处理者时继续降级，而不是让 ActivityNotFoundException 杀掉进程
             if (PickImageUtil.launchSafe(pickVideoLauncher, "video/*")) return;
@@ -107,14 +124,16 @@ public class LocalListActivity extends InstanceActivity {
             MsgUtil.showMsg("此设备没有视频文件选择器\n可先用文件管理器打开，或从缓存列表播放");
         });
 
-        //刷新+听歌+视频三颗 chip 占宽，标题右留白同步让位（与 RefreshMainActivity 同一套逻辑）
+        //主页面只剩「选择视频」一颗 chip，听歌模式页没有 chip：标题右留白按模式收窄
         View pageTitle = findViewById(R.id.pageName);
         if (pageTitle != null) {
             android.view.ViewGroup.LayoutParams lp = pageTitle.getLayoutParams();
-            if (lp instanceof android.view.ViewGroup.MarginLayoutParams)
-                ((android.view.ViewGroup.MarginLayoutParams) lp).setMarginEnd((int) (140 * getResources().getDisplayMetrics().density + 0.5f));
+            if (lp instanceof android.view.ViewGroup.MarginLayoutParams) {
+                int endDp = audioOnlyMode ? 0 : 80;
+                ((android.view.ViewGroup.MarginLayoutParams) lp).setMarginEnd(
+                        (int) (endDp * getResources().getDisplayMetrics().density + 0.5f));
+            }
         }
-        localAudioBtn.setOnClickListener(v -> startAudioQueue(0));
 
         if (!FileUtil.checkStoragePermission()) {
             FileUtil.requestStoragePermission(this);
@@ -125,13 +144,17 @@ public class LocalListActivity extends InstanceActivity {
             //先构建到临时列表再并入 videoList：此时 adapter 尚未挂到 UI，主线程不可能并发读
             ArrayList<LocalVideo> initialList = new ArrayList<>(10);
             scan(initialList, FileUtil.getVideoDownloadPath());
-            videoList.addAll(initialList);
-            adapter = new LocalVideoAdapter(this, videoList);
-            //点纯音频条目=从这条开始连播整个缓存（1.3.5 反馈 R1：此前点条目只播单曲，
-            //用户以为"缓存不能自动接下一首"；标题栏「听歌」保留为"从头听"）
+            applyScan(initialList);
+            adapter = new LocalVideoAdapter(this, videoList, audioOnlyMode);
+            //二级页里点纯音频条目=从这条开始连播整个音频队列
             adapter.setOnAudioItemClickListener(position -> startAudioQueue(audioIndexOf(position)));
-            //列表头「听缓存（音频）」：不必先进收藏夹，直接在缓存页起播整个缓存队列
-            adapter.setOnAudioEntryClickListener(() -> startAudioQueue(0));
+            if (audioOnlyMode) {
+                //二级页列表头「播放全部」：从第一首开始
+                adapter.setOnAudioEntryClickListener(() -> startAudioQueue(0));
+            } else {
+                //主缓存页列表头「听歌模式」：进入只列音频的二级页，不再直接起播
+                adapter.setOnAudioEntryClickListener(this::openAudioOnlyPage);
+            }
 
             adapter.setOnLongClickListener(position -> {
                 if (position < 0 || position >= videoList.size()) return;
@@ -186,6 +209,8 @@ public class LocalListActivity extends InstanceActivity {
                     if (mark.exists())
                         continue;
 
+                    //只有音频文件、没有 video.mp4：这条要收进二级「听歌模式」，不再混在视频列表
+                    localVideo.audioOnly = !videoFile.exists() && audioFile.exists();
                     localVideo.sizeList.add(mediaFile.length());
                     localVideo.videoFileList.add(mediaFile.toString());
                     localVideo.danmakuFileList.add(danmakuFile.toString()); // 单集视频
@@ -195,6 +220,7 @@ public class LocalListActivity extends InstanceActivity {
                 } else {
                     File[] pages = video.listFiles(); // 分页视频
                     if (pages != null) {
+                        boolean allAudio = true;
                         for (File page : pages) {
                             if (page.isDirectory()) {
                                 File mark = new File(page, ".DOWNLOADING");
@@ -210,6 +236,7 @@ public class LocalListActivity extends InstanceActivity {
                                         : (pageAudioFile.exists() ? pageAudioFile : null);
 
                                 if (pageMediaFile != null) {
+                                    if (pageMediaFile == pageVideoFile) allAudio = false;
                                     localVideo.pageList.add(page.getName());
                                     localVideo.sizeList.add(pageMediaFile.length());
                                     localVideo.videoFileList.add(pageMediaFile.toString());
@@ -217,6 +244,7 @@ public class LocalListActivity extends InstanceActivity {
                                 }
                             }
                         }
+                        localVideo.audioOnly = allAudio && !localVideo.videoFileList.isEmpty();
                         localVideo.calcTotalSize();
                         if (localVideo.videoFileList.size() > 0)
                             into.add(localVideo);
@@ -226,15 +254,46 @@ public class LocalListActivity extends InstanceActivity {
         }
     }
 
+    /** 按 audioOnly 拆成视频/音频两张表；二级页把音频表当主列表。 */
+    private void applyScan(ArrayList<LocalVideo> all) {
+        videoList.clear();
+        audioList.clear();
+        for (LocalVideo item : all) {
+            if (item == null) continue;
+            if (item.audioOnly) audioList.add(item);
+            else videoList.add(item);
+        }
+        if (audioOnlyMode) {
+            videoList.clear();
+            videoList.addAll(audioList);
+        }
+    }
+
+    /** 主缓存页 → 二级「听歌模式」页（只列音频）。 */
+    private void openAudioOnlyPage() {
+        if (audioList.isEmpty()) {
+            MsgUtil.showMsg("还没有缓存音频");
+            return;
+        }
+        Intent intent = new Intent(this, LocalListActivity.class);
+        intent.putExtra(EXTRA_AUDIO_ONLY, true);
+        startActivity(intent);
+    }
+
     /**
      * 把缓存列表展开成音频队列条目：单集 1 条，多P 每 P 一条，顺序与列表一致。
      *
      * <p>只负责组装，不决定从哪首开始——听歌按钮传 0，点某条音频则传该条的展开下标。
+     * 主页面从 audioList 取，二级页 videoList 本身就是音频表；顺带过滤掉混在
+     * 多P 目录里的 video.mp4，避免听歌队列里混进视频文件。
      */
     private ArrayList<VideoCard> buildAudioItems() {
         ArrayList<VideoCard> items = new ArrayList<>();
-        for (LocalVideo localVideo : videoList) {
+        ArrayList<LocalVideo> source = audioOnlyMode ? videoList : audioList;
+        for (LocalVideo localVideo : source) {
             for (int i = 0; i < localVideo.videoFileList.size(); i++) {
+                String path = localVideo.videoFileList.get(i);
+                if (!path.endsWith("audio.m4a")) continue;
                 VideoCard card = new VideoCard();
                 //单集标题=文件夹名；分P 标题=文件夹名·分P 名，与本地选集页口径一致
                 boolean single = localVideo.videoFileList.size() == 1;
@@ -242,7 +301,7 @@ public class LocalListActivity extends InstanceActivity {
                         : localVideo.title + " · " + localVideo.pageList.get(i);
                 card.upName = "本地缓存";
                 card.cover = localVideo.cover;
-                card.localPath = localVideo.videoFileList.get(i);
+                card.localPath = path;
                 items.add(card);
             }
         }
@@ -349,13 +408,9 @@ public class LocalListActivity extends InstanceActivity {
 
     private void checkEmpty() {
         runOnUiThread(() -> {
-            if (videoList.isEmpty() && emptyTip != null) {
-                emptyTip.setVisibility(View.VISIBLE);
-            } else {
-                if (emptyTip != null) {
-                    emptyTip.setVisibility(View.GONE);
-                }
-            }
+            //空态已收进列表头（cell_local_header.local_empty），外部 emptyTip 永远隐藏，
+            //避免 centerVertical 的文字和固定的下载/听歌入口在屏幕中间叠在一起
+            if (emptyTip != null) emptyTip.setVisibility(View.GONE);
         });
     }
 
@@ -368,8 +423,7 @@ public class LocalListActivity extends InstanceActivity {
                 ArrayList<LocalVideo> newList = new ArrayList<>(10);
                 scan(newList, FileUtil.getVideoDownloadPath());
                 runOnUiThread(() -> {
-                    videoList.clear();
-                    videoList.addAll(newList);
+                    applyScan(newList);
                     if (adapter != null) adapter.notifyDataSetChanged();
                     swipeRefreshLayout.setRefreshing(false);
                     checkEmpty();

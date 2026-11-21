@@ -67,6 +67,20 @@ public class PrivateMsgSessionsAdapter
         this.cardRoundRadius = (int) context.getResources().getDimension(R.dimen.card_round);
     }
 
+    /**
+     * 原地替换会话数据（从私信页返回 / 下拉刷新）。
+     *
+     * <p>不重建 adapter，RecyclerView 的滚动位置不会跳回顶部；会话重新排序后
+     * 仍由 notifyDataSetChanged 让列表管理器按新顺序接管。
+     */
+    public void submit(ArrayList<PrivateMsgSession> sessions, HashMap<Long, UserInfo> users) {
+        sessionsList.clear();
+        if (sessions != null) sessionsList.addAll(sessions);
+        userMap.clear();
+        if (users != null) userMap.putAll(users);
+        notifyDataSetChanged();
+    }
+
     @NonNull
     @Override
     public PrivateMsgSessionsHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -183,6 +197,9 @@ public class PrivateMsgSessionsAdapter
                 "查看用户主页"};
         new AdaptiveDialog.Builder(context)
                 .setTitle("会话操作")
+                //手表 ROM 常把「右滑」映射成返回键，小弹窗上手指轻微抖动就可能把菜单关掉，
+                //列表项点击随之丢失。这里禁用返回/点外取消，只允许点条目或「取消」。
+                .setCancelable(false)
                 .setSingleChoiceItems(actions, -1, (dialog, which) -> {
                     dialog.dismiss();
                     if (which == 0) {

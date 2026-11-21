@@ -56,6 +56,7 @@ import com.RobinNotBad.BiliClient.api.PlayerApi;
 import com.RobinNotBad.BiliClient.api.VideoInfoApi;
 import com.RobinNotBad.BiliClient.api.WatchLaterApi;
 import com.RobinNotBad.BiliClient.model.PlayerData;
+import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.model.VideoInfo;
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
@@ -149,6 +150,8 @@ public class VideoInfoFragment extends BaseFragment {
     private ImageView like, coin, fav;
     /** 收藏结果早于视图/视频信息就绪时暂存；initView 设置完初始状态后补应用 */
     private Boolean pendingFavState = null;
+    private volatile Boolean watchLaterState = null; // null=还没查过；true=已在稍后再看
+    private boolean watchLaterBusy = false;
     private int coinAdd = 0;
     private boolean desc_expand = false, tags_expand = false;
     private Animation shakeAnimation;
@@ -507,16 +510,65 @@ public class VideoInfoFragment extends BaseFragment {
             favLauncher.launch(intent);
         });
 
-        //稍后再看
-        addWatchlater.setOnClickListener(view1 -> CenterThreadPool.run(() -> {
-            try {
-                int result = WatchLaterApi.add(videoInfo.aid);
-                if (result == 0) MsgUtil.showMsg("添加成功");
-                else MsgUtil.showMsg("添加失败，错误码：" + result);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }));
+        //稍后再看：详情页直接做成可取消的切换。首次点击不知道当前是否已在列表里，
+        //先拉一次列表查 aid；之后用本地状态，避免每次点击都拉全量列表。
+        //按钮文案在手表窄屏上会变长（取消稍后再看），因此窄屏字号收到 11sp。
+        int watchLaterTextSize = getResources().getConfiguration().screenWidthDp < 400 ? 11 : 13;
+        addWatchlater.setTextSize(watchLaterTextSize);
+        watchLaterBusy = false;
+        if (watchLaterState != null) {
+            addWatchlater.setText(watchLaterState ? "取消稍后再看" : "稍后再看");
+        }
+        addWatchlater.setOnClickListener(view1 -> {
+            if (watchLaterBusy) return;
+            watchLaterBusy = true;
+            addWatchlater.setEnabled(false);
+            addWatchlater.setText("处理中…");
+            CenterThreadPool.run(() -> {
+                try {
+                    boolean inList;
+                    if (watchLaterState != null) {
+                        inList = watchLaterState;
+                    } else {
+                        inList = false;
+                        ArrayList<VideoCard> list = WatchLaterApi.getWatchLaterList(WatchLaterApi.VIEWED_ALL);
+                        for (VideoCard card : list) {
+                            if (card != null && card.aid == videoInfo.aid) {
+                                inList = true;
+                                break;
+                            }
+                        }
+                    }
+                    final boolean wasInList = inList;
+                    int result = wasInList ? WatchLaterApi.delete(videoInfo.aid)
+                            : WatchLaterApi.add(videoInfo.aid);
+                    final boolean nowIn = !inList;
+                    runOnUiThread(() -> {
+                        if (!isAdded()) return;
+                        watchLaterBusy = false;
+                        addWatchlater.setEnabled(true);
+                        if (result == 0) {
+                            watchLaterState = nowIn;
+                            addWatchlater.setText(nowIn ? "取消稍后再看" : "稍后再看");
+                            MsgUtil.showMsg(nowIn ? "已添加稍后再看" : "已取消稍后再看");
+                        } else {
+                            addWatchlater.setText(watchLaterState != null && watchLaterState
+                                    ? "取消稍后再看" : "稍后再看");
+                            MsgUtil.showMsg((wasInList ? "取消失败，错误码：" : "添加失败，错误码：") + result);
+                        }
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        if (!isAdded()) return;
+                        watchLaterBusy = false;
+                        addWatchlater.setEnabled(true);
+                        addWatchlater.setText(watchLaterState != null && watchLaterState
+                                ? "取消稍后再看" : "稍后再看");
+                        MsgUtil.err(e);
+                    });
+                }
+            });
+        });
         addWatchlater.setOnLongClickListener(view1 -> {
             Intent intent = new Intent();
             intent.setClass(requireContext(), WatchLaterActivity.class);

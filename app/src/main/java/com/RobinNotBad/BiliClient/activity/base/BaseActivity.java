@@ -2,12 +2,15 @@ package com.RobinNotBad.BiliClient.activity.base;
 
 import static com.RobinNotBad.BiliClient.activity.dynamic.DynamicActivity.getRelayDynamicLauncher;
 
+import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -15,13 +18,17 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -35,27 +42,40 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
+import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
+import com.RobinNotBad.BiliClient.activity.user.HistoryActivity;
+import com.RobinNotBad.BiliClient.activity.user.WatchLaterActivity;
+import com.RobinNotBad.BiliClient.api.HistoryApi;
 import com.RobinNotBad.BiliClient.event.SnackEvent;
+import com.RobinNotBad.BiliClient.model.ApiResult;
 import com.RobinNotBad.BiliClient.model.AudioQueue;
+import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.service.AudioPlayerService;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
+import com.RobinNotBad.BiliClient.ui.theme.UiAlpha;
 import com.RobinNotBad.BiliClient.ui.widget.AmbientBackground;
 import com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.BackgroundManager;
+import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
 import com.RobinNotBad.BiliClient.util.CrashTrace;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
+import com.RobinNotBad.BiliClient.util.RoundGeometry;
+import com.RobinNotBad.BiliClient.util.TerminalContext;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
+
+import java.util.ArrayList;
 
 
 public class BaseActivity extends AppCompatActivity {
@@ -64,11 +84,22 @@ public class BaseActivity extends AppCompatActivity {
     public final ActivityResultLauncher<Intent> relayDynamicLauncher = getRelayDynamicLauncher(this);
     public boolean force_single_column = false;
 
+    /** 真正按圆屏几何处理：既开了「圆屏适配」，系统也报告圆屏 */
+    private boolean roundUi;
+    /** 默认圆屏内缩（px）。roundInsetT 用于没有顶栏的全屏提示页 */
+    private int roundInsetH, roundInsetB, roundInsetT;
+    /** 用户手设了「界面边距」时沿用旧逻辑，不再叠加默认圆屏内缩 */
+    private boolean customPaddingApplied;
+
     //顶部音频悬浮胶囊（音频服务活跃时显示，点击拉起全屏播放页）
     private View audioCapsule;
     private TextView audioCapsuleText;
     private Handler audioCapsuleHandler;
     private Runnable audioCapsuleRefresh;
+
+    //右边缘左滑快捷面板：GestureDetector 只“旁听”事件，不消费，页面原有滑动不受影响
+    private GestureDetector quickSwipeDetector;
+    private boolean quickSwipePanelShowing;
 
 
 
@@ -113,25 +144,42 @@ public class BaseActivity extends AppCompatActivity {
 
         int scrW = metrics.widthPixels;
         int scrH = metrics.heightPixels;
-        //圆屏内容区安全边距（适配审计 20261107 P2-1/2/3）：player_ui_round 此前只补偿顶栏与播放器，
-        //内容区（列表卡片、菜单网格底部、设置开关）四角没有任何安全机制。这里给默认内缩——
-        //水平 8% 屏宽、底部 6% 屏高；用户手设了「界面边距」时以用户值为准（只叠加历史的底部 3%）。
-        boolean roundScreen = SharedPreferencesUtil.getBoolean("player_ui_round", false);
+        //圆屏内容区安全边距。旧的 8% 水平 / 6% 底部在 384 圆屏上必然让 324px 宽卡片四角出圆
+        //（首卡顶边 y=68 时四角已到 194px，半径只有 192px）。这里改为：
+        //水平 12%，底部按内接圆算（约 18%）；顶部留给顶栏，没有顶栏的全屏提示页再补同样的顶边距。
+        //用户手设「界面边距」时仍以用户值为准（只叠加历史的底部 3%）。
+        boolean roundPref = SharedPreferencesUtil.getBoolean("player_ui_round", false);
+        roundUi = roundPref && getResources().getConfiguration().isScreenRound();
         if (paddingH_percent != 0 || paddingV_percent != 0) {
             Logu.d("debug", "调整边距");
             int paddingH = scrW * paddingH_percent / 100;
             int paddingT = scrH * paddingV_percent / 100;
             int paddingB = paddingT;
             //圆屏底部 3% 补偿从 padding_percent 分支里挪出独立判断（此前不开「界面边距」就完全失效）
-            if (roundScreen)
+            if (roundPref)
                 paddingB += scrH * 0.03;
             window_width = scrW - paddingH * 2;
             window_height = scrH - paddingT - paddingB;
             applyContentPadding(paddingH, paddingT, paddingH, paddingB);
-        } else if (roundScreen && roundContentInset()) {
-            Logu.d("round", "内容区默认安全边距");
-            int paddingH = (int) (scrW * 0.08);
-            int paddingB = (int) (scrH * 0.06);
+            customPaddingApplied = true;
+        } else if (roundPref && roundContentInset()) {
+            int paddingH;
+            int paddingB;
+            if (roundUi) {
+                //按内容宽度反算：让卡片顶边落在顶栏下方时四角仍在圆内。
+                //再留 3dp 安全边距：0.4px 的纯几何余量在描边/抗锯齿下看起来仍是"贴着圆边被切"
+                paddingH = Math.max(1, Math.round(scrW * 0.12f) + ToolsUtil.dp2px(3));
+                paddingB = Math.max(1, RoundGeometry.verticalInsetForWidth(scrW, scrH, scrW - paddingH * 2)
+                        + ToolsUtil.dp2px(3));
+                roundInsetH = paddingH;
+                roundInsetB = paddingB;
+                roundInsetT = paddingB;
+            } else {
+                //方屏/手机开了「圆屏适配」：保持旧观感，避免这次改动影响非圆设备
+                paddingH = (int) (scrW * 0.08);
+                paddingB = (int) (scrH * 0.06);
+            }
+            Logu.d("round", "内容区默认安全边距 " + paddingH + "/" + paddingB);
             window_width = scrW - paddingH * 2;
             window_height = scrH - paddingB;
             applyContentPadding(paddingH, 0, paddingH, paddingB);
@@ -211,6 +259,7 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     public void setContentView(int layoutResID) {
         super.setContentView(layoutResID);
+        applyRoundContentPadding();
         applyThemeColors();
         installAudioCapsule();
     }
@@ -218,6 +267,7 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     public void setContentView(View view) {
         super.setContentView(view);
+        applyRoundContentPadding();
         applyThemeColors();
         installAudioCapsule();
     }
@@ -225,6 +275,7 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     public void setContentView(View view, ViewGroup.LayoutParams params) {
         super.setContentView(view, params);
+        applyRoundContentPadding();
         applyThemeColors();
         installAudioCapsule();
     }
@@ -333,7 +384,12 @@ public class BaseActivity extends AppCompatActivity {
     private void applyThemeColors() {
         try {
             View content = findViewById(android.R.id.content);
-            if (content != null) ThemeApplier.apply(content);
+            if (content != null) {
+                ThemeApplier.apply(content);
+                //卡片/胶囊透明度：与主题色同一入口，默认 0 时 UiAlpha 直接返回
+                UiAlpha.apply(content);
+                UiAlpha.installOnLists(content);
+            }
         } catch (Throwable t) {
             //换色失败只影响观感，绝不能连累页面启动
             Logu.e("theme", "应用主题色失败：" + t);
@@ -377,15 +433,31 @@ public class BaseActivity extends AppCompatActivity {
     }
 
     /**
-     * 圆屏内容区默认安全边距的页面级豁免口（适配审计 20261107 §1.1）：
-     * NoSwipe 全屏页（播放器/短视频/看图，与氛围背景同一排除口径——它们各自管理圆屏布局，
-     * 再套一层内容边距会双重内缩）与伪装计算器页（刻意满屏，套边距反而露馅）不参与。
+     * 圆屏内容区默认安全边距的页面级豁免口。
+     *
+     * <p>只豁免真正自己管圆屏布局的全屏页（播放器/短视频/看图），不再按 NoSwipe 主题一刀切：
+     * DialogActivity（免责声明等提示框）与 TutorialActivity 也挂 NoSwipe 主题，但它们没有
+     * 自己的圆屏布局，之前被误豁免后 0 内缩，标题直接顶到 12px、关闭按钮在首屏外。
+     * 伪装计算器页刻意满屏，继续挡掉。
      */
     protected boolean roundContentInset() {
-        if (isNoSwipeThemedPage()) return false;
+        String cls = getClass().getSimpleName();
+        if ("PlayerActivity".equals(cls) || "ShortVideoPlayerActivity".equals(cls)
+                || "ImageViewerActivity".equals(cls)) return false;
         //伪装计算器页刻意满屏（套边距反而露馅）。它 extends Activity 不经过本类，正常到不了这里，
         //防御性按类名挡一道（instanceof 会因类型不相干直接编译失败）
-        return !"CalculatorActivity".equals(getClass().getSimpleName());
+        return !"CalculatorActivity".equals(cls);
+    }
+
+    /**
+     * 内容真正 inflate 之后再套一次圆屏内缩：没有顶栏的提示页需要补顶部安全边距，
+     * 而 {@code onCreate} 里还没法判断 R.id.top 是否存在。setContentView 的每个入口都会调。
+     */
+    private void applyRoundContentPadding() {
+        if (customPaddingApplied || !roundUi || !roundContentInset()) return;
+        View top = findViewById(R.id.top);
+        boolean hasTopBar = top != null && top.getVisibility() == View.VISIBLE;
+        applyContentPadding(roundInsetH, hasTopBar ? 0 : roundInsetT, roundInsetH, roundInsetB);
     }
 
     /**
@@ -438,6 +510,144 @@ public class BaseActivity extends AppCompatActivity {
         if (!SharedPreferencesUtil.getBoolean("back_disable", false)) super.onBackPressed();
     }
 
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        //只在非沉浸页旁听；播放器/看图/短视频自己管手势，不抢
+        if (!isNoSwipeThemedPage()
+                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.QUICK_SWIPE_ENABLE, true)) {
+            if (quickSwipeDetector == null) {
+                quickSwipeDetector = new GestureDetector(this, new QuickSwipeListener());
+            }
+            quickSwipeDetector.onTouchEvent(ev);
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private final class QuickSwipeListener extends GestureDetector.SimpleOnGestureListener {
+        @Override
+        public boolean onDown(MotionEvent e) {
+            return true;
+        }
+
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            if (quickSwipePanelShowing || e1 == null || e2 == null) return false;
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            //必须从右边缘起手，且是明确的向左横滑；避免和视频详情/收藏夹的左右翻页混淆
+            if (e1.getX() < screenWidth * 0.80f) return false;
+            float dx = e1.getX() - e2.getX();
+            float dy = Math.abs(e1.getY() - e2.getY());
+            if (dx < ToolsUtil.dp2px(70f) || dx < dy * 1.5f) return false;
+            if (Math.abs(velocityX) < 250f) return false;
+            showQuickPanel();
+            return true;
+        }
+    }
+
+    private void showQuickPanel() {
+        if (quickSwipePanelShowing || isFinishing()) return;
+        quickSwipePanelShowing = true;
+
+        try {
+        //4 个动作用 2×2 网格：AdaptiveDialog 的竖向列表在 384 圆屏上只分到一行高，
+        //后三个要滚动才能看到；2×2 两行就能全部露出，且每格仍有 48dp 触摸区。
+        final String[] labels = {"最近观看", "播放历史", "稍后再看", "搜索"};
+        int gap = ToolsUtil.dp2px(3);
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        for (int row = 0; row < 2; row++) {
+            LinearLayout rowView = new LinearLayout(this);
+            rowView.setOrientation(LinearLayout.HORIZONTAL);
+            for (int col = 0; col < 2; col++) {
+                TextView cell = new TextView(this);
+                cell.setText(labels[row * 2 + col]);
+                cell.setTextColor(0xFFFFFFFF);
+                cell.setTextSize(12);
+                cell.setGravity(Gravity.CENTER);
+                cell.setClickable(true);
+                cell.setFocusable(true);
+                GradientDrawable bg = new GradientDrawable();
+                //面板是临时浮层，不跟随全局卡片透明度：深色底保证任何页面/视频上都读得清
+                bg.setColor(0xCC262626);
+                bg.setCornerRadius(ToolsUtil.dp2px(8));
+                bg.setStroke(ToolsUtil.dp2px(1), 0x33FFFFFF);
+                cell.setBackground(bg);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        0, ToolsUtil.dp2px(44), 1f);
+                lp.setMargins(gap, gap, gap, gap);
+                cell.setLayoutParams(lp);
+                rowView.addView(cell);
+            }
+            grid.addView(rowView, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        //面板由明确的右边缘左滑触发，不存在“手指抖动误触”的问题；允许点外/返回关闭，
+        //省掉底部「取消」占的一整行，2×2 四格才能完整落在圆内。
+        grid.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        AdaptiveDialog.Builder builder = new AdaptiveDialog.Builder(this)
+                .setCancelable(true)
+                .setView(grid)
+                .setOnDismissListener(d -> quickSwipePanelShowing = false);
+        Dialog dialog = builder.create();
+        for (int row = 0; row < 2; row++) {
+            LinearLayout rowView = (LinearLayout) grid.getChildAt(row);
+            for (int col = 0; col < 2; col++) {
+                final int which = row * 2 + col;
+                rowView.getChildAt(col).setOnClickListener(v -> {
+                    dialog.dismiss();
+                    if (which == 0) openRecentWatched();
+                    else if (which == 1) startActivity(new Intent(this, HistoryActivity.class));
+                    else if (which == 2) startActivity(new Intent(this, WatchLaterActivity.class));
+                    else if (which == 3) startActivity(new Intent(this, SearchActivity.class));
+                });
+            }
+        }
+        dialog.show();
+        } catch (Throwable t) {
+            quickSwipePanelShowing = false;
+            Logu.e("quick", "快捷面板打开失败：" + t);
+            MsgUtil.showMsg("快捷面板打开失败：" + t.getClass().getSimpleName());
+        }
+    }
+
+    private void openRecentWatched() {
+        CenterThreadPool.run(() -> {
+            ArrayList<VideoCard> list = new ArrayList<>();
+            ApiResult result = new ApiResult();
+            Exception error = null;
+            try {
+                result = HistoryApi.getHistory(result, list);
+            } catch (Exception e) {
+                error = e;
+            }
+            final ApiResult finalResult = result;
+            final Exception finalError = error;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (finalError != null || finalResult.code != 0) {
+                    String msg = finalResult.message == null ? "" : finalResult.message;
+                    MsgUtil.showMsg("获取最近观看失败" + (msg.isEmpty() ? "" : "：" + msg));
+                    return;
+                }
+                VideoCard target = null;
+                for (VideoCard card : list) {
+                    if (card != null && card.aid > 0 && !"media_bangumi".equals(card.type)) {
+                        target = card;
+                        break;
+                    }
+                }
+                if (target == null) {
+                    MsgUtil.showMsg("没有最近观看记录");
+                    return;
+                }
+                TerminalContext.getInstance().enterVideoDetailPage(
+                        this, target.aid, target.bvid, "video");
+            });
+        });
+    }
+
     public void setPageName(String name) {
         TextView textView = findViewById(R.id.pageName);
         if (textView != null) textView.setText(name);
@@ -477,82 +687,255 @@ public class BaseActivity extends AppCompatActivity {
         }
 
         //圆屏适配
-
         TextView pagename = findViewById(R.id.pageName);
         if (pagename == null) return;
         //onStart 每次返回都会调到这里，asyncInflate 的页面还会在内容 setContentView 后再调一次。
         //同一个 pageName 视图只处理一遍：换成新视图（内容真正 inflate 出来）才重做，
-        //避免每次返回都 findViewById + 读 SP + 重设 LayoutParams（后者会触发 requestLayout）
-        if (pagename == roundAppliedOn) return;
-        roundAppliedOn = pagename;
-        //顶栏标题溢出时跑马灯（1.3.3 反馈：私信页效果好评，全局加入）；
-        //口径与 MarqueeTextView 完全一致，短标题不溢出不会滚动
-        MarqueeTextView.applyTo(pagename);
+        //避免每次返回都 findViewById + 读 SP + 重设 LayoutParams（后者会触发 requestLayout）。
+        //顶栏动作的「更多」收纳要在每次 onStart 都复核（批量/听歌等按钮可能晚于首帧才点亮）。
+        if (pagename != roundAppliedOn) {
+            roundAppliedOn = pagename;
+            //顶栏标题溢出时跑马灯（1.3.3 反馈：私信页效果好评，全局加入）；
+            //口径与 MarqueeTextView 完全一致，短标题不溢出不会滚动
+            MarqueeTextView.applyTo(pagename);
 
-        TextView clock = findViewById(R.id.timeText);
-        //这里的 null 判断是冗余的（上面已 return），保留只是避免把下面 40 行整体再缩进一级
-        if (pagename != null) {
+            TextView clock = findViewById(R.id.timeText);
             pagename.setMaxLines(1);
             pagename.setEllipsize(TextUtils.TruncateAt.END);
             if (SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
                 if (clock == null) {
                     //布局没有 timeText（如投票/音频页旧版顶栏）：圆屏重排依赖时钟居中，
-                    //缺它就跳过整套重排——否则这里每次进页都解引用 null 弹"圆屏适配执行错误"（E-01）
+                    //缺它就跳过整套重排，下面仍要执行顶栏动作收纳
                     Logu.d("round", "skip (no timeText)");
-                    return;
-                }
-                try {
-                    ViewGroup.LayoutParams params = pagename.getLayoutParams();
-                    int paddingH = (int) (window_width * 0.18);
-                    int paddingV = (int) (window_width * 0.03);
-                    pagename.setPadding(paddingH, paddingV, paddingH, 0);
-                    if (params instanceof RelativeLayout.LayoutParams) {
-                        RelativeLayout.LayoutParams clockParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                        clockParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
-                        clock.setLayoutParams(clockParams);
-                        clock.setAlpha(0.85f);
-                        clock.setTextSize(12);
+                } else {
+                    try {
+                        ViewGroup.LayoutParams params = pagename.getLayoutParams();
+                        int paddingH = (int) (window_width * 0.18);
+                        int paddingV = (int) (window_width * 0.03);
+                        pagename.setPadding(paddingH, paddingV, paddingH, 0);
+                        if (params instanceof RelativeLayout.LayoutParams) {
+                            //时钟原先贴着 y=0，圆屏顶部会切掉 1dp；整体下移 2dp，标题跟着下移同样距离，
+                            //两者相对间距不变
+                            int topShift = ToolsUtil.dp2px(2);
+                            RelativeLayout.LayoutParams clockParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                            clockParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+                            clockParams.topMargin = topShift;
+                            clock.setLayoutParams(clockParams);
+                            clock.setAlpha(0.85f);
+                            clock.setTextSize(12);
 
-                        RelativeLayout.LayoutParams pnParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                        pnParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
-                        pnParams.topMargin = (int) (window_height * 0.01) + ToolsUtil.sp2px(12);
-                        pnParams.bottomMargin = (int) (window_height * 0.01);
-                        pagename.setLayoutParams(pnParams);
-                        pagename.setPadding(0, 0, ToolsUtil.dp2px(5), 0);
+                            RelativeLayout.LayoutParams pnParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                            pnParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+                            pnParams.topMargin = (int) (window_height * 0.01) + ToolsUtil.sp2px(12) + topShift;
+                            pnParams.bottomMargin = (int) (window_height * 0.01);
+                            pagename.setLayoutParams(pnParams);
+                            pagename.setPadding(0, 0, ToolsUtil.dp2px(5), 0);
 
-                        //顶栏上的「刷新」按钮也必须重排：它原本靠 layout_toStartOf="@id/timeText" 定位，
-                        //而圆屏下时钟被居中，按钮会跟着落到屏幕中间、正好压住同样居中的标题。
-                        //圆屏下标题左右各留 18% 内边距（上面的 paddingH），那片区域是空的，
-                        //把按钮对齐到父容器左侧并垂直居中即可既落在可视圆内、又不遮字
-                        View btnRefresh = findViewById(R.id.btn_refresh);
-                        if (btnRefresh != null) {
-                            RelativeLayout.LayoutParams brParams = new RelativeLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                            brParams.addRule(RelativeLayout.ALIGN_PARENT_START);
-                            brParams.addRule(RelativeLayout.CENTER_VERTICAL);
-                            btnRefresh.setLayoutParams(brParams);
+                            //「回首页」小房子原本锚在 timeText 左侧；圆屏把 timeText 和标题
+                            //都改成居中后，它会压住标题左端的返回箭头。圆屏上顶栏两端本来就在
+                            //圆弧外，直接收进底部「⋮」；非圆屏保持 XML 的原始位置。
+                            View homeBtn = findViewById(R.id.home_btn);
+                            if (homeBtn != null && homeBtn.getVisibility() == View.VISIBLE) {
+                                homeBtn.setTag(R.id.round_overflow_hidden, Boolean.TRUE);
+                                homeBtn.setVisibility(View.GONE);
+                            }
+
+                            //顶栏左右两端的动作按钮（刷新/回首页/批量/听歌…）在圆屏上落在圆弧外，
+                            //再往下挪也放不进 68px 高的顶栏。统一在 setRound 末尾收进圆内「更多」按钮，
+                            //这里不再逐个把按钮对齐到父容器左右。
+                            Logu.d("round", "ok");
                         }
-                        //顶栏上锚定 timeText 的其他额外按钮同理：home_btn（详情页一键回首页）
-                        //在圆屏下会随居中的时钟压到居中的标题上（1.3.2 反馈截图）。首版照 btn_refresh
-                        //挪到父容器最左，真机上又嫌太靠边（圆屏页角被裁，图标孤零零）；改成贴在
-                        //居中标题的右边（END_OF pageName），与标题连成一小组，整体仍在可视圆内。
-                        //只在圆屏分支动它：其余共用布局的页面 home_btn 是 GONE，重排无副作用
-                        View homeBtn = findViewById(R.id.home_btn);
-                        if (homeBtn != null) {
-                            RelativeLayout.LayoutParams hbParams = new RelativeLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                            hbParams.addRule(RelativeLayout.END_OF, R.id.pageName);
-                            hbParams.addRule(RelativeLayout.CENTER_VERTICAL);
-                            hbParams.setMarginStart(ToolsUtil.dp2px(6));
-                            homeBtn.setLayoutParams(hbParams);
-                        }
-                        Logu.d("round", "ok");
+                    } catch (Throwable e) {
+                        MsgUtil.err("圆屏适配执行错误：", e);
                     }
-                } catch (Throwable e) {
-                    MsgUtil.err("圆屏适配执行错误：", e);
                 }
             }
         }
+
+        if (roundUi && roundContentInset()) {
+            //没有顶栏的提示页（Dialog/Tutorial/Catch）在这里补顶部安全边距；
+            //有顶栏的页面 hasTopBar=true，不会重复内缩。
+            applyRoundContentPadding();
+            refreshRoundTopbarOverflow();
+        } else if (roundOverflowButton != null) {
+            //自己管圆屏布局的全屏页（播放器/看图/短视频）不接管顶栏动作
+            roundOverflowButton.setVisibility(View.GONE);
+        }
+
+        //卡片/胶囊透明度：onStart 每次返回都复核一次，设置页改完返回立即生效；
+        //默认 0 且从未用过该设置时 apply/installOnLists 都在入口直接返回。
+        View decor = getWindow().getDecorView();
+        UiAlpha.apply(decor);
+        UiAlpha.installOnLists(decor);
+    }
+
+    // ---------------------------------------------------------------- 圆屏顶栏「更多」
+
+    /** 圆内「更多」按钮：32dp 视觉 + 48dp 触摸区，落在底部安全带（距底 3dp） */
+    private View roundOverflowButton;
+    private ViewGroup roundOverflowTop;
+    private final ArrayList<View> roundOverflowActions = new ArrayList<>();
+    private final ArrayList<String> roundOverflowLabels = new ArrayList<>();
+    private boolean roundOverflowRefreshScheduled;
+
+    private void ensureRoundOverflowButton() {
+        if (roundOverflowButton != null || !(getWindow().getDecorView() instanceof ViewGroup)) return;
+        final ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        TextView fab = new TextView(this);
+        fab.setText("⋮");
+        fab.setTextSize(20);
+        fab.setTextColor(0xFFFFFFFF);
+        fab.setGravity(Gravity.CENTER);
+        fab.setContentDescription("更多操作");
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(0x66000000);
+        bg.setStroke(ToolsUtil.dp2px(1), 0x40FFFFFF);
+        fab.setBackground(bg);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ToolsUtil.dp2px(32), ToolsUtil.dp2px(32),
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        //18% 底边距（384 下 68px）刚好容下 32dp 按钮 + 3dp 边距，不压列表最后一行
+        lp.bottomMargin = ToolsUtil.dp2px(3);
+        fab.setVisibility(View.GONE);
+        fab.setOnClickListener(v -> showRoundOverflowMenu());
+        decor.addView(fab, lp);
+        roundOverflowButton = fab;
+        //32dp 视觉按钮触摸区补到 48dp（Wear 最小点击目标），视觉不变
+        decor.post(() -> {
+            if (roundOverflowButton == null) return;
+            Rect hit = new Rect();
+            roundOverflowButton.getHitRect(hit);
+            int expand = ToolsUtil.dp2px(8);
+            hit.inset(-expand, -expand);
+            decor.setTouchDelegate(new TouchDelegate(hit, roundOverflowButton));
+        });
+    }
+
+    private void refreshRoundTopbarOverflow() {
+        ViewGroup top = findViewById(R.id.top);
+        if (top == null) {
+            if (roundOverflowButton != null) roundOverflowButton.setVisibility(View.GONE);
+            return;
+        }
+        ensureRoundOverflowButton();
+        if (top != roundOverflowTop) {
+            roundOverflowTop = top;
+            top.addOnLayoutChangeListener((v, left, topEdge, right, bottom,
+                                           oldLeft, oldTop, oldRight, oldBottom) ->
+                    scheduleRoundOverflowRefresh());
+        }
+        scheduleRoundOverflowRefresh();
+    }
+
+    private void scheduleRoundOverflowRefresh() {
+        if (roundOverflowRefreshScheduled) return;
+        final ViewGroup top = roundOverflowTop;
+        if (top == null) return;
+        roundOverflowRefreshScheduled = true;
+        top.post(() -> {
+            roundOverflowRefreshScheduled = false;
+            collectRoundOverflowActions();
+        });
+    }
+
+    /**
+     * 把顶栏里落到圆弧外的可见动作收进「更多」。
+     *
+     * <p>只收 clickable 的子 View，pageName/timeText 按引用排除；已经收过的按钮用 tag 记住，
+     * 避免 onStart 复核时把"自己收走的 GONE"当成"页面隐藏"而丢出菜单。
+     */
+    private void collectRoundOverflowActions() {
+        ViewGroup top = roundOverflowTop;
+        if (top == null) return;
+        TextView pageName = findViewById(R.id.pageName);
+        TextView clock = findViewById(R.id.timeText);
+        View decor = getWindow().getDecorView();
+        int screenW = decor.getWidth();
+        int screenH = decor.getHeight();
+        if (screenW <= 0 || screenH <= 0) return;
+        int cx = screenW / 2;
+        int cy = screenH / 2;
+        int radius = RoundGeometry.radius(screenW, screenH);
+        float tolerance = ToolsUtil.dp2px(2);
+
+        ArrayList<View> actions = new ArrayList<>();
+        ArrayList<String> labels = new ArrayList<>();
+        for (int i = 0; i < top.getChildCount(); i++) {
+            View child = top.getChildAt(i);
+            if (child == pageName || child == clock || child == roundOverflowButton) continue;
+            boolean hiddenByUs = Boolean.TRUE.equals(child.getTag(R.id.round_overflow_hidden));
+            if (child.getVisibility() != View.VISIBLE && !hiddenByUs) continue;
+            if (!child.isClickable()) continue;
+            if (hiddenByUs) {
+                actions.add(child);
+                labels.add(roundOverflowLabel(child, labels.size()));
+                continue;
+            }
+            Rect rect = new Rect();
+            if (!child.getGlobalVisibleRect(rect) || rect.isEmpty()) continue;
+            if (RoundGeometry.maxCornerDepth(rect, cx, cy, radius) > tolerance) {
+                actions.add(child);
+                labels.add(roundOverflowLabel(child, labels.size()));
+            }
+        }
+
+        //页面后来把某个动作放到圆内（或自己隐藏了）时，清掉"我们收走"的标记，不强行改可见性
+        for (View old : roundOverflowActions) {
+            if (!actions.contains(old)) old.setTag(R.id.round_overflow_hidden, null);
+        }
+        for (View action : actions) {
+            action.setTag(R.id.round_overflow_hidden, Boolean.TRUE);
+            if (action.getVisibility() == View.VISIBLE) action.setVisibility(View.GONE);
+        }
+
+        boolean changed = actions.size() != roundOverflowActions.size();
+        if (!changed) {
+            for (int i = 0; i < actions.size(); i++) {
+                if (actions.get(i) != roundOverflowActions.get(i)
+                        || !labels.get(i).equals(roundOverflowLabels.get(i))) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            roundOverflowActions.clear();
+            roundOverflowActions.addAll(actions);
+            roundOverflowLabels.clear();
+            roundOverflowLabels.addAll(labels);
+        }
+        if (roundOverflowButton != null) {
+            roundOverflowButton.setVisibility(roundOverflowActions.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    private String roundOverflowLabel(View view, int index) {
+        if (view instanceof TextView) {
+            CharSequence text = ((TextView) view).getText();
+            if (!TextUtils.isEmpty(text)) return text.toString();
+        }
+        CharSequence desc = view.getContentDescription();
+        if (!TextUtils.isEmpty(desc)) return desc.toString();
+        return "操作 " + (index + 1);
+    }
+
+    private void showRoundOverflowMenu() {
+        if (roundOverflowActions.isEmpty()) return;
+        final ArrayList<View> actions = new ArrayList<>(roundOverflowActions);
+        //标签现场取：批量按钮会从「批量」变成「取消/删除(n)」，用收集时的旧标签会误导
+        String[] labels = new String[actions.size()];
+        for (int i = 0; i < actions.size(); i++) labels[i] = roundOverflowLabel(actions.get(i), i);
+        AdaptiveDialog.Builder builder = new AdaptiveDialog.Builder(this)
+                .setTitle("页面操作")
+                //与私信长按菜单同一口径：小弹窗不允许点外/返回误取消
+                .setCancelable(false);
+        builder.setItems(labels, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (which >= 0 && which < actions.size()) actions.get(which).performClick();
+                })
+                .setNegativeButton("取消", null);
+        builder.show();
     }
 
     @Override
@@ -625,6 +1008,9 @@ public class BaseActivity extends AppCompatActivity {
         //不会掉进圆屏设备的下巴里（DecorView 现在没有 padding 了，见 applyContentPadding）
         View host = findViewById(android.R.id.content);
         MsgUtil.processSnackEvent(event, host != null ? host : getWindow().getDecorView().getRootView());
+        //sticky 事件只应被消费一次：此前 onStart 注册与 onResume 各取一次，换页后还会把
+        //上一页的"下载列表为空"之类提示重新弹出来（番剧详情页实测）
+        EventBus.getDefault().removeStickyEvent(event);
     }
 
     protected boolean eventBusEnabled() {

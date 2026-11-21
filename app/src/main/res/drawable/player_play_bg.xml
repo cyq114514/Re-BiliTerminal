@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    播放/暂停键的强调色圆底。XML 里先用默认粉兜底；PlayerActivity.applyPlayerVisualTheme()
+    会用 ThemeManager.getPrimary() 重建同一个圆，自定义主题色才会跟随。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/bili_pink" />
+</shape>
