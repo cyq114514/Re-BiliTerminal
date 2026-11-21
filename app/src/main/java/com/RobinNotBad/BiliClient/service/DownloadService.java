@@ -29,6 +29,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.Logu;
+import com.RobinNotBad.BiliClient.util.LyricProvider;
 import com.RobinNotBad.BiliClient.util.MediaMerger;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.NetWorkUtil;
@@ -173,6 +174,7 @@ public class DownloadService extends Service {
                     break;
 
                 section = section_tmp;
+                long mediaDurationMs = 0;   //歌词匹配用：本条的媒体时长（取流时拿到）
 
                 // 获取视频链接（候选列表：官方 CDN 优先、PCDN 垫底，见 PlayerApi.buildMediaCandidates）
                 List<String> urls_video, urls_audio;
@@ -227,6 +229,7 @@ public class DownloadService extends Service {
                         urls_audio = null;
                     }
                     url_danmaku = data.danmakuUrl;
+                    mediaDurationMs = data.durationMs;
                 } catch (JSONException e) {
                     setState(section.id, "error");
                     notifyCompletion("下载链接获取失败：\n" + section.name_short, (int) section.id);
@@ -391,6 +394,13 @@ public class DownloadService extends Service {
                             }
 
                             break;
+                    }
+
+                    //仅音频缓存：把歌词一并写进缓存目录，听歌模式离线时直接读（2026-11-21 反馈）
+                    final DownloadSection doneSection = section;
+                    final long doneDuration = mediaDurationMs;
+                    if (doneSection.isAudioOnly()) {
+                        CenterThreadPool.run(() -> saveLyricsToCache(doneSection, doneDuration));
                     }
 
                     notifyCompletion("下载成功：\n" + section.name_short, (int) section.id);
@@ -866,6 +876,30 @@ public class DownloadService extends Service {
             }
         }
         return output;
+    }
+
+    /**
+     * 把歌词落到缓存条目目录（与 audio.m4a 同级的 lyrics.json）。
+     *
+     * <p>听歌模式的歌词默认「B 站字幕优先、网易云兜底」，两条都要联网；下载完成时取一次
+     * 并落盘，离线播放直接读本地（2026-11-21 反馈：缓存音频后无网没有歌词）。
+     * 失败静默：没写成时播放侧仍会按联网逻辑再试。
+     */
+    private void saveLyricsToCache(DownloadSection done, long durationMs) {
+        if (done == null || done.cid <= 0) return;
+        try {
+            VideoCard card = new VideoCard();
+            card.aid = done.aid;
+            card.cid = done.cid;
+            //多P 的歌名通常写在分P名里；单集用视频标题
+            card.title = (done.child != null && !done.child.isEmpty()) ? done.child : done.title;
+            LyricProvider.Lyrics lyrics = LyricProvider.load(
+                    this, card, (int) Math.min(Integer.MAX_VALUE, durationMs));
+            if (lyrics != null && !lyrics.isEmpty()) {
+                LyricProvider.writeLocal(done.getPath(), lyrics);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     public static DownloadSection getFirst() {

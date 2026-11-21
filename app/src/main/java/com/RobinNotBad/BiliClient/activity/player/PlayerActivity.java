@@ -33,6 +33,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
@@ -442,6 +443,20 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private GestureDetector doubleTapGestureDetector;
     private float previousX, previousY;
     private boolean gesture_moved, gesture_scaled, gesture_click_disabled;
+    //双击挂起：第二下按下时只登记，抬手时确认"没有拖动/缩放"再执行。
+    //quick scale 同样在第二下按下时进入锚定缩放，按下即执行会让复位/暂停/快进和缩放互相踩
+    //（2026-11-21 反馈："双击后有时乱动"、"双击单指缩放会同时触发其它双击手势"）
+    private boolean doubleTapPending;
+    private long doubleTapPendingAt;
+    private float doubleTapPendingX, doubleTapPendingY;
+    //双击快进是否开启：没开时左右双击仍按老语义走复位/暂停
+    private boolean doubleTapSeekEnabled;
+    private int doubleTapSeekSeconds;
+    private boolean doubleTapResetFirst;
+    //拖动起步阈值：不达 touchSlop 不动画面，双击第二下的微抖不会把画面挪走
+    private int touchSlop;
+    private boolean dragActivated;
+    private float dragStartX, dragStartY;
     //横滑调进度：单指水平拖动超过阈值才接管；画面被放大时让位给"拖动画布"（videoMoveBy）
     private boolean seekDragActive = false;
     private float seekDragStartX, seekDragStartY;
@@ -885,75 +900,45 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     @SuppressLint("ClickableViewAccessibility")
     private void setVideoGestures() {
-        boolean doubleTapSeekEnabled = SharedPreferencesUtil.getBoolean("player_doubletap_seek", false);
-        int doubleTapSeekSeconds = SharedPreferencesUtil.getInt("player_doubletap_seek_seconds", 10);
-        boolean doubleTapResetFirst = SharedPreferencesUtil.getBoolean("player_doubletap_reset_first", true);
-        
-        if (doubleTapSeekEnabled) {
+        doubleTapSeekEnabled = SharedPreferencesUtil.getBoolean("player_doubletap_seek", false);
+        doubleTapSeekSeconds = SharedPreferencesUtil.getInt("player_doubletap_seek_seconds", 10);
+        doubleTapResetFirst = SharedPreferencesUtil.getBoolean("player_doubletap_reset_first", true);
+        boolean scaleEnabled = SharedPreferencesUtil.getBoolean("player_scale", true);
+        touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+
+        //缩放开启时也要有双击仲裁器：quick scale 会把"双击后拖拽"解释成缩放，
+        //只靠 clickUI 的连点判定会让双击复位与拖拽缩放同时发生（2026-11-21 反馈）
+        if (doubleTapSeekEnabled || scaleEnabled) {
             doubleTapGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onDoubleTap(MotionEvent e) {
-                    if (ijkPlayer != null && isPrepared && !isLiveMode) {
-                        float x = e.getX();
-                        float viewWidth = layout_control.getWidth();
-                        long currentPosition = video_now;   //进度条由 progressTimer 后台维护，读它不取原生锁
-                        long seekOffset = doubleTapSeekSeconds * 1000L;
-
-                        gesture_click_disabled = true;
-                        doubleTapSeekTimestamp = System.currentTimeMillis();
-
-                        if (isDoubleTapCenter(e)) {
-                            boolean canReset = SharedPreferencesUtil.getBoolean("player_scale", true)
-                                    && scaleGestureListener != null
-                                    && scaleGestureListener.can_reset;
-                            if (canReset && doubleTapResetFirst) {
-                                scaleGestureListener.can_reset = false;
-                                layout_video.setX(video_origX);
-                                layout_video.setY(video_origY);
-                                layout_video.setScaleX(1.0f);
-                                layout_video.setScaleY(1.0f);
-                            } else {
-                                if (isPlaying)
-                                    playerPause();
-                                else
-                                    playerResume();
-                            }
-                            return true;
-                        }
-
-                        if (x > viewWidth / 2.0f) {
-                            long newPosition = currentPosition + seekOffset;
-                            long duration = ijkPlayer.getDuration();
-                            if (newPosition > duration) {
-                                newPosition = duration;
-                            }
-                            seekToPosition(newPosition);
-                        } else {
-                            long newPosition = currentPosition - seekOffset;
-                            if (newPosition < 0) {
-                                newPosition = 0;
-                            }
-                            seekToPosition(newPosition);
-                        }
-                        return true;
-                    }
-                    return false;
+                    if (ijkPlayer == null || !isPrepared || isLiveMode) return false;
+                    //这里只登记，动作留到 ACTION_UP 由 consumePendingDoubleTap 决定
+                    doubleTapPending = true;
+                    doubleTapPendingAt = System.currentTimeMillis();
+                    doubleTapPendingX = e.getX();
+                    doubleTapPendingY = e.getY();
+                    return true;
                 }
             });
         }
         
-        if (SharedPreferencesUtil.getBoolean("player_scale", true)) {
+        if (scaleEnabled) {
             scaleGestureListener = new ViewScaleGestureListener(layout_video);
             scaleGestureDetector = new ScaleGestureDetector(this, scaleGestureListener);
 
             boolean doublemove_enabled = SharedPreferencesUtil.getBoolean("player_doublemove", true);
 
             layout_control.setOnTouchListener((v, event) -> {
-                if (doubleTapSeekEnabled && doubleTapGestureDetector != null) {
+                if (doubleTapGestureDetector != null) {
                     doubleTapGestureDetector.onTouchEvent(event);
                 }
                 //横滑调进度优先：被它接管时后续的缩放/移动/单击都不再处理
-                if (handleSeekDrag(event)) return false;
+                if (handleSeekDrag(event)) {
+                    //横滑调进度说明这一划不是干净的双击（抬手才真正 seek），挂起的双击动作作废
+                    doubleTapPending = false;
+                    return false;
+                }
                 int action = event.getActionMasked();
                 int pointerCount = event.getPointerCount();
                 boolean singleTouch = pointerCount == 1;
@@ -964,7 +949,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
                 //空降弹幕：干净的单击命中含时间点的弹幕时跳转，并吞掉这次单击（不切控制层）
                 if (action == MotionEvent.ACTION_UP && !gesture_moved && !gesture_scaled
-                        && tryAirborneDanmaku(event)) {
+                        && !doubleTapPending && tryAirborneDanmaku(event)) {
                     gesture_click_disabled = true;
                     return false;
                 }
@@ -983,6 +968,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                             } else if (!(gesture_scaled && !doublemove_enabled)) {
                                 float currentX = event.getX(0); // 单指移动
                                 float currentY = event.getY(0);
+                                //起步阈值：双击第二下的手指微抖不算拖动，否则画面会被挪走
+                                if (!dragActivated) {
+                                    if (distanceFromDragStart(currentX, currentY) < touchSlop) break;
+                                    dragActivated = true;
+                                    gesture_moved = true;
+                                    previousX = currentX;
+                                    previousY = currentY;
+                                    break;
+                                }
                                 float deltaX = currentX - previousX;
                                 float deltaY = currentY - previousY;
                                 if (deltaX != 0f || deltaY != 0f) {
@@ -995,6 +989,14 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         if (doubleTouch && doublemove_enabled) {
                             float currentX = (event.getX(0) + event.getX(1)) / 2;
                             float currentY = (event.getY(0) + event.getY(1)) / 2;
+                            if (!dragActivated) {
+                                if (distanceFromDragStart(currentX, currentY) < touchSlop) break;
+                                dragActivated = true;
+                                gesture_moved = true;
+                                previousX = currentX;
+                                previousY = currentY;
+                                break;
+                            }
                             float deltaX = currentX - previousX;
                             float deltaY = currentY - previousY;
                             if (deltaX != 0f || deltaY != 0f) {
@@ -1009,6 +1011,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         if (singleTouch) { // 如果是单指按下，设置起始位置为当前手指位置
                             previousX = event.getX(0);
                             previousY = event.getY(0);
+                            dragStartX = previousX;
+                            dragStartY = previousY;
+                            dragActivated = false;
                             // Logu.v("gesture", "touch_start:" + previousX + "," + previousY);
                         }
                         break;
@@ -1017,6 +1022,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         if (doubleTouch) { // 如果是双指按下，设置起始位置为两指连线的中心点
                             previousX = (event.getX(0) + event.getX(1)) / 2;
                             previousY = (event.getY(0) + event.getY(1)) / 2;
+                            if (!dragActivated) {
+                                dragStartX = previousX;
+                                dragStartY = previousY;
+                            }
                             // Logu.v("gesture","double_touch");
                         }
                         break;
@@ -1026,6 +1035,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                             int index = event.getActionIndex(); // actionIndex是抬起来的手指位置
                             previousX = event.getX((index == 0 ? 1 : 0));
                             previousY = event.getY((index == 0 ? 1 : 0));
+                            if (!dragActivated) {
+                                dragStartX = previousX;
+                                dragStartY = previousY;
+                            }
                             // Logu.v("gesture","single_touch");
                         }
                         break;
@@ -1039,10 +1052,21 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                             //松手也要给反馈：3x 期间控制栏是隐藏的，用户看不到倍速文字变化（1.3.4 反馈）
                             flashCenterText("已恢复 " + speed_strs[seekbar_speed.getProgress()], 1200);
                         }
+                        //抬手才执行双击动作：这一划若已拖动/缩放，就说明是"双击后拖拽缩放"，
+                        //动作让位，不再复位/暂停/快进
+                        consumePendingDoubleTap();
                         if (gesture_moved)
                             gesture_moved = false;
                         if (gesture_scaled)
                             gesture_scaled = false;
+                        dragActivated = false;
+                        break;
+
+                    case MotionEvent.ACTION_CANCEL:
+                        doubleTapPending = false;
+                        gesture_moved = false;
+                        gesture_scaled = false;
+                        dragActivated = false;
                         break;
                 }
 
@@ -1055,22 +1079,31 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             });
         } else {
             layout_control.setOnTouchListener((view, motionEvent) -> {
-                if (doubleTapSeekEnabled && doubleTapGestureDetector != null) {
+                if (doubleTapGestureDetector != null) {
                     doubleTapGestureDetector.onTouchEvent(motionEvent);
                 }
                 //横滑调进度（不允许缩放的分支）：同样优先接管
-                if (handleSeekDrag(motionEvent)) return false;
+                if (handleSeekDrag(motionEvent)) {
+                    doubleTapPending = false;   //同上：拖动接管后不再是双击
+                    return false;
+                }
+                int action = motionEvent.getActionMasked();
                 //空降弹幕：同上，这里是不允许缩放时的分支
-                if (motionEvent.getAction() == MotionEvent.ACTION_UP && !gesture_moved && !gesture_scaled
-                        && tryAirborneDanmaku(motionEvent)) {
+                if (action == MotionEvent.ACTION_UP && !gesture_moved && !gesture_scaled
+                        && !doubleTapPending && tryAirborneDanmaku(motionEvent)) {
                     gesture_click_disabled = true;
                     return false;
                 }
-                if (motionEvent.getAction() == MotionEvent.ACTION_UP && onLongClick) {
-                    onLongClick = false;
-                    float normalSpeed = speed_values[seekbar_speed.getProgress()];
-                    applySpeed(normalSpeed, "手势加速结束");
-                    text_speed.setText(speed_strs[seekbar_speed.getProgress()]);
+                if (action == MotionEvent.ACTION_UP) {
+                    if (onLongClick) {
+                        onLongClick = false;
+                        float normalSpeed = speed_values[seekbar_speed.getProgress()];
+                        applySpeed(normalSpeed, "手势加速结束");
+                        text_speed.setText(speed_strs[seekbar_speed.getProgress()]);
+                    }
+                    consumePendingDoubleTap();
+                } else if (action == MotionEvent.ACTION_CANCEL) {
+                    doubleTapPending = false;
                 }
                 return false;
             });
@@ -1093,6 +1126,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     && !isLiveMode) {
                 if (!onLongClick && !gesture_click_disabled) {
                     hidecon.run();
+                    //长按一旦成立就不是双击了，丢掉挂起的双击动作
+                    doubleTapPending = false;
                     applySpeed(3.0f, "长按加速开始");
                     text_speed.setText("x 3.0");
                     //控制栏已被 hidecon 收起，倍速文字跟着一起看不见，必须在屏幕中间补一条提示
@@ -1114,6 +1149,62 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         layout_control.postDelayed(hidecon, 4000);
     }
 
+    /**
+     * 执行挂起的双击动作（只在 ACTION_UP 调用）。
+     *
+     * <p>为什么不在第二下按下的瞬间执行：quick scale 也是从「第二下按下」开始进入锚定缩放，
+     * 两边同时动手就会出现「复位刚做完又被缩走」「缩放和快进同时触发」（2026-11-21 反馈）。
+     * 抬手时以「这一划有没有拖动/缩放」做唯一裁决：没拖 = 双击动作，拖了 = 快速缩放。
+     */
+    private void consumePendingDoubleTap() {
+        if (!doubleTapPending) return;
+        doubleTapPending = false;
+        if (System.currentTimeMillis() - doubleTapPendingAt > 800L) return; // 按住太久，不算双击
+        if (ijkPlayer == null || !isPrepared || isLiveMode) return;
+        if (gesture_moved || gesture_scaled) return; // 拖过/缩过：这一划让位给快速缩放
+
+        doubleTapSeekTimestamp = System.currentTimeMillis();
+
+        boolean center = isDoubleTapCenter(doubleTapPendingX, doubleTapPendingY);
+        //没开双击快进时，左右双击沿用老语义（复位/暂停），不引入区域差异
+        if (center || !doubleTapSeekEnabled) {
+            boolean canReset = scaleGestureListener != null && scaleGestureListener.can_reset;
+            if (canReset && doubleTapResetFirst) {
+                resetVideoZoom();
+            } else if (isPlaying) {
+                playerPause();
+            } else {
+                playerResume();
+            }
+            return;
+        }
+
+        long seekOffset = doubleTapSeekSeconds * 1000L;
+        long newPosition;
+        if (doubleTapPendingX > layout_control.getWidth() / 2.0f) {
+            newPosition = video_now + seekOffset;
+            long duration = ijkPlayer.getDuration();
+            if (newPosition > duration) newPosition = duration;
+        } else {
+            newPosition = video_now - seekOffset;
+            if (newPosition < 0) newPosition = 0;
+        }
+        seekToPosition(newPosition);
+    }
+
+    /** 复位画面：缩放归 1、位置回原始居中；同时清掉"可复位"标记，避免重复复位 */
+    private void resetVideoZoom() {
+        if (scaleGestureListener != null) scaleGestureListener.can_reset = false;
+        layout_video.setX(video_origX);
+        layout_video.setY(video_origY);
+        layout_video.setScaleX(1.0f);
+        layout_video.setScaleY(1.0f);
+    }
+
+    private float distanceFromDragStart(float x, float y) {
+        return (float) Math.hypot(x - dragStartX, y - dragStartY);
+    }
+
     private void clickUI() {
         long now_timestamp = System.currentTimeMillis();
         if (now_timestamp - timestamp_click < 300) {
@@ -1123,11 +1214,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             boolean doubleTapResetFirst = SharedPreferencesUtil.getBoolean("player_doubletap_reset_first", true);
 
             if (canReset && doubleTapResetFirst) {
-                scaleGestureListener.can_reset = false;
-                layout_video.setX(video_origX);
-                layout_video.setY(video_origY);
-                layout_video.setScaleX(1.0f);
-                layout_video.setScaleY(1.0f);
+                resetVideoZoom();
             } else if (!isLiveMode) {
                 if (isPlaying)
                     playerPause();
@@ -1346,11 +1433,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         autohideReset();
     }
 
-    private boolean isDoubleTapCenter(MotionEvent event) {
+    private boolean isDoubleTapCenter(float x, float y) {
         float viewWidth = layout_control.getWidth();
         float viewHeight = layout_control.getHeight();
-        float x = event.getX();
-        float y = event.getY();
         float centerWidth = viewWidth * 0.4f;
         float centerHeight = viewHeight * 0.4f;
         float centerLeft = (viewWidth - centerWidth) / 2.0f;

@@ -129,6 +129,9 @@ public class DownloadListActivity extends RefreshListActivity {
 
     //确认框点「删除」后的实际删除动作：原长按直删逻辑原样迁移（后台线程执行）
     private void deleteSection(final DownloadSection delete) {
+        //先本地移除再删文件：停服务要等 500ms、删目录也可能要几秒，
+        //等全部做完才刷列表会让用户以为没点上，于是反复点（2026-11-21 反馈）
+        removeSectionRow(delete);
         try {
             if (delete.state.equals("downloading") && DownloadService.started) {
                 stopService(new Intent(DownloadListActivity.this, DownloadService.class));
@@ -152,8 +155,23 @@ public class DownloadListActivity extends RefreshListActivity {
             refreshList(false);
             MsgUtil.showMsg("删除成功");
         } catch (Exception e) {
+            //失败则按真实数据重刷，把乐观移除的行补回来
+            refreshList(false);
             MsgUtil.err(e);
         }
+    }
+
+    /** 删除的乐观反馈：先从列表里拿掉这一行，真正的文件/记录删除在后台继续 */
+    private void removeSectionRow(final DownloadSection delete) {
+        runOnUiThread(() -> {
+            if (destroyed || delete == null) return;
+            if (sections != null) sections.remove(delete);
+            if (adapter != null) {
+                if (adapter.downloadList != null && adapter.downloadList != sections)
+                    adapter.downloadList.remove(delete);
+                adapter.notifyDataSetChanged();
+            }
+        });
     }
 
     //------------------------------------------------------------ 批量删除

@@ -4,8 +4,13 @@ import android.animation.AnimatorInflater;
 import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.View;
+import android.widget.ImageView;
+
+import androidx.annotation.DrawableRes;
+import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.BuildConfig;
@@ -28,6 +33,26 @@ public class ToolsUtil {
         final float fontScale = BiliTerminal.context.getResources()
                 .getDisplayMetrics().scaledDensity;
         return (int) (spValue * fontScale + 0.5f);
+    }
+
+    /**
+     * 加载矢量图标。
+     *
+     * <p>API 24 以下必须走 {@link VectorDrawableCompat}：framework 的 VectorDrawable 在
+     * 21~23 不认 {@code android:fillType="evenOdd"}，投币/收藏这类「圆底 + 镂空字形」的图标
+     * 会把镂空处一起填实，渲染成一块实心圆盘（2026-11-21 反馈：sdk21 投币/收藏后的图标）。
+     * API 24+ 直接 setImageResource，与原实现完全一致。
+     */
+    public static void setVectorIcon(ImageView view, @DrawableRes int resId) {
+        if (view == null) return;
+        if (Build.VERSION.SDK_INT >= 24) {
+            view.setImageResource(resId);
+            return;
+        }
+        Drawable compat = VectorDrawableCompat.create(
+                view.getResources(), resId, view.getContext().getTheme());
+        if (compat != null) view.setImageDrawable(compat);
+        else view.setImageResource(resId);
     }
 
     /**

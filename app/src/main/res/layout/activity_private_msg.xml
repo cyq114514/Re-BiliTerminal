@@ -152,7 +152,7 @@
                 android:background="@drawable/background_edittext_privatemsg"
                 android:hint="@string/hint_private_message"
                 android:maxHeight="128dp"
-                android:minHeight="38dp"
+                android:minHeight="44dp"
                 android:paddingHorizontal="6dp"
                 android:paddingVertical="6dp"
                 android:textColorHint="@color/text_hint"
@@ -163,22 +163,25 @@
             <!-- hint 跑马灯覆盖层（2026-11-14 反馈）：TextView 的 marquee 不作用于 hint，
                  未输入且未聚焦时用这层展示长文案滚动，聚焦/有文本时由 Activity 切换隐藏。
                  背景/内边距与输入框一致以完全盖住其 hint；clickable 保持 false 使触摸穿透
-                 到下层 EditText（聚焦、光标都由它处理） -->
+                 到下层 EditText（聚焦、光标都由它处理）。
+
+                 2026-11-21 反馈（4.4/6.0）：右侧漏一条缝。原因是这里同时写了 alignEnd 和
+                 toStartOf+marginEnd：alignEnd 对齐的是 EditText 边界、不继承它的 marginEnd，
+                 自带的 4dp 又叠上去，低版本上合成 8dp。只保留一套定位（跟随 EditText 的
+                 marginEnd 到 more_btn 左侧），不再写 alignEnd。 -->
             <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                 android:id="@+id/hint_marquee"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignStart="@id/msg_input_et"
                 android:layout_alignLeft="@id/msg_input_et"
-                android:layout_alignEnd="@id/msg_input_et"
-                android:layout_alignRight="@id/msg_input_et"
                 android:layout_alignTop="@id/msg_input_et"
                 android:layout_alignBottom="@id/msg_input_et"
                 android:layout_marginEnd="4dp"
                 android:layout_toStartOf="@id/more_btn"
                 android:background="@drawable/background_edittext_privatemsg"
                 android:gravity="center_vertical"
-                android:minHeight="38dp"
+                android:minHeight="44dp"
                 android:paddingHorizontal="6dp"
                 android:paddingVertical="6dp"
                 android:text="@string/hint_private_message_marquee"

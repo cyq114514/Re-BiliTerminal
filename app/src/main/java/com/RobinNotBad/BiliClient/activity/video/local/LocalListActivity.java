@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.model.LocalVideo;
 import com.RobinNotBad.BiliClient.model.PlayerData;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.service.AudioPlayerService;
+import com.RobinNotBad.BiliClient.util.AdaptiveDialog;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.FileUtil;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -44,9 +45,6 @@ public class LocalListActivity extends InstanceActivity {
     private final ArrayList<LocalVideo> videoList = new ArrayList<>(10);
     private LocalVideoAdapter adapter;
     private TextView emptyTip;
-
-    private int longClickPosition = -1;
-    private long longClickTimestamp;
 
     private boolean started;
 
@@ -132,23 +130,21 @@ public class LocalListActivity extends InstanceActivity {
             //点纯音频条目=从这条开始连播整个缓存（1.3.5 反馈 R1：此前点条目只播单曲，
             //用户以为"缓存不能自动接下一首"；标题栏「听歌」保留为"从头听"）
             adapter.setOnAudioItemClickListener(position -> startAudioQueue(audioIndexOf(position)));
+            //列表头「听缓存（音频）」：不必先进收藏夹，直接在缓存页起播整个缓存队列
+            adapter.setOnAudioEntryClickListener(() -> startAudioQueue(0));
 
             adapter.setOnLongClickListener(position -> {
-                long timestamp = System.currentTimeMillis();
-                if (longClickPosition == position && timestamp - longClickTimestamp < 4000) {
-                    File file = new File(FileUtil.getVideoDownloadPath(), videoList.get(position).title);
-                    CenterThreadPool.run(() -> FileUtil.deleteFolder(file));
-                    MsgUtil.showMsg("删除成功");
-                    videoList.remove(position);
-                    adapter.notifyItemRemoved(position + 1);
-                    adapter.notifyItemRangeChanged(position + 1, videoList.size() - position);
-                    longClickPosition = -1;
-                    checkEmpty();
-                } else {
-                    longClickPosition = position;
-                    longClickTimestamp = timestamp;
-                    MsgUtil.showMsg("再次长按删除");
-                }
+                if (position < 0 || position >= videoList.size()) return;
+                final LocalVideo target = videoList.get(position);
+                //原来靠"4 秒内再长按一次"确认，用户不知道要按第二下，表现为"点好几下没反应"
+                //（2026-11-21 反馈：缓存删除反应慢）。改成标准确认框：一次长按 + 一次点按，
+                //确认后先把行拿掉给即时反馈，文件在后台删。
+                new AdaptiveDialog.Builder(this)
+                        .setTitle("删除缓存")
+                        .setMessage("将删除「" + target.title + "」的本地文件，确定吗？")
+                        .setPositiveButton("删除", (dialog, which) -> deleteLocal(target))
+                        .setNegativeButton("取消", null)
+                        .show();
             });
             runOnUiThread(() -> {
                 recyclerView.setLayoutManager(getLayoutManager());
@@ -328,6 +324,27 @@ public class LocalListActivity extends InstanceActivity {
         for (int i = 0; i < videoIndex && i < videoList.size(); i++)
             index += videoList.get(i).videoFileList.size();
         return index;
+    }
+
+    /** 删除一条缓存：先把行拿掉给即时反馈，文件在后台删；删失败再按磁盘真实内容刷回来 */
+    private void deleteLocal(final LocalVideo target) {
+        final int index = videoList.indexOf(target);
+        if (index < 0) return;
+        final File file = new File(FileUtil.getVideoDownloadPath(), target.title);
+        videoList.remove(index);
+        if (adapter != null) {
+            adapter.notifyItemRemoved(index + 1);
+            adapter.notifyItemRangeChanged(index + 1, videoList.size() - index);
+        }
+        checkEmpty();
+        CenterThreadPool.run(() -> {
+            FileUtil.deleteFolder(file);
+            final boolean gone = !file.exists();
+            runOnUiThread(() -> {
+                MsgUtil.showMsg(gone ? "已删除" : "删除失败，请检查存储权限");
+                if (!gone) refresh();
+            });
+        });
     }
 
     private void checkEmpty() {

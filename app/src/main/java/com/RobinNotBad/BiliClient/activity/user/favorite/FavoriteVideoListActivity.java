@@ -108,13 +108,24 @@ public class FavoriteVideoListActivity extends RefreshListActivity {
         int index = container.indexOfChild(sortBar);
         container.removeView(sortBar);
         if (index < 0) index = 0;
-        android.widget.RelativeLayout.LayoutParams headerLp =
+        //头部要能随列表滚出可视区，但不能画到上面固定的标题栏上——2026-11-21 反馈
+        //（sdk21）「收藏界面 UI 遮挡」：滚动后两张入口卡/sortBar 被 translationY 顶到
+        //标题栏位置，标题文字被压在下面。加一层与 listContainer 等高的裁剪容器，
+        //超出容器顶部的内容直接裁掉；容器本身不消费触摸，列表手势照常。
+        android.widget.FrameLayout clip = new android.widget.FrameLayout(this);
+        clip.setClipChildren(true);
+        clip.setClickable(false);
+        android.widget.RelativeLayout.LayoutParams clipLp =
                 new android.widget.RelativeLayout.LayoutParams(
                         android.widget.RelativeLayout.LayoutParams.MATCH_PARENT,
-                        android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT);
-        headerLp.addRule(android.widget.RelativeLayout.ALIGN_TOP, R.id.listContainer);
-        headerLp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_START);
-        root.addView(header, headerLp);
+                        android.widget.RelativeLayout.LayoutParams.MATCH_PARENT);
+        clipLp.addRule(android.widget.RelativeLayout.ALIGN_TOP, R.id.listContainer);
+        clipLp.addRule(android.widget.RelativeLayout.ALIGN_BOTTOM, R.id.listContainer);
+        clipLp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_START);
+        root.addView(clip, clipLp);
+        clip.addView(header, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
         header.addView(sortBar, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 

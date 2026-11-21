@@ -63,7 +63,8 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
     //歌词：B站 CC 字幕优先，取不到再走网易云兜底
     private TextView lyricLine;
     private LyricProvider.Lyrics lyrics;
-    private long lyricCid = 0;
+    //单曲身份：在线条目是 cid，本地缓存条目是 media 路径（缓存条目通常没有 cid）
+    private String lyricKey = "";
     private int lastLyricIndex = -1;
     private int lyricWaitTicks = 0;
 
@@ -358,14 +359,17 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
      * B 站字幕本身不依赖时长，但也一并等——歌词不是关键路径，晚一两秒无所谓。
      */
     private void ensureLyrics(VideoCard item) {
-        if (lyricLine == null || item == null || item.cid <= 0) return;
-        if (item.cid == lyricCid) return;
+        if (lyricLine == null || item == null) return;
+        //本地缓存条目没有 cid：只要带 media 路径，就能读同目录的 lyrics.json（离线可用）
+        if (item.cid <= 0 && !LyricProvider.hasLocalPath(item)) return;
+        final String key = LyricProvider.keyOf(item);
+        if (key.equals(lyricKey)) return;
 
-        //缓存命中（预取过/播过）就不进「加载中」：切歌时歌词直接出现，不闪提示
-        LyricProvider.Lyrics cached = LyricProvider.readCache(this, item.cid);
+        //本地歌词/网络缓存命中就不进「加载中」：切歌时歌词直接出现，不闪提示
+        LyricProvider.Lyrics cached = LyricProvider.readCache(this, item);
         if (cached != null && !cached.isEmpty()) {
             lyricWaitTicks = 0;
-            lyricCid = item.cid;
+            lyricKey = key;
             applyLyrics(cached);
             return;
         }
@@ -377,18 +381,17 @@ public class AudioPlayerActivity extends BaseActivity implements AudioPlayerServ
             return;
         }
         lyricWaitTicks = 0;
-        lyricCid = item.cid;
+        lyricKey = key;
         lyrics = null;
         lastLyricIndex = -1;
         showLyricLoading();
 
-        final long cid = item.cid;
         final VideoCard target = item;
         new Thread(() -> {
             LyricProvider.Lyrics loaded = LyricProvider.load(this, target, duration);
             handler.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
-                if (cid != lyricCid) return;
+                if (!key.equals(lyricKey)) return;
                 applyLyrics(loaded);
             });
         }).start();
