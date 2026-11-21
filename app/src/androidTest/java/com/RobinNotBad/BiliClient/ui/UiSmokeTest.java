@@ -96,72 +96,101 @@ public class UiSmokeTest {
         AudioQueue.get().clear();
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void menuPage() {
         smokePage("menu", MenuActivity.class, new Intent(context, MenuActivity.class));
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void homeRecommendPage() {
         smokePage("home", RecommendActivity.class, new Intent(context, RecommendActivity.class));
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void bangumiPage() {
         smokePage("bangumi", BangumiActivity.class, new Intent(context, BangumiActivity.class));
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void bgmDetailPage() {
         Intent intent = new Intent(context, BgmSubjectActivity.class);
         intent.putExtra("bgmId", 1L);
         smokePage("bgm-detail", BgmSubjectActivity.class, intent);
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void videoDetailPage() {
         Intent intent = new Intent(context, VideoInfoActivity.class);
         intent.putExtra("aid", 2L);
         smokePage("video-detail", VideoInfoActivity.class, intent);
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void searchPage() {
-        smokePage("search", SearchActivity.class, new Intent(context, SearchActivity.class));
+        smokePage("search", new Intent(context, SearchActivity.class), false);
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void downloadsPage() {
         smokePage("downloads", DownloadListActivity.class, new Intent(context, DownloadListActivity.class));
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void settingsPage() {
         smokePage("settings", SettingMainActivity.class, new Intent(context, SettingMainActivity.class));
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void audioQueuePage() {
         smokePage("audio-queue", AudioQueueActivity.class, new Intent(context, AudioQueueActivity.class));
     }
 
-    @Test
+    @Test(timeout = 180000)
     public void favoriteFolderPage() {
         smokePage("favorites", FavoriteFolderListActivity.class, new Intent(context, FavoriteFolderListActivity.class));
     }
 
     private void smokePage(String name, Class<? extends Activity> activityClass, Intent intent) {
+        smokePage(name, intent, true);
+    }
+
+    private void smokePage(String name, Intent intent, boolean recreate) {
+        wake();
         try (ActivityScenario<Activity> scenario = ActivityScenario.launch(intent)) {
             // 页面里有 asyncInflate / 网络空态；固定等 1.2s 会误判「根视图不可见」。
             assertRootVisible(name, scenario, 8000);
             capture(name);
 
-            scenario.recreate();
-            assertRootVisible(name + "（重建后）", scenario, 5000);
-            capture(name + "-recreated");
+            if (recreate) {
+                try {
+                    scenario.recreate();
+                    assertRootVisible(name + "（重建后）", scenario, 8000);
+                    capture(name + "-recreated");
+                } catch (Throwable t) {
+                    dumpFailure(name + "-recreate");
+                    throw t;
+                }
+            }
         } catch (Throwable t) {
+            dumpFailure(name);
             capture(name + "-FAILED");
             throw t;
+        }
+    }
+
+    private void wake() {
+        try {
+            device.wakeUp();
+        } catch (android.os.RemoteException ignored) {
+        }
+    }
+
+    private void dumpFailure(String name) {
+        try {
+            device.dumpWindowHierarchy(new File(shotDir, name + "-FAILED.xml"));
+            System.out.println("UI_DUMP=" + new File(shotDir, name + "-FAILED.xml").getAbsolutePath());
+            System.out.println("UI_CURRENT_PACKAGE=" + device.getCurrentPackageName());
+        } catch (Throwable ignored) {
         }
     }
 

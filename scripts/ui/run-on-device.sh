@@ -120,7 +120,7 @@ stage "test package=$TEST_PKG"
 stage "run instrumentation"
 adb logcat -c || true
 set +e
-adb shell am instrument -w -r \
+timeout 900 adb shell am instrument -w -r \
     -e class com.RobinNotBad.BiliClient.ui.UiSmokeTest \
     -e listener com.RobinNotBad.BiliClient.ui.UiReportListener \
     "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" > "$REPORT/instrumentation.txt" 2>&1
