@@ -199,6 +199,9 @@ dependencies {
     androidTestImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test:core:1.5.0'
+    // 云端多屏幕 UI 冒烟：AndroidJUnit4 规则 + UiAutomator（截图/窗口/系统交互）
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.2.0'
 
     // ===== JVM 单元测试（testImplementation 只进 test classpath，不会进入 APK）=====
     testImplementation 'junit:junit:4.13.2'
