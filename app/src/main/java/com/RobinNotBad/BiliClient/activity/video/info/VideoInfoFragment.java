@@ -93,9 +93,9 @@ public class VideoInfoFragment extends BaseFragment {
         public void onActivityResult(ActivityResult o) {
             int code = o.getResultCode();
             if (code == RESULT_ADDED) {
-                fav.setImageResource(R.drawable.icon_fav_1);
+                applyFavState(true);
             } else if (code == RESULT_DELETED) {
-                fav.setImageResource(R.drawable.icon_fav_0);
+                applyFavState(false);
             }
         }
     });
@@ -146,6 +146,8 @@ public class VideoInfoFragment extends BaseFragment {
     private TextView description;
     private TextView tagsText;
     private ImageView like, coin, fav;
+    /** 收藏结果早于视图/视频信息就绪时暂存；initView 设置完初始状态后补应用 */
+    private Boolean pendingFavState = null;
     private int coinAdd = 0;
     private boolean desc_expand = false, tags_expand = false;
     private Animation shakeAnimation;
@@ -205,6 +207,24 @@ public class VideoInfoFragment extends BaseFragment {
             if (getActivity() instanceof VideoInfoActivity) return;
             MsgUtil.err(error);
         }));
+    }
+
+    /**
+     * 应用收藏结果。
+     *
+     * <p>ActivityResult 可能在视图/异步视频信息就绪前到达（页面重建后的待处理结果、
+     * 慢网下先返回 AddFavorite），此时 fav 仍为 null；直接 setImageResource 会 NPE
+     * （线上 1.3.9 两例）。视图不在时暂存，initView 初始化完图标后再补上。
+     */
+    private void applyFavState(boolean favoured) {
+        if (videoInfo != null && videoInfo.stats != null) {
+            videoInfo.stats.favoured = favoured;
+        }
+        if (fav == null || getView() == null || !isAdded()) {
+            pendingFavState = favoured;
+            return;
+        }
+        fav.setImageResource(favoured ? R.drawable.icon_fav_1 : R.drawable.icon_fav_0);
     }
 
     @SuppressLint("SetTextI18n")
@@ -304,6 +324,15 @@ public class VideoInfoFragment extends BaseFragment {
             like.setImageResource(R.drawable.icon_like_1);
         if (videoInfo.stats.favoured)
             fav.setImageResource(R.drawable.icon_fav_1);
+
+        //收藏结果可能在 initView 之前就到达：stats 已由 applyFavState 更新，
+        //但图标要等 fav 绑定后补一次（否则页面重建/慢网时图标会停在旧态）
+        if (pendingFavState != null) {
+            boolean favoured = pendingFavState;
+            pendingFavState = null;
+            videoInfo.stats.favoured = favoured;
+            fav.setImageResource(favoured ? R.drawable.icon_fav_1 : R.drawable.icon_fav_0);
+        }
 
         //历史上报
         CenterThreadPool.run(() -> {
