@@ -86,6 +86,16 @@ cat > "$REPORT/prefs.xml" <<XML
     <boolean name="usage_stats_enable" value="false" />
     <boolean name="player_ui_round" value="$ROUND_BOOL" />
     <float name="dpi" value="1.0" />
+    <!-- 教程是独立 TutorialActivity；不预置已读会盖住目标页，导致后续 UI 测试误判 -->
+    <int name="tutorial_ver_recommend" value="999" />
+    <int name="tutorial_ver_video" value="999" />
+    <int name="tutorial_ver_space" value="999" />
+    <int name="tutorial_ver_update_install" value="999" />
+    <int name="tutorial_ver_search" value="999" />
+    <int name="tutorial_ver_message" value="999" />
+    <int name="tutorial_ver_dynamic" value="999" />
+    <int name="tutorial_ver_dynamic_info" value="999" />
+    <int name="tutorial_ver_article" value="999" />
 </map>
 XML
 adb push "$REPORT/prefs.xml" /data/local/tmp/rebili-ui-prefs.xml >/dev/null

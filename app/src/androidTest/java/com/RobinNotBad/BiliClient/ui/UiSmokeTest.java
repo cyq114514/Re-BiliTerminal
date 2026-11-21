@@ -75,15 +75,20 @@ public class UiSmokeTest {
         SharedPreferences prefs = context.getSharedPreferences("default", Context.MODE_PRIVATE);
         boolean round = context.getResources().getConfiguration().isScreenRound();
         String today = new SimpleDateFormat("yyyyMMdd", Locale.CHINA).format(new Date());
-        prefs.edit()
+        SharedPreferences.Editor edit = prefs.edit()
                 .putBoolean("setup", true)
                 .putBoolean("crash_report_enable", false)
                 .putBoolean("crash_report_asked", true)
                 .putBoolean("usage_stats_enable", false)
                 .putString("usage_stats_last_day", today)
                 .putBoolean("player_ui_round", round)
-                .putFloat("dpi", 1.0F)
-                .commit();
+                .putFloat("dpi", 1.0F);
+        // 教程是独立 TutorialActivity；不预置已读会让它盖在目标页上，后续页面全部误判不可见。
+        for (String tag : new String[]{"recommend", "video", "space", "update_install",
+                "search", "message", "dynamic", "dynamic_info", "article"}) {
+            edit.putInt("tutorial_ver_" + tag, 999);
+        }
+        edit.commit();
 
         shotDir = new File(context.getExternalFilesDir(null), "ui-shots");
         if (!shotDir.exists() && !shotDir.mkdirs()) {
