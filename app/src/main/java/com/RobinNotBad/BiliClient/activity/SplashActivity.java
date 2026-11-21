@@ -27,7 +27,6 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil;
 import com.RobinNotBad.BiliClient.util.PrivacyLockUtil;
 import com.RobinNotBad.BiliClient.util.ResumePageUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
-import com.RobinNotBad.BiliClient.util.UpdateManager;
 
 import org.json.JSONException;
 
@@ -424,13 +423,8 @@ public class SplashActivity extends Activity {
      */
     private void scheduleStartupDialogs() {
         BiliTerminal.runAfterFirstPageResumed(() -> AppInfoApi.showStartupDialogs(BiliTerminal.context));
-        //「启动时检查更新」开关：默认开启。与检查更新页走同一条链路
-        //（GitHub 直连优先，失败依次试内置镜像），发现新版本时弹同一套自适应弹窗。
-        //放在首屏之后执行：不占启动关键路径，也不会和首屏抢着弹窗；弱网失败只记日志，不打扰用户
-        BiliTerminal.runAfterFirstPageResumed(activity -> {
-            if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.UPDATE_CHECK_ON_START, true)) return;
-            UpdateManager.autoCheck(activity);
-        });
+        //「启动时检查更新」不再在这里注册：自动检查统一由推荐页 / 主菜单的 onResume 触发，
+        //开关、6 小时节流、失败重试都在 UpdateManager.autoCheck 内部处理。
     }
 
     /** 「关闭界面过渡动画」打开时，离开开屏页也不要转场动画 */

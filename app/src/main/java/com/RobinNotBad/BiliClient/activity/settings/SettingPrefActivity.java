@@ -94,7 +94,8 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
             sectionList.add(new SettingSection("choose", "低电量阈值", "battery_low_threshold",
                     "电量掉到这个值以下才提醒", "3", new String[]{"5%", "10%", "15%", "20%", "30%"}));
             sectionList.add(new SettingSection("switch", "启动时检查更新", SharedPreferencesUtil.UPDATE_CHECK_ON_START,
-                    "每次冷启动在首屏之后从 GitHub（直连失败会依次尝试内置镜像）检查新版本，发现更新时弹窗提示；默认开启，不想让它联网可以关掉",
+                    "启动或回到前台时从 GitHub（直连失败会依次尝试内置镜像）检查新版本，最短间隔 6 小时；"
+                            + "网络失败会自动重试，发现更新时弹窗提示。默认开启，不想联网可以关掉",
                     "true"));
 
             sectionList.add(new SettingSection("title", "视觉与动画", "", "", ""));

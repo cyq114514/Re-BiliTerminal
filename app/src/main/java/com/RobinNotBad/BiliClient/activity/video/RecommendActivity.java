@@ -13,6 +13,7 @@ import com.RobinNotBad.BiliClient.helper.TutorialHelper;
 import com.RobinNotBad.BiliClient.model.VideoCard;
 import com.RobinNotBad.BiliClient.util.CenterThreadPool;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
+import com.RobinNotBad.BiliClient.util.UpdateManager;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -53,6 +54,14 @@ public class RecommendActivity extends RefreshMainActivity {
         TutorialHelper.showTutorialList(this, R.array.tutorial_recommend, 0);
 
         refreshRecommend();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        //自动检查更新：推荐页是新版默认首页，回到这里时触发
+        //（UpdateManager 内部读开关、6h 节流、失败重试；不在这里直接发请求）
+        UpdateManager.autoCheck(this);
     }
 
     @SuppressLint("NotifyDataSetChanged")

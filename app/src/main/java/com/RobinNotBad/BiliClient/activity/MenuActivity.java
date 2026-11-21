@@ -226,10 +226,6 @@ public class MenuActivity extends BaseActivity {
             }
         }
 
-        //应用内自动检查更新：静默执行（进程内一次），发现新版本且未被忽略时弹一次性提示；
-        //网络不通/接口异常时完全静默，不打扰使用
-        UpdateManager.autoCheck(this);
-
         Log.e("debug", "MenuActivity onCreate in: " + (System.currentTimeMillis() - time));
     }
 
@@ -242,6 +238,9 @@ public class MenuActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        //自动检查更新：回到主菜单才触发（UpdateManager 内部读开关、6h 节流、失败重试），
+        //不在播放/看图页弹更新框，避免打断正在做的事；常驻进程回前台也能重新检查
+        UpdateManager.autoCheck(this);
         Log.e("debug", "MenuActivity onResume in: " + (System.currentTimeMillis() - time));
         if (menuGridAdapter != null) {
             //新版菜单：更新数以徽章形式刷新
