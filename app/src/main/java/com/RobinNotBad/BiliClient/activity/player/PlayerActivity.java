@@ -179,6 +179,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private float subtitle_delta;
 
     private RelativeLayout layout_control, layout_top, layout_video, layout_card_bg, layout_audio_only;
+    private RelativeLayout bottom_text_bar;
     private LinearLayout layout_speed, layout_volume, right_control, loading_info, left_control, bottom_control;
     private RelativeLayout bottom_buttons;
     private HorizontalScrollView right_second;
@@ -842,6 +843,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         img_loading = findViewById(R.id.circle);
         text_progress = findViewById(R.id.text_progress);
         text_online = findViewById(R.id.text_online);
+        bottom_text_bar = findViewById(R.id.bottom_text_bar);
         btn_danmaku = findViewById(R.id.danmaku_btn);
         btn_loop = findViewById(R.id.loop_btn);
         btn_rotate = findViewById(R.id.rotate_btn);
@@ -1465,6 +1467,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //不再常驻挡在画面上（原来是独立于控制栏的常驻元素）。
         //顶/底改成悬浮卡片后，卡片底必须和内容一起淡出：直接淡 bottom_control，
         //不再单独淡它的两个子 View，否则父子 alpha 相乘、过渡会明显偏快。
+        //底栏卡片用 INVISIBLE 而不是 GONE：时间/观看人数、字幕条、左侧按钮都以底栏上方为锚点，
+        //底栏一旦 GONE 这些锚点会瞬间失效，加载态呼出控制栏时表现为文字「飞」到别处。
+        //INVISIBLE 保留原高度，视频从透明卡片区域透出，不影响观感。
         View[] controls = {right_control, layout_top, bottom_control, left_control};
 
         //返回热区现在是 top 的兄弟，必须手动跟控制层一起显隐：
@@ -1482,11 +1487,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 }
                 control.animate().alpha(1f).setDuration(CONTROL_FADE_MS);
             } else {
+                final int hiddenVisibility = control == bottom_control ? View.INVISIBLE : View.GONE;
                 if (control.getVisibility() == View.VISIBLE && control.getAlpha() > 0f) {
                     control.animate().alpha(0f).setDuration(CONTROL_FADE_MS)
-                            .withEndAction(() -> control.setVisibility(View.GONE));
+                            .withEndAction(() -> control.setVisibility(hiddenVisibility));
                 } else {
-                    control.setVisibility(View.GONE);
+                    control.setVisibility(hiddenVisibility);
                 }
             }
         }
@@ -1501,12 +1507,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             text_speed.setVisibility(View.VISIBLE);
             updateDebugButtonVisibility();
         }
-        if (screen_round) {
-            text_progress.setGravity(Gravity.NO_GRAVITY);
-            text_progress.setPadding(ToolsUtil.dp2px(24f), 0, 0, 0);
-            if (onlineTimer != null)
-                text_online.setVisibility(View.VISIBLE);
-        }
+        if (onlineTimer != null) text_online.setVisibility(View.VISIBLE);
+        //底栏时间/观看人数不再随控制栏切换 gravity/padding：
+        //1.4.0 圆屏分支在 hidecon 里把进度文字改成 CENTER，再在 showcon 改回 start，
+        //加载态反复呼出/收起控制栏时文字会横向跳到屏幕中间。这里保持 initUI 的圆屏内缩口径不变。
 
         autohideReset();
     }
@@ -1528,12 +1532,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             text_speed.setVisibility(View.GONE);
             btn_debug.setVisibility(View.GONE);
         }
-        if (screen_round) {
-            text_progress.setGravity(Gravity.CENTER);
-            text_progress.setPadding(0, 0, 0, ToolsUtil.dp2px(8f));
-            if (onlineTimer != null)
-                text_online.setVisibility(View.GONE);
-        }
+        //进度/在线人数保持与显示态相同的位置和显隐（圆屏内缩已在 initUI 里设好），
+        //不再在收起时改 CENTER / 隐藏 text_online，避免下一次呼出控制栏时出现跳位。
         if (menu_opened)
             btn_menu.performClick();
     };
@@ -1785,6 +1785,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //事件门：release 已异步化的旧实例仍可能滞后回调（onCompletion/onError/onInfo），
         //按"回调实例 != 当前字段"丢弃，防止旧事件触发换P/错误重试等作用到新实例
         final IjkMediaPlayer thisPlayer = ijkPlayer;
+        //弱网首帧可能晚于 onPrepared：此时 getVideoWidth/Height 还是 0，changeVideoSize()
+        //会跳过（videoArea 若仍是 XML 的 1px，就成了「有声音、没画面」）。
+        //尺寸回调一到就补一次布局；onPrepared 里那次仍保留，正常网络不增加等待。
+        ijkPlayer.setOnVideoSizeChangedListener((mp, width, height, sarNum, sarDen) -> {
+            if (mp != thisPlayer || width <= 0 || height <= 0) return;
+            runOnUiThread(this::changeVideoSize);
+        });
         playerError = false;   //任何新的载入（切P/切清晰度/重试）都清除错误态
 
         //重试路径恢复加载占位：错误态曾把转圈藏掉、文案换成错误提示，每次重新载入统一复位（X-08）
@@ -1952,6 +1959,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                                     + " 弹幕时钟=" + safeDanmakuTime());
                         }
                     });
+                } else if (what == IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                    //尺寸回调偶发缺席时的兜底：首帧已经上屏，再按真实宽高校正一次画面区域
+                    runOnUiThread(this::changeVideoSize);
                 }
 
                 return false;
@@ -2187,7 +2197,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     private void changeVideoSize() {
-        if (!isPrepared || ijkPlayer == null)
+        if (destroyed || !isPrepared || ijkPlayer == null)
             return;
         int width = ijkPlayer.getVideoWidth();
         int height = ijkPlayer.getVideoHeight();
@@ -2195,8 +2205,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         Logu.v("video", width + "x" + height);
 
         // 在听视频模式下，视频宽高可能为0，跳过尺寸调整
-        if (width == 0 || height == 0) {
-            Logu.v("视频尺寸", "视频宽高为0，跳过尺寸调整（可能处于听视频模式）");
+        // <=1 同样按未就绪处理：个别弱网流在 prepare 阶段会先给出 1×1，
+        // 若这里照着缩，Surface 又会回到 1px，表现就是黑屏但有声音
+        if (width <= 1 || height <= 1) {
+            Logu.v("视频尺寸", "视频宽高未就绪（" + width + "x" + height + "），保留全屏 Surface");
             return;
         }
 
@@ -3638,29 +3650,31 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * <p>每次都从 34dp 的默认值重新算，反复调用（旋转 / 显隐切换 / 重新布局）不会越压越小。
      */
     private void clampSeekColumnHeight() {
-        if (left_control == null || layout_top == null || text_progress == null) return;
+        if (left_control == null || layout_top == null || bottom_text_bar == null) return;
         if (left_control.getVisibility() != View.VISIBLE) return;
 
-        int available = text_progress.getTop() - layout_top.getBottom();
+        int available = bottom_text_bar.getTop() - layout_top.getBottom();
         if (available <= 0) {   //还没完成布局
             //顶栏被异常撑高时这里恒为负、左右控件列会被压成 0 高（1.3.0 就是这么整列消失的）。
             //布局已完成（进度文字已有 top）却仍不够高度时留一条日志，下次一眼能定位
-            if (layout_top.getHeight() > ToolsUtil.dp2px(80f) && text_progress.getTop() > 0)
+            if (layout_top.getHeight() > ToolsUtil.dp2px(80f) && bottom_text_bar.getTop() > 0)
                 Logu.w("player_ui", "顶栏高度异常 " + layout_top.getHeight() + "px，控件列可用高度 " + available + "px");
             return;
         }
         int budget = available - ToolsUtil.dp2px(4f);
 
-        int defaultHeight = ToolsUtil.dp2px(34f);
+        int defaultHeight = ToolsUtil.dp2px(28f);
         boolean speedVisible = text_speed != null && text_speed.getVisibility() == View.VISIBLE;
-        //倍速文字是 wrap_content：还没量到高度时按「一行 14sp + 上下 5dp」估
-        int speedHeight = speedVisible ? Math.max(text_speed.getHeight(), ToolsUtil.dp2px(24f)) : 0;
+        int rows = speedVisible ? 3 : 2;
+        int spacing = ToolsUtil.dp2px(6f);
 
         int buttonHeight = defaultHeight;
-        if (defaultHeight * 2 + speedHeight > budget) {
-            buttonHeight = Math.max(ToolsUtil.dp2px(22f), (budget - speedHeight) / 2);
+        if (defaultHeight * rows + spacing > budget) {
+            buttonHeight = Math.max(ToolsUtil.dp2px(20f), (budget - spacing) / rows);
         }
+        //三颗按钮必须同一高度：倍速原先固定 30dp，而 ±秒 会被夹到 34/22dp，加载态最明显
         applySeekButtonHeight(button_seek_back, buttonHeight, defaultHeight);
+        applySeekButtonHeight(text_speed, buttonHeight, defaultHeight);
         applySeekButtonHeight(button_seek_forward, buttonHeight, defaultHeight);
     }
 
@@ -4668,10 +4682,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             if (clockBack != null) clockBack.setOnClickListener(view -> finish());
         }
 
-        //左侧纵列的小屏保护：进度文字每次重新布局（首次布局/旋转/字号或按钮显隐变化）都重算一次
-        if (text_progress != null)
-            text_progress.addOnLayoutChangeListener((v, left, top, right, bottom,
-                                                     oldLeft, oldTop, oldRight, oldBottom)
+        //左侧纵列的小屏保护：底栏文字条每次重新布局（首次布局/旋转/字号或按钮显隐变化）都重算一次。
+        //监听条容器而不是内部 TextView：TextView 的 top 相对条容器恒为 0，量不到可用高度
+        View seekAnchor = bottom_text_bar != null ? bottom_text_bar : text_progress;
+        if (seekAnchor != null)
+            seekAnchor.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                                  oldLeft, oldTop, oldRight, oldBottom)
                     -> clampSeekColumnHeight());
 
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,

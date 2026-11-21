@@ -12,8 +12,8 @@
 
     <RelativeLayout
         android:id="@+id/videoArea"
-        android:layout_width="1px"
-        android:layout_height="1px"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:layout_centerInParent="true" />
 
     <master.flame.danmaku.ui.widget.DanmakuView
@@ -78,7 +78,7 @@
             android:id="@+id/text_subtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_above="@+id/text_progress"
+            android:layout_above="@+id/bottom_text_bar"
             android:layout_centerHorizontal="true"
             android:layout_marginBottom="2dp"
             android:alpha="0.9"
@@ -92,43 +92,49 @@
             android:visibility="gone" />
 
         <!-- 这两条文字在控制卡片之外、直接压视频：保留 1px 柔和阴影，亮画面下才读得清。
-             其余放在卡片内的文字一律不投影。 -->
-        <TextView
-            android:id="@+id/text_progress"
+             其余放在卡片内的文字一律不投影。
+             包在一个独立容器里：底栏收起时只把 bottom_control 设为 INVISIBLE（保留高度），
+             文字条位置不变，不会像 1.4.0 早期那样因锚点 GONE 而跳到别处。 -->
+        <RelativeLayout
+            android:id="@+id/bottom_text_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_above="@id/bottom_control"
-            android:layout_marginBottom="2dp"
-            android:alpha="0.9"
-            android:gravity="start"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:shadowColor="#CC000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3"
-            android:text="@string/text_default_progress"
-            android:textColor="@color/textwhite"
-            android:textSize="11sp" />
+            android:layout_marginBottom="2dp">
 
-        <TextView
-            android:id="@+id/text_online"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_above="@id/bottom_control"
-            android:layout_marginBottom="2dp"
-            android:alpha="0.9"
-            android:gravity="end"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:shadowColor="#CC000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3"
-            android:text="@string/text_default_online"
-            android:textAlignment="textEnd"
-            android:textColor="@color/textwhite"
-            android:textSize="11sp" />
+            <TextView
+                android:id="@+id/text_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alpha="0.9"
+                android:gravity="start"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:text="@string/text_default_progress"
+                android:textColor="@color/textwhite"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/text_online"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alpha="0.9"
+                android:gravity="end"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:text="@string/text_default_online"
+                android:textAlignment="textEnd"
+                android:textColor="@color/textwhite"
+                android:textSize="11sp" />
+        </RelativeLayout>
 
         <!-- 顶栏：悬浮卡片（10dp 圆角 + 发丝描边），不再铺整条灰底 -->
         <RelativeLayout
@@ -526,7 +532,7 @@
             android:id="@+id/left_control"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:layout_above="@+id/text_progress"
+            android:layout_above="@+id/bottom_text_bar"
             android:layout_alignParentLeft="true"
             android:layout_below="@+id/top"
             android:layout_marginStart="4dp"
@@ -535,10 +541,10 @@
 
             <TextView
                 android:id="@+id/button_seek_back"
-                android:layout_width="48dp"
-                android:layout_height="30dp"
-                android:layout_marginBottom="4dp"
-                android:background="@drawable/player_pill_bg"
+                android:layout_width="44dp"
+                android:layout_height="28dp"
+                android:layout_marginBottom="3dp"
+                android:background="@drawable/player_side_pill_bg"
                 android:gravity="center"
                 android:text="-10s"
                 android:textColor="@color/textwhite"
@@ -546,9 +552,9 @@
 
             <TextView
                 android:id="@+id/text_speed"
-                android:layout_width="48dp"
-                android:layout_height="30dp"
-                android:background="@drawable/player_pill_bg"
+                android:layout_width="44dp"
+                android:layout_height="28dp"
+                android:background="@drawable/player_side_pill_bg"
                 android:gravity="center"
                 android:text="x 1.0"
                 android:textColor="@color/textwhite"
@@ -557,10 +563,10 @@
 
             <TextView
                 android:id="@+id/button_seek_forward"
-                android:layout_width="48dp"
-                android:layout_height="30dp"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/player_pill_bg"
+                android:layout_width="44dp"
+                android:layout_height="28dp"
+                android:layout_marginTop="3dp"
+                android:background="@drawable/player_side_pill_bg"
                 android:gravity="center"
                 android:text="+10s"
                 android:textColor="@color/textwhite"

@@ -112,10 +112,11 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
             sectionList.add(new SettingSection("switch", "提示样式（气泡/横条）", SharedPreferencesUtil.SNACKBAR_ENABLE,
                     "打开此选项，会启用新提示信息显示方式", "true"));
             sectionList.add(new SettingSection("switch", "新版开屏动画", SharedPreferencesUtil.SPLASH_NEW_UI,
-                    "新版开屏为「图标+粉色短线+氛围光晕」，觉得图标不协调可关闭，回到纯黑+文字的旧开屏", "true"));
+                    "新版开屏为「图标+粉色短线+氛围光晕」，觉得图标不协调可关闭，回到纯黑+文字的旧开屏；"
+                            + "仅在打开「启动时等待请求完成」时完整播放", "true"));
             sectionList.add(new SettingSection("switch", "启动时等待请求完成", "splash_wait_requests",
                     "打开后启动会先等 Cookie 续期/刷新与终端接口返回、并等开屏打字动画播完再进首页，"
-                            + "开屏动画能完整看到；弱网最多多等 6 秒。默认关闭（开屏立刻进入）", "false"));
+                            + "开屏动画能完整看到；弱网最多多等 6 秒。默认关闭（直接沿用系统首帧图标，开屏立刻进入）", "false"));
         }
         return sectionList;
     }

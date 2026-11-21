@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.activity;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Process;
 import android.text.TextUtils;
@@ -63,6 +64,24 @@ public class MenuActivity extends BaseActivity {
     private MenuGridAdapter menuGridAdapter;
 
     /**
+     * 动态/消息未读数由启动后的后台任务写入 SharedPreferences。
+     *
+     * <p>用户可能在应用刚进来（请求还没回来）就点标题栏开菜单：此时 onCreate/onResume
+     * 读到的都是旧值（通常是 0），之后请求完成也没有任何东西通知菜单，红点就一直不出现。
+     * 监听这两个 key，请求一回来就把角标补上；新旧两版菜单共用 {@link #refreshBadges()}。
+     */
+    private final SharedPreferences.OnSharedPreferenceChangeListener badgePrefListener =
+            new SharedPreferences.OnSharedPreferenceChangeListener() {
+                @Override
+                public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
+                    if (SharedPreferencesUtil.DYNAMIC_UPDATE_NUM.equals(key)
+                            || SharedPreferencesUtil.MESSAGE_UPDATE_NUM.equals(key)) {
+                        runOnUiThread(MenuActivity.this::refreshBadges);
+                    }
+                }
+            };
+
+    /**
      * 在排序设置和Splash中使用到的，
      * 需要使用排序，故用了LinkedHashMap
      * 请不要让它的顺序被打乱（
@@ -92,6 +111,10 @@ public class MenuActivity extends BaseActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_menu);
+
+        //先注册再读未读数：后台任务可能在 onCreate 期间就把新值写进来，避免读到旧值又漏掉通知
+        SharedPreferences badgePrefs = SharedPreferencesUtil.getSharedPreferences();
+        if (badgePrefs != null) badgePrefs.registerOnSharedPreferenceChangeListener(badgePrefListener);
 
 
         time = System.currentTimeMillis();
@@ -214,6 +237,9 @@ public class MenuActivity extends BaseActivity {
             }
         }
 
+        //把 onCreate 期间可能刚刚返回的未读数补到菜单上（旧版按钮/新版徽章都走这里）
+        refreshBadges();
+
         //首次安装/升级到新版本后，首次进入主菜单时自动打开当前版本的更新日志
         String lastVersion = SharedPreferencesUtil.getString(SharedPreferencesUtil.last_version, "");
         if (!BuildConfig.VERSION_NAME.equals(lastVersion)) {
@@ -242,27 +268,38 @@ public class MenuActivity extends BaseActivity {
         //不在播放/看图页弹更新框，避免打断正在做的事；常驻进程回前台也能重新检查
         UpdateManager.autoCheck(this);
         Log.e("debug", "MenuActivity onResume in: " + (System.currentTimeMillis() - time));
+        refreshBadges();
+    }
+
+    /** 把最新的动态/消息未读数刷到菜单（新版徽章与旧版按钮共用）。 */
+    private void refreshBadges() {
+        if (isFinishing() || isDestroyed()) return;
+
+        int dynamicNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
+        int messageNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
+
         if (menuGridAdapter != null) {
             //新版菜单：更新数以徽章形式刷新
-            menuGridAdapter.updateBadge("dynamic", SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0));
-            menuGridAdapter.updateBadge("message", SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0));
+            menuGridAdapter.updateBadge("dynamic", dynamicNum);
+            menuGridAdapter.updateBadge("message", messageNum);
         }
         if (dynamicButton != null) {
             String btnText = Objects.requireNonNull(btnNames.get("dynamic")).first;
-            int updateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.DYNAMIC_UPDATE_NUM, 0);
-            if (updateNum > 0) {
-                btnText = btnText + " (" + updateNum + ")";
-            }
+            if (dynamicNum > 0) btnText = btnText + " (" + dynamicNum + ")";
             dynamicButton.setText(btnText);
         }
         if (messageButton != null) {
             String messageBtnText = Objects.requireNonNull(btnNames.get("message")).first;
-            int messageUpdateNum = SharedPreferencesUtil.getInt(SharedPreferencesUtil.MESSAGE_UPDATE_NUM, 0);
-            if (messageUpdateNum > 0) {
-                messageBtnText = messageBtnText + " (" + messageUpdateNum + ")";
-            }
+            if (messageNum > 0) messageBtnText = messageBtnText + " (" + messageNum + ")";
             messageButton.setText(messageBtnText);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        SharedPreferences badgePrefs = SharedPreferencesUtil.getSharedPreferences();
+        if (badgePrefs != null) badgePrefs.unregisterOnSharedPreferenceChangeListener(badgePrefListener);
+        super.onDestroy();
     }
 
     //长按"推荐"刷新视频（新旧两版菜单共用）

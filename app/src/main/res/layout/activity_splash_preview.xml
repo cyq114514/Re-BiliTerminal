@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  「启动时等待请求完成」关闭时使用的开屏内容。
+
+  关闭等待后，首屏通常在 onCreate 后十几毫秒就被拉起；如果这时还渲染完整的
+  图标 + 短线 + 打字动画，它往往只来得及画出一帧就被首屏盖掉，表现为
+  「开屏闪一下再出现」。这里直接复用系统首帧的 windowBackground（纯黑 + 居中图标），
+  让系统预览窗口到 Activity 内容的切换是同一张画面，不再有第二段开屏闪出来。
+-->
+<View xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/splash_text" />
