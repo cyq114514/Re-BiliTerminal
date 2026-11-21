@@ -100,6 +100,9 @@ adb shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1 || true
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
 adb shell wm dismiss-keyguard >/dev/null 2>&1 || true
 adb shell input keyevent 82 >/dev/null 2>&1 || true
+adb shell svc power stayon true >/dev/null 2>&1 || true
+adb shell settings put secure doze_always_on 0 >/dev/null 2>&1 || true
+adb shell settings put system ambient_enabled 0 >/dev/null 2>&1 || true
 
 stage "cold start app (real launcher alias)"
 adb logcat -c || true

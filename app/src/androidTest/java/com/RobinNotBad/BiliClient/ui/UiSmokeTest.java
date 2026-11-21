@@ -199,6 +199,8 @@ public class UiSmokeTest {
         AtomicBoolean visible = new AtomicBoolean(false);
         AtomicBoolean destroyed = new AtomicBoolean(false);
         while (System.currentTimeMillis() < deadline) {
+            // Wear 镜像可能进入 ambient/关屏，isShown 会瞬间变 false；轮询期间持续唤醒。
+            wake();
             try {
                 scenario.onActivity(activity -> {
                     // 用 decor content 作为根：部分页面（Wear 菜单/搜索）会隐藏/替换 topbar，
