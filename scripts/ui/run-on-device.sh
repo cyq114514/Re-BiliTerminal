@@ -89,7 +89,7 @@ cat > "$REPORT/prefs.xml" <<XML
 </map>
 XML
 adb push "$REPORT/prefs.xml" /data/local/tmp/rebili-ui-prefs.xml >/dev/null
-adb shell run-as "$PKG" sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/rebili-ui-prefs.xml shared_prefs/default.xml && chmod 600 shared_prefs/default.xml' >/dev/null
+adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/rebili-ui-prefs.xml shared_prefs/default.xml && chmod 600 shared_prefs/default.xml'" >/dev/null
 
 stage "disable animations / lock rotation"
 for k in window_animation_scale transition_animation_scale animator_duration_scale; do
