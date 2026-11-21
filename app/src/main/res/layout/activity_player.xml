@@ -306,14 +306,6 @@
                         android:scaleType="fitCenter"
                         android:src="@drawable/icon_folder"
                         android:visibility="gone" />
-
-                    <!-- 选P键隐藏时在末尾补一格，行仍是 5 格；「播放」是第 3 格，
-                         正好落在整行中心。放在开头会把播放键挤到第 4 格。 -->
-                    <Space
-                        android:id="@+id/bottom_spacer"
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
-                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
             </RelativeLayout>
@@ -324,7 +316,7 @@
             android:id="@+id/right_control"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:layout_above="@+id/bottom_text_bar"
+            android:layout_above="@+id/bottom_control"
             android:layout_alignParentRight="true"
             android:layout_below="@+id/top"
             android:layout_marginEnd="4dp"
@@ -443,8 +435,8 @@
 
                 <ImageButton
                     android:id="@+id/danmaku_btn"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:layout_marginBottom="4dp"
                     android:adjustViewBounds="true"
                     android:alpha="0.5"
@@ -455,8 +447,8 @@
 
                 <ImageButton
                     android:id="@+id/rotate_btn"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:layout_marginBottom="4dp"
                     android:adjustViewBounds="true"
                     android:background="@drawable/player_circle_bg"
@@ -466,8 +458,8 @@
 
                 <ImageButton
                     android:id="@+id/menu_btn"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:adjustViewBounds="true"
                     android:background="@drawable/player_circle_bg"
                     android:padding="7dp"
@@ -549,36 +541,36 @@
 
             <TextView
                 android:id="@+id/button_seek_back"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginBottom="4dp"
-                android:background="@drawable/player_circle_bg"
+                android:layout_width="44dp"
+                android:layout_height="28dp"
+                android:layout_marginBottom="3dp"
+                android:background="@drawable/player_side_pill_bg"
                 android:gravity="center"
                 android:text="-10s"
                 android:textColor="@color/textwhite"
-                android:textSize="10sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/text_speed"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="@drawable/player_circle_bg"
+                android:layout_width="44dp"
+                android:layout_height="28dp"
+                android:background="@drawable/player_side_pill_bg"
                 android:gravity="center"
                 android:text="x 1.0"
                 android:textColor="@color/textwhite"
-                android:textSize="10sp"
+                android:textSize="12sp"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/button_seek_forward"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/player_circle_bg"
+                android:layout_width="44dp"
+                android:layout_height="28dp"
+                android:layout_marginTop="3dp"
+                android:background="@drawable/player_side_pill_bg"
                 android:gravity="center"
                 android:text="+10s"
                 android:textColor="@color/textwhite"
-                android:textSize="10sp" />
+                android:textSize="12sp" />
 
         </LinearLayout>
 

@@ -763,7 +763,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     btn_auto_next.setVisibility(View.GONE);
                     // 直播模式隐藏分P选择器按钮
                     btn_page_selector.setVisibility(View.GONE);
-                    updateBottomSpacer();
                     //隐藏完再按剩下的按钮重算一次宽度：否则行宽还按 7 个按钮算，
                     //只剩一个发弹幕按钮时会被拉成横贯屏幕的长条
                     clampQuickMenuWidth();
@@ -2121,9 +2120,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             btn_auto_next.setVisibility(View.GONE);
             btn_quality.setVisibility(View.GONE);
         }
-
-        //选P键的可见性在这里才最终确定：同步 spacer，让播放键回到正中间
-        updateBottomSpacer();
 
         seekbar_progress.setMax(video_all);
         progress_str = StringUtil.toTime(video_all / 1000);
@@ -3667,39 +3663,28 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
         int budget = available - ToolsUtil.dp2px(4f);
 
-        int defaultHeight = ToolsUtil.dp2px(36f);
-        //右列恒为 3 颗按钮，预算按 3 行算；左列倍速隐藏时只是多出余量。
-        int rows = 3;
-        int spacing = ToolsUtil.dp2px(8f);
-        int gaps = rows - 1;
+        int defaultHeight = ToolsUtil.dp2px(28f);
+        boolean speedVisible = text_speed != null && text_speed.getVisibility() == View.VISIBLE;
+        int rows = speedVisible ? 3 : 2;
+        int spacing = ToolsUtil.dp2px(6f);
 
         int buttonHeight = defaultHeight;
-        if (defaultHeight * rows + spacing * gaps > budget) {
-            buttonHeight = Math.max(ToolsUtil.dp2px(20f), (budget - spacing * gaps) / rows);
+        if (defaultHeight * rows + spacing > budget) {
+            buttonHeight = Math.max(ToolsUtil.dp2px(20f), (budget - spacing) / rows);
         }
-        //左右六颗按钮用同一个直径：只压左列会让小屏上又是一边长一边短
-        applyColumnButtonSize(button_seek_back, buttonHeight);
-        applyColumnButtonSize(text_speed, buttonHeight);
-        applyColumnButtonSize(button_seek_forward, buttonHeight);
-        applyColumnButtonSize(findViewById(R.id.danmaku_btn), buttonHeight);
-        applyColumnButtonSize(findViewById(R.id.rotate_btn), buttonHeight);
-        applyColumnButtonSize(findViewById(R.id.menu_btn), buttonHeight);
+        //三颗按钮必须同一高度：倍速原先固定 30dp，而 ±秒 会被夹到 34/22dp，加载态最明显
+        applySeekButtonHeight(button_seek_back, buttonHeight, defaultHeight);
+        applySeekButtonHeight(text_speed, buttonHeight, defaultHeight);
+        applySeekButtonHeight(button_seek_forward, buttonHeight, defaultHeight);
     }
 
-    private void applyColumnButtonSize(View button, int size) {
+    private void applySeekButtonHeight(TextView button, int height, int defaultHeight) {
         if (button == null) return;
         ViewGroup.LayoutParams params = button.getLayoutParams();
-        if (params == null) return;
-        if (params.width == size && params.height == size) return;
-        params.width = size;
-        params.height = size;
+        if (params == null || params.height == height) return;
+        params.height = height;
         button.setLayoutParams(params);
-        if (button instanceof TextView) {
-            ((TextView) button).setTextSize(size < ToolsUtil.dp2px(30f) ? 9f : 10f);
-        } else {
-            int pad = Math.max(ToolsUtil.dp2px(2f), size / 5);
-            button.setPadding(pad, pad, pad, pad);
-        }
+        button.setTextSize(height < defaultHeight ? 11f : 12f);
     }
 
     /** direction：1 快进、-1 快退；走 seekToPosition，弹幕零点会跟着对齐 */
@@ -4322,9 +4307,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      */
     private void clampQuickMenuWidth() {
         if (right_second == null || screen_width <= 0) return;
-        int columnWidth = ToolsUtil.dp2px(36f) + ToolsUtil.dp2px(8f);
-        //左右两列现在都是 36dp 圆钮，给左侧留同样宽度；展开的快速行不会横穿到左列
-        int leftColumnWidth = ToolsUtil.dp2px(36f) + ToolsUtil.dp2px(8f);
+        int columnWidth = ToolsUtil.dp2px(32f) + ToolsUtil.dp2px(8f);
+        //同时给左侧"快进/倍速/快退"胶囊留出宽度：否则展开的快速行会横穿到左列上
+        int leftColumnWidth = ToolsUtil.dp2px(48f) + ToolsUtil.dp2px(12f);
         int maxRowWidth = Math.max(screen_width - columnWidth - leftColumnWidth
                 - ToolsUtil.dp2px(8f), ToolsUtil.dp2px(56f));
 
@@ -4344,18 +4329,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         lp.width = target;
         right_second.setLayoutParams(lp);
         Logu.d("player", "快速菜单行宽度=" + target + "px（上限 " + maxRowWidth + "，屏宽 " + screen_width + "）");
-    }
-
-    /**
-     * 底排 5 格对称：选P键显示时它占第 5 格；隐藏时用等宽 spacer 占第 1 格，
-     * 这样「播放」永远是 5 格正中间，不会因为选P键 GONE 而偏向左侧。
-     */
-    private void updateBottomSpacer() {
-        View spacer = findViewById(R.id.bottom_spacer);
-        if (spacer != null && btn_page_selector != null) {
-            spacer.setVisibility(btn_page_selector.getVisibility() == View.VISIBLE
-                    ? View.GONE : View.VISIBLE);
-        }
     }
 
     /**
@@ -4436,15 +4409,19 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
-     * 左右两列的高度兜底。
+     * 右侧按钮列的高度兜底（弹幕/旋转/菜单 + 「更多」展开行）。
      *
-     * <p>两列都用 {@code below=top + above=bottom_text_bar} 被上下横条夹取；
-     * 「界面大小」放大后中间剩余高度可能小于整列内容所需，超出部分会被父容器裁掉。
-     * 装不下时把两列一起改成 wrap_content + CENTER_VERTICAL，保持同一中心线；
-     * 只改右列会立刻回到「左列居中于区间、右列居中于整屏」的不对称老问题。
+     * <p>XML 里它用 {@code below=top + above=bottom_control} 被上下两条横条夹取，
+     * 高度就是两者之间的剩余空间。「界面大小」放大后顶栏与底部控制区都按 density 成倍长高，
+     * 中间剩下的高度可能小于整列内容所需（34dp 展开行 + 3×28dp 按钮），
+     * 超出部分被父容器裁掉——表现为右侧按钮只露一部分、底下几个点不到（1.3.4 反馈）。
+     *
+     * <p>这里在真正布局完之后量一次：装不下就改成 wrap_content + 垂直居中，
+     * 让整列按自身高度落在两条横条中间，而不是被夹成一条缝。圆屏分支此前已经这么处理，
+     * 这里只补非圆屏（方屏/手机放大场景）。
      */
     private void fitRightControl() {
-        if (right_control == null) return;
+        if (right_control == null || screen_round) return;
         right_control.post(() -> {
             if (right_control == null || isFinishing() || isDestroyed()) return;
             int avail = right_control.getHeight();
@@ -4453,22 +4430,16 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
             int needed = right_control.getMeasuredHeight();
             if (needed <= avail) return;
-            centerColumn(right_control);
-            centerColumn(left_control);
-            Logu.d("player_ui", "按钮列高度不足（需 " + needed + "px / 可用 " + avail + "px），两列改为自适应居中");
+            ViewGroup.LayoutParams lp = right_control.getLayoutParams();
+            if (!(lp instanceof RelativeLayout.LayoutParams)) return;
+            RelativeLayout.LayoutParams rlp = (RelativeLayout.LayoutParams) lp;
+            rlp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            rlp.addRule(RelativeLayout.CENTER_VERTICAL);
+            rlp.removeRule(RelativeLayout.BELOW);
+            rlp.removeRule(RelativeLayout.ABOVE);
+            right_control.setLayoutParams(rlp);
+            Logu.d("player_ui", "右侧按钮列高度不足（需 " + needed + "px / 可用 " + avail + "px），改为自适应居中");
         });
-    }
-
-    private void centerColumn(View column) {
-        if (column == null) return;
-        ViewGroup.LayoutParams lp = column.getLayoutParams();
-        if (!(lp instanceof RelativeLayout.LayoutParams)) return;
-        RelativeLayout.LayoutParams rlp = (RelativeLayout.LayoutParams) lp;
-        rlp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-        rlp.addRule(RelativeLayout.CENTER_VERTICAL);
-        rlp.removeRule(RelativeLayout.BELOW);
-        rlp.removeRule(RelativeLayout.ABOVE);
-        column.setLayoutParams(rlp);
     }
 
     private void initUI() {
@@ -4599,11 +4570,43 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     bottomBtn.setBackgroundResource(R.drawable.player_circle_bg);
             }
 
-            //对称双列：左右都用 36dp 圆钮、同样的水平内缩，并共用
-            //below=top / above=bottom_text_bar 的垂直区间。此前右列被单独改成
-            //「CENTER_VERTICAL + 26dp」、左列是「区间居中 + 44×28 胶囊」，所以永远对不齐。
+            //左右两列同样内缩：圆形屏在 y≈100 处的可用弦宽只有 ~330px
             left_control.setPadding(padding * 3, 0, 0, 0);
-            right_control.setPadding(0, 0, padding * 3, 0);
+            right_control.setPadding(0, 0, padding * 4, 0);
+            //右列缩到 26dp：底排上移后，32dp 的整列会压到最下面那颗按钮；
+            //26dp × 3 + 间距 = 164px，正好在底排上方居中收住
+            int[] roundRightBtnIds = {R.id.danmaku_btn, R.id.rotate_btn, R.id.menu_btn};
+            for (int roundRightBtnId : roundRightBtnIds) {
+                View roundBtn = findViewById(roundRightBtnId);
+                if (roundBtn == null) continue;
+                ViewGroup.LayoutParams rp = roundBtn.getLayoutParams();
+                rp.width = ToolsUtil.dp2px(26f);
+                rp.height = ToolsUtil.dp2px(26f);
+                roundBtn.setLayoutParams(rp);
+            }
+
+            //右侧按钮列在圆屏上要保证"整列都落在可视圆内"：
+            //原实现用 layout_below/layout_above 让它被上下横条精确夹取，高度吃紧时最后一个按钮会被裁掉
+            //（顶栏在圆屏下要变两行、底栏要加下内边距，余量只剩十几像素）。改成自适应高度 + 垂直居中，
+            //既不受上下横条挤压，也自然落在圆盘最宽的中段；同时给可横向滚动的菜单行加宽度上限，
+            //避免它把整列一起顶出屏幕右缘
+            try {
+                RelativeLayout.LayoutParams rcParams = (RelativeLayout.LayoutParams) right_control.getLayoutParams();
+                rcParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                rcParams.addRule(RelativeLayout.CENTER_VERTICAL);
+                rcParams.removeRule(RelativeLayout.BELOW);
+                rcParams.removeRule(RelativeLayout.ABOVE);
+                right_control.setLayoutParams(rcParams);
+                right_control.setClipChildren(false);
+
+                int columnWidth = ToolsUtil.dp2px(26f) + padding * 4;
+                int maxRowWidth = Math.max(screen_width - columnWidth - ToolsUtil.dp2px(8f), ToolsUtil.dp2px(56f));
+                ViewGroup.LayoutParams rowParams = right_second.getLayoutParams();
+                rowParams.width = maxRowWidth;
+                right_second.setLayoutParams(rowParams);
+            } catch (Throwable e) {
+                Logu.e("round", "右侧按钮列圆屏布局调整失败: " + e.getMessage());
+            }
 
             RelativeLayout.LayoutParams danmakuParams = (RelativeLayout.LayoutParams) mDanmakuView.getLayoutParams();
             danmakuParams.setMargins(0, padding * 3, 0, padding * 3);
@@ -4611,13 +4614,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             text_subtitle.setMaxWidth((int) (screen_width * 0.65));
 
-            //圆屏顶部同样不铺卡片（卡片四角会出圆）：改回浮动文字 + 1px 阴影。
-            //顶栏保持单行：标题+返回箭头在左，时钟/电量在右；不再把时钟居中、
-            //标题下移，否则标题会压到时钟上，左右两列也失去共同的垂直基准。
+            //圆屏顶部同样不铺卡片（卡片四角会出圆）：改回浮动文字 + 1px 阴影，
+            //横向只留 8dp 安全边距，标题限宽 70% 后居中，避免长标题被圆边裁掉。
             layout_top.setBackground(null);
             layout_top.setPadding(padding * 4, padding, padding * 4, padding / 2);
-            text_title.setMaxWidth((int) (screen_width * 0.66));
-            text_title.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+            text_title.setMaxWidth((int) (screen_width * 0.70));
             text_title.setShadowLayer(3f, 0f, 1f, 0xCC000000);
             View roundClock = findViewById(R.id.player_clock);
             if (roundClock instanceof TextView)
@@ -4625,6 +4626,22 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             if (batteryText != null)
                 batteryText.setShadowLayer(3f, 0f, 1f, 0xCC000000);
 
+            LinearLayout clockLayout = findViewById(R.id.clock_layout);
+            clockLayout.setOrientation(LinearLayout.HORIZONTAL);
+            RelativeLayout.LayoutParams clockLayoutParams = new RelativeLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            clockLayoutParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+            clockLayout.setLayoutParams(clockLayoutParams);
+
+            RelativeLayout.LayoutParams titleParams = new RelativeLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            titleParams.addRule(RelativeLayout.BELOW, R.id.clock_layout);
+            titleParams.topMargin = padding / 2;
+            text_title.setLayoutParams(titleParams);
+            text_title.setGravity(Gravity.CENTER);
+            //顶栏的时钟已随 TextClock 一并删除（定位见上一段），圆屏这里不再需要给它补间距
+
+            //right_control 的右侧内边距是在本分支里才加的，宽度上限要按新值再算一次
             clampQuickMenuWidth();
         }
 
@@ -4632,8 +4649,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //边缘裁掉）。该行是居中 wrap_content，放不下时两侧对称外溢、被物理边缘裁切；
         //按满编 5 键（菜单/音量-/播放/音量+/选P）算所需宽度，放不下就整行等比收缩，
         //宽度足够的屏幕保持原尺寸。必须放在圆屏 padding 之后：padding 会吃掉可用宽度
-        //选P键隐藏时用占位空格把播放键顶到正中间，先按当前可见性定 spacer
-        updateBottomSpacer();
         fitBottomButtons();
         fitRightControl();
 
