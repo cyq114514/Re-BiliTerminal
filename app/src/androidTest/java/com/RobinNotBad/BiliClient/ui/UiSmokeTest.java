@@ -172,7 +172,9 @@ public class UiSmokeTest {
         while (System.currentTimeMillis() < deadline) {
             try {
                 scenario.onActivity(activity -> {
-                    View root = activity.findViewById(R.id.top);
+                    // 用 decor content 作为根：部分页面（Wear 菜单/搜索）会隐藏/替换 topbar，
+                    // 页面是否真的渲染出来应由 content 判断；页面内的 pageName 另行校验。
+                    View root = activity.findViewById(android.R.id.content);
                     visible.set(root != null && root.isShown());
                 });
             } catch (Throwable t) {
@@ -182,8 +184,8 @@ public class UiSmokeTest {
             if (visible.get()) {
                 scenario.onActivity(activity -> {
                     assertNotNull(name + "：页面未启动（Activity 为空）", activity);
-                    View root = activity.findViewById(R.id.top);
-                    assertNotNull(name + "：根视图缺失（R.id.top）", root);
+                    View root = activity.findViewById(android.R.id.content);
+                    assertNotNull(name + "：根视图缺失（android.R.id.content）", root);
                     Rect rect = new Rect();
                     assertTrue(name + "：根视图没有可见区域", root.getGlobalVisibleRect(rect));
                     assertTrue(name + "：根视图宽度为 0", rect.width() > 0);
