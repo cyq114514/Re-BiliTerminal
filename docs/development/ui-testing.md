@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|---|---|
 | `round-watch` | 圆屏手表 | 30 | `android-wear` | `x86` | `wearos_small_round` | 384×384 @320dpi，`ro.build.characteristics=watch` | 系统镜像 `system-images;android-30;android-wear;x86`；真圆屏 |
 | `small-phone` | 小屏手机 | 26 | `default` | `x86` | `Nexus One` | 480×800 @240dpi | 代表性小屏 |
-| `standard-phone` | 标准手机 | 30 | `default` | `x86` | `pixel_2` | 待 CI 实测记录 | 主分支标准机 |
+| `standard-phone` | 标准手机 | 29 | `default` | `x86` | `pixel_2` | 待 CI 实测记录 | API 30 的 default 只有 x86_64 镜像，32 位 x86 最高 API 29 |
 | `square-watch` | 方屏手表 | 30 | `android-wear` | `x86` | `wearos_square` | 待 CI 实测记录 | 与圆屏同一 Wear 镜像，不同 profile |
 
 选择 `x86`（而非 x86_64）的原因：debug 包只带 `armeabi-v7a`/`x86` 原生库（`app/libs` 无 x86_64，且不可重建）。不升级 compileSdk/AGP/Gradle 来适配新系统镜像。

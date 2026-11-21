@@ -21,7 +21,7 @@ DEVICES = {
         "round": "0", "shape": "phone-small",
     },
     "standard-phone": {
-        "id": "standard-phone", "label": "标准手机", "api": "30", "target": "default",
+        "id": "standard-phone", "label": "标准手机", "api": "29", "target": "default",
         "arch": "x86", "profile": "pixel_2", "avd": "standard-phone",
         "round": "0", "shape": "phone-standard",
     },
