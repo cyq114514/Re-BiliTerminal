@@ -168,7 +168,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 | 本地 JVM 单元测试（全部） | **PASS** | `./gradlew clean :app:testDebugUnitTest :app:assembleDebug -Pandroid.aapt2FromMavenOverride=...` → `BUILD SUCCESSFUL`；XML 汇总 **211 tests / 0 failures / 0 errors / 0 skipped**（19 个测试类，含基础设施冒烟） |
 | 本地 Debug 编译 | **PASS** | 同一次 Gradle 调用产出 `app/build/outputs/apk/debug/app-debug.apk`（约 22.0 MB，构建时间 2026-11-21 03:03（本地）） |
 | 仓库自检脚本 | **PASS** | `check-env`（FAIL 0 / WARN 1：本机 aapt2 override 提示）、`check-repo`（FAIL 0 / WARN 2：工作区未提交、tag 版本提示）、`check-links`（FAIL 0）、`validate-ci`（FAIL 0 / WARN 1：action 未 pin SHA）、`check-tests`（FAIL 0 / WARN 0） |
-| GitHub Actions 真实运行 | **PASS** | 两次 main push 均全绿：[run 44839324416](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44839324416)（`main` @ `5cf433a`）与 [run 44838407423](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44838407423)（`d91bf9b`）：`规范与环境检查` / `编译自检（Debug）` / `JVM 单元测试` PASS，`发布（tag）` skipped（非 tag，符合预期）；CI 日志 **210 tests / 0 failures / 0 errors / 0 skipped**（`BUILD SUCCESSFUL in 1m 11s`）；artifact `unit-test-results`（XML+HTML）与 `Re-BiliTerminal-debug` 均上传成功 |
+| GitHub Actions 真实运行 | **PASS** | 最终交付提交 [run 44842783655](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44842783655)（`main` @ `d706c40`）：`规范与环境检查` / `编译自检（Debug）` / `JVM 单元测试` success，`发布（tag）` skipped（非 tag，符合预期）；artifact `unit-test-results`（XML+HTML，约 58KB）与 `Re-BiliTerminal-debug`（约 16.7MB）上传成功。此前 [44839324416](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44839324416)、[44838407423](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44838407423) 也全绿；同代码本地 clean 跑出 **211 tests / 0 failures / 0 errors / 0 skipped**，CI 该 job 同提交 success（运行期 android-all 下载已改为本地目录，日志抓取受本机网络限制未拉取，状态以 Actions job conclusion 为准） |
 | Android Emulator 集成测试 | **NOT RUN / NOT ADOPTED** | 见 §4 评估；现有仪器化测试会写线上数据，未接入 |
 | Release tag 发布链 | **NOT RUN** | 只在真实 tag 推送时验证；本次未创建 tag、未发 Release |
 
@@ -190,7 +190,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 2. **`AppSignTest` 偶发 `sign` 只有 31 位（本地复现）**：
    - 根因（真实生产缺陷）：`ToolsUtil.md5` 用 `for (i = 0; i < 32 - md5code.length(); i++)` 边插入边改长度，最多只补 1 个 0；MD5 首字节 <0x10 时会少 1~2 位，导致 B 站 `sign`/`w_rid` 随机失效。
    - 修法：改为 `while (hex.length() < 32) hex = "0" + hex;`，新增「首字节 0 的 MD5 已知向量」与「300 次批量签名定长 32 位」回归用例。
-   - 验证：本地 `clean :app:testDebugUnitTest :app:assembleDebug` → BUILD SUCCESSFUL，**211 tests / 0 failures / 0 errors / 0 skipped**；最终 CI 结果见下一次 run。
+   - 验证：本地 `clean :app:testDebugUnitTest :app:assembleDebug` → BUILD SUCCESSFUL，**211 tests / 0 failures / 0 errors / 0 skipped**；最终 CI [run 44842783655](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44842783655) 三个日常 job 全 success（`unit-test` 含 `prepareRobolectricJars`，无运行期下载失败）。
 
 ### 8.3 下一步（按顺序）
 
