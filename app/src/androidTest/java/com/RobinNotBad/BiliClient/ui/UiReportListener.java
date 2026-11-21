@@ -91,9 +91,10 @@ public class UiReportListener extends RunListener {
     @Override
     public void testAssumptionFailure(Failure failure) {
         TestCase item = getCase(failure.getDescription());
+        // assumeFalse 是显式跳过，不是失败；不能把 message 写进 failure，
+        // 否则会被 JUnit/CI 汇总当成失败（Wear 的横屏用例就是这样误报的）。
         item.skipped = true;
         item.assumptionFailure = true;
-        item.failureMessage = failure.getMessage();
     }
 
     @Override
