@@ -96,6 +96,10 @@ for k in window_animation_scale transition_animation_scale animator_duration_sca
     adb shell settings put global "$k" 0 >/dev/null 2>&1 || true
 done
 adb shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+adb shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1 || true
+adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+adb shell wm dismiss-keyguard >/dev/null 2>&1 || true
+adb shell input keyevent 82 >/dev/null 2>&1 || true
 
 stage "cold start app (real launcher alias)"
 adb logcat -c || true
@@ -125,7 +129,10 @@ set -e
 stage "instrumentation exit=$INSTRUMENT_EXIT"
 
 stage "pull screenshots / reports / logcat"
-adb pull "/sdcard/Android/data/$PKG/files/ui-shots" "$REPORT/screenshots" >/dev/null 2>&1 || true
+SHOT_TMP="$REPORT/.shots-tmp"
+adb pull "/sdcard/Android/data/$PKG/files/ui-shots" "$SHOT_TMP" >/dev/null 2>&1 || true
+find "$SHOT_TMP" -type f -name '*.png' -exec cp {} "$REPORT/screenshots/" \; 2>/dev/null || true
+rm -rf "$SHOT_TMP"
 adb pull "/sdcard/Android/data/$PKG/files/ui-report" "$REPORT/ui-report" >/dev/null 2>&1 || true
 if [ -f "$REPORT/ui-report/TEST-ui-smoke.xml" ]; then
     mv "$REPORT/ui-report/TEST-ui-smoke.xml" "$REPORT/TEST-ui-smoke.xml"

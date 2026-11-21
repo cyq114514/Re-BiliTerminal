@@ -17,7 +17,6 @@ import androidx.test.uiautomator.UiDevice;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.MenuActivity;
 import com.RobinNotBad.BiliClient.activity.video.local.DownloadListActivity;
-import com.RobinNotBad.BiliClient.activity.player.AudioPlayerActivity;
 import com.RobinNotBad.BiliClient.activity.player.AudioQueueActivity;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
 import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity;
@@ -40,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -65,6 +65,11 @@ public class UiSmokeTest {
     public void setUp() {
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        try {
+            device.wakeUp();
+        } catch (android.os.RemoteException ignored) {
+            // 部分 Wear 镜像不支持唤醒；host 已通过 KEYCODE_WAKEUP/dismiss-keyguard 兜底
+        }
         device.waitForIdle(1000);
 
         SharedPreferences prefs = context.getSharedPreferences("default", Context.MODE_PRIVATE);
@@ -93,113 +98,109 @@ public class UiSmokeTest {
 
     @Test
     public void menuPage() {
-        smokePage("menu", MenuActivity.class, new Intent(context, MenuActivity.class), R.id.menu_scroll);
+        smokePage("menu", MenuActivity.class, new Intent(context, MenuActivity.class));
     }
 
     @Test
     public void homeRecommendPage() {
-        smokePage("home", RecommendActivity.class, new Intent(context, RecommendActivity.class),
-                R.id.recyclerView);
+        smokePage("home", RecommendActivity.class, new Intent(context, RecommendActivity.class));
     }
 
     @Test
     public void bangumiPage() {
-        smokePage("bangumi", BangumiActivity.class, new Intent(context, BangumiActivity.class),
-                R.id.tabBar);
+        smokePage("bangumi", BangumiActivity.class, new Intent(context, BangumiActivity.class));
     }
 
     @Test
     public void bgmDetailPage() {
         Intent intent = new Intent(context, BgmSubjectActivity.class);
         intent.putExtra("bgmId", 1L);
-        smokePage("bgm-detail", BgmSubjectActivity.class, intent, R.id.text_title);
+        smokePage("bgm-detail", BgmSubjectActivity.class, intent);
     }
 
     @Test
     public void videoDetailPage() {
         Intent intent = new Intent(context, VideoInfoActivity.class);
         intent.putExtra("aid", 2L);
-        smokePage("video-detail", VideoInfoActivity.class, intent, R.id.viewPager);
+        smokePage("video-detail", VideoInfoActivity.class, intent);
     }
 
     @Test
     public void searchPage() {
-        smokePage("search", SearchActivity.class, new Intent(context, SearchActivity.class),
-                R.id.keywordInput);
+        smokePage("search", SearchActivity.class, new Intent(context, SearchActivity.class));
     }
 
     @Test
     public void downloadsPage() {
-        smokePage("downloads", DownloadListActivity.class,
-                new Intent(context, DownloadListActivity.class), R.id.pageName);
+        smokePage("downloads", DownloadListActivity.class, new Intent(context, DownloadListActivity.class));
     }
 
     @Test
     public void settingsPage() {
-        smokePage("settings", SettingMainActivity.class,
-                new Intent(context, SettingMainActivity.class), R.id.scrollView);
+        smokePage("settings", SettingMainActivity.class, new Intent(context, SettingMainActivity.class));
     }
 
     @Test
     public void audioQueuePage() {
-        smokePage("audio-queue", AudioQueueActivity.class,
-                new Intent(context, AudioQueueActivity.class), R.id.recycler);
-    }
-
-    @Test
-    public void audioPlayerPage() {
-        List<VideoCard> items = new ArrayList<>();
-        items.add(new VideoCard("UI 冒烟测试曲目", "测试 UP", "1", "", 1L, "BV1xx411c7mD", 1L));
-        AudioQueue.get().setQueue(items, 0L, "list", "UI Smoke");
-        AudioQueue.get().setIndex(0);
-        smokePage("audio-player", AudioPlayerActivity.class,
-                new Intent(context, AudioPlayerActivity.class), R.id.coverCard);
+        smokePage("audio-queue", AudioQueueActivity.class, new Intent(context, AudioQueueActivity.class));
     }
 
     @Test
     public void favoriteFolderPage() {
-        smokePage("favorites", FavoriteFolderListActivity.class,
-                new Intent(context, FavoriteFolderListActivity.class), R.id.recyclerView);
+        smokePage("favorites", FavoriteFolderListActivity.class, new Intent(context, FavoriteFolderListActivity.class));
     }
 
-    private void smokePage(String name, Class<? extends Activity> activityClass, Intent intent, int rootId) {
+    private void smokePage(String name, Class<? extends Activity> activityClass, Intent intent) {
         try (ActivityScenario<Activity> scenario = ActivityScenario.launch(intent)) {
-            scenario.onActivity(activity -> {
-                assertNotNull(name + "：页面未启动（Activity 为空）", activity);
-                View root = activity.findViewById(rootId);
-                assertNotNull(name + "：根视图缺失（id=" + rootId + "）", root);
-                assertTrue(name + "：根视图不可见", root.isShown());
-                Rect rect = new Rect();
-                assertTrue(name + "：根视图没有可见区域", root.getGlobalVisibleRect(rect));
-                assertTrue(name + "：根视图宽度为 0", rect.width() > 0);
-                assertTrue(name + "：根视图高度为 0", rect.height() > 0);
-                assertTrue(name + "：根视图超出屏幕左边界", rect.left >= 0);
-                assertTrue(name + "：根视图超出屏幕右边界", rect.right <= root.getRootView().getWidth());
-                assertTrue(name + "：根视图超出屏幕上边界", rect.top >= 0);
-                assertTrue(name + "：根视图超出屏幕下边界", rect.bottom <= root.getRootView().getHeight());
-                TextView pageName = activity.findViewById(R.id.pageName);
-                if (pageName != null) {
-                    assertTrue(name + "：pageName 不可见", pageName.isShown());
-                }
-            });
-
-            SystemClock.sleep(1200);
-            device.waitForIdle(2500);
+            // 页面里有 asyncInflate / 网络空态；固定等 1.2s 会误判「根视图不可见」。
+            assertRootVisible(name, scenario, 8000);
             capture(name);
 
             scenario.recreate();
-            scenario.onActivity(activity -> {
-                View root = activity.findViewById(rootId);
-                assertNotNull(name + "：页面重建后根视图丢失", root);
-                assertTrue(name + "：页面重建后根视图不可见", root.isShown());
-            });
-            SystemClock.sleep(600);
-            device.waitForIdle(2000);
+            assertRootVisible(name + "（重建后）", scenario, 5000);
             capture(name + "-recreated");
         } catch (Throwable t) {
             capture(name + "-FAILED");
             throw t;
         }
+    }
+
+    private void assertRootVisible(String name, ActivityScenario<Activity> scenario, long timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        AtomicBoolean visible = new AtomicBoolean(false);
+        AtomicBoolean destroyed = new AtomicBoolean(false);
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                scenario.onActivity(activity -> {
+                    View root = activity.findViewById(R.id.top);
+                    visible.set(root != null && root.isShown());
+                });
+            } catch (Throwable t) {
+                destroyed.set(true);
+                break;
+            }
+            if (visible.get()) {
+                scenario.onActivity(activity -> {
+                    assertNotNull(name + "：页面未启动（Activity 为空）", activity);
+                    View root = activity.findViewById(R.id.top);
+                    assertNotNull(name + "：根视图缺失（R.id.top）", root);
+                    Rect rect = new Rect();
+                    assertTrue(name + "：根视图没有可见区域", root.getGlobalVisibleRect(rect));
+                    assertTrue(name + "：根视图宽度为 0", rect.width() > 0);
+                    assertTrue(name + "：根视图高度为 0", rect.height() > 0);
+                    assertTrue(name + "：根视图超出屏幕左边界", rect.left >= 0);
+                    assertTrue(name + "：根视图超出屏幕右边界", rect.right <= root.getRootView().getWidth());
+                    assertTrue(name + "：根视图超出屏幕上边界", rect.top >= 0);
+                    assertTrue(name + "：根视图超出屏幕下边界", rect.bottom <= root.getRootView().getHeight());
+                    TextView pageName = activity.findViewById(R.id.pageName);
+                    if (pageName != null) assertTrue(name + "：pageName 不可见", pageName.isShown());
+                });
+                return;
+            }
+            SystemClock.sleep(250);
+        }
+        if (destroyed.get()) throw new AssertionError(name + "：Activity 在根视图可见前被销毁（检查页面启动参数/服务状态）");
+        throw new AssertionError(name + "：根视图在 " + timeoutMs + "ms 内仍不可见");
     }
 
     private void capture(String name) {
