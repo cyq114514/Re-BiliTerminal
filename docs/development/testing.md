@@ -8,10 +8,11 @@
 | 层 | 执行环境 | 本仓库做法 | 覆盖对象 |
 |---|---|---|---|
 | JVM 单元测试 | 本机/CI，无需设备 | **本次建设重点**：JUnit4 + Robolectric | 纯业务逻辑、状态机、安全校验、数据库迁移 |
-| 仪器化测试 | 真机/模拟器 | 仅历史 TLS 测试（会真实联网、写线上数据），**不纳入 CI** | Android 框架真实行为 |
+| UI 冒烟（仪器化） | GitHub Actions 云端 AVD | `app/src/androidTest/.../ui/UiSmokeTest`，PR/main/定时；见 [ui-testing.md](ui-testing.md) | 页面启动、布局可见/越界、重建、截图 |
+| 历史 TLS 仪器化 | 真机/模拟器 | 仅历史 TLS 测试（会真实联网、写线上数据），**不纳入 CI** | Android 框架真实行为 |
 | 真机回归 | 真机 | 按模块文档清单人工执行 | IJKPlayer/Surface/Service/播放链路 |
 
-原则：**能在 JVM 稳定验证的逻辑，不放到模拟器**；**依赖 native/真实设备行为的部分，不伪装成 JVM 测试**。
+原则：**能在 JVM 稳定验证的逻辑，不放到模拟器**；**UI 骨架/多屏幕布局放到云端 AVD**；**依赖 native/真实设备行为的部分，不伪装成 JVM 测试**。
 
 ## 2. 本地运行
 
@@ -35,6 +36,17 @@
 ./gradlew :app:testDebugUnitTest \
   -Pandroid.aapt2FromMavenOverride=/usr/lib/android-sdk/build-tools/debian/aapt2
 ```
+
+### 2.1.1 云端 UI 冒烟（本机不可执行）
+
+UI 冒烟只在 GitHub Actions 的 AVD 上执行；本机 ARM64/PRoot 无 x86 模拟器，状态为 **NOT RUN**。
+
+```bash
+# 手动触发全部 4 设备（需已登录 gh）
+gh workflow run ci.yml -f ui_devices=all
+```
+
+设备矩阵、截图/基线/报告与失败分类：见 [ui-testing.md](ui-testing.md)。
 
 ### 2.2 报告位置
 
@@ -114,7 +126,7 @@ app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
 | 第三方番剧源真实站点解析 | 站点会变、不可控 | `UrlGuard`/`RuleLimits`/`SafeRegex`/HLS 的离线安全测试 |
 | Release 资源收缩/R8/签名 | 只能在 CI tag 构建验证 | tag 发布链的资源冒烟 + 人工发版验收 |
 | 数据库跨进程/并发写 | 需要多进程环境 | 迁移/映射测试；真实下载流程真机回归 |
-| UI 布局/主题 | 无截图测试框架 | 人工/真机截图回归（`docs/screens` 仅历史参考） |
+| UI 布局/主题 | 云端 UI 冒烟只覆盖页面骨架与多屏幕可见性；真实内容/主题观感仍可能差异 | `ui-testing.md` 的截图/基线机制 + 人工审查；`docs/screens` 仅历史参考 |
 
 **这些模块的状态必须写 `NOT RUN`/`BLOCKED`，不能用 JVM 测试结果替代真机验证。**
 

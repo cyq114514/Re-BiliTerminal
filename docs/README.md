@@ -45,6 +45,7 @@
 | [development/commands.md](development/commands.md) | 需要真实可用的构建/验证/产物核验命令时 |
 | [development/ci.md](development/ci.md) | 改 CI、看 Actions 结果、判断失败属于编译/测试/环境、发布链边界 |
 | [development/testing.md](development/testing.md) | 写/改测试、查已覆盖与未覆盖风险、本地跑单测 |
+| [development/ui-testing.md](development/ui-testing.md) | 改 UI/布局、看云端多屏幕 UI 冒烟、截图基线与 AVD 配置、哪些页面还不能自动化 |
 | [development/workflow.md](development/workflow.md) | 标准任务七步、验证矩阵、Diff 自查、多 Agent 协作 |
 | [development/agent-handoff.md](development/agent-handoff.md) | 任务中断/换模型/接力时写与读交接 |
 | [templates/task-template.md](templates/task-template.md) | 复杂任务开工前记录目标/范围/验收 |

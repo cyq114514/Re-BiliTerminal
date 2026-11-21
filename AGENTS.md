@@ -30,7 +30,7 @@ app/                        唯一业务模块（全部 UI/网络/播放/下载�
     util/ helper/ event/     工具类、Glide/MediaSession/SQL、EventBus 事件
   src/main/res/              布局与资源（颜色/圆角/字号 token 规则见 DESIGN.md）
   src/test/                  JVM 单元测试（JUnit4 + Robolectric，无需设备）
-  src/androidTest/           TLS 回移仪器化测试（需设备，会真实联网，**不纳入 CI**）
+  src/androidTest/           云端 UI 冒烟（UiSmokeTest/UiReportListener）+ 历史 TLS 测试（后者不纳入 CI）
   libs/                      10 个预编译 .so（不可重建）
 ijkplayer-java/              第三方播放器 Java 封装（原样，勿改）
 DanmakuFlameMaster/          弹幕引擎（**已 fork**：6 个上游文件 + 1 个 Bili* 类被本项目改过）
@@ -53,6 +53,7 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 | 设置 / 主题 / 持久化 | `docs/modules/settings.md`；界面同时读 `DESIGN.md` |
 | 构建 / 发布 / CI | `docs/development/environment.md`、`docs/development/ci.md`、`.github/workflows/ci.yml` |
 | 写/改测试、看 CI 结果 | `docs/development/testing.md`、`docs/development/ci.md` |
+| 改 UI/布局、看多屏幕 UI 冒烟/截图 | `docs/development/ui-testing.md` |
 | 改包结构 / 找模块归属 | `docs/architecture/module-map.md`、`dependency-map.md` |
 
 **三级**（只在追历史/排查根因时）：`docs/更新日志.md`（2,500+ 行，按版本检索，不要通读）、`docs/audit/**`（历史审计，**不代表当前状态**）、`docs/decisions-*.md`。
@@ -77,8 +78,9 @@ docs/ site/ netlify/         文档 / 官网 / Netlify Functions
 | 编译 | `./gradlew :app:assembleDebug` | 本机可行（ARM64 需 aapt2 override） |
 | JVM 单元测试（本地） | `./gradlew :app:testDebugUnitTest --stacktrace` | ARM64/PRoot 需 aapt2 override；首次会下载 Robolectric `android-all`；未跑写 NOT RUN |
 | JVM 单元测试（CI） | Actions `unit-test` job（Job Summary + `unit-test-results` artifact） | **只能以真实 Actions 结果为准**；不得用本地编译/本地测试代替 |
+| UI 冒烟（CI/AVD） | Actions `ui-smoke` matrix（圆屏/方屏手表、小屏/标准手机） | 本机无 x86 模拟器，**只能云端**；截图/Logcat/XML 见 `docs/development/ui-testing.md`；不能拿 JVM 测试冒充 |
 | Release 等价 | CI tag 构建（R8 + `shrinkResources` + 资源冒烟） | 本地**无法**等价验证 |
-| 仪器化 | `./gradlew -PemuArm64 connectedDebugAndroidTest` | 需设备/模拟器；**不纳入 CI**；本机 NOT RUN |
+| 历史 TLS 仪器化 | `./gradlew -PemuArm64 connectedDebugAndroidTest` | 需设备/模拟器；**不纳入 CI**；本机 NOT RUN |
 | 真机回归 | 按模块文档的回归清单 | 第二阶段；本机 NOT RUN |
 
 未执行写 `NOT RUN`；无法执行写 `BLOCKED` / `PARTIAL` 并说明原因（如无 gh/无设备/无凭据）。

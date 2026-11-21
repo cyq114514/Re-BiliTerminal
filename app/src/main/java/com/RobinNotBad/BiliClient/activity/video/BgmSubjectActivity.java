@@ -108,6 +108,9 @@ public class BgmSubjectActivity extends InstanceActivity {
 
     @SuppressLint("SetTextI18n")
     private void render(BgmSubject data) {
+        //网络回调可能在页面已退栈/重建后才到：Glide.with(destroyed activity) 会直接抛
+        //IllegalArgumentException 崩溃（2026-11-21 云端 UI 冒烟 recreate 时复现）。
+        if (isFinishing() || isDestroyed()) return;
         //详情页用原图（800px 封顶）：列表格子里放原图是浪费，但详情页只有这一张，
         //用 400px 的 common 在 3x 屏上仍会发虚
         String detailCover = data.coverLarge.isEmpty() ? data.coverCommon : data.coverLarge;
