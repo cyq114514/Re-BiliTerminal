@@ -38,14 +38,14 @@ if [ -n "$TAG" ] && [ -n "$VERSION_NAME" ]; then
                 base=${TAG_VERSION%%fix*}
                 base=${base%-}
                 if [ "$base" = "$VERSION_NAME" ]; then
-                    info "历史 fix tag 兼容放行：$TAG（base=$VERSION_NAME；新 tag 请统一 v<versionName>）"
+                    info "历史 fix tag 兼容放行：${TAG}（base=${VERSION_NAME}；新 tag 请统一 v<versionName>）"
                 else
-                    no "tag 与 versionName 不一致：$TAG vs v$VERSION_NAME（历史 fix tag 的 base 也不一致）"
+                    no "tag 与 versionName 不一致：$TAG vs v${VERSION_NAME}（历史 fix tag 的 base 也不一致）"
                     fail=1
                 fi
                 ;;
             *)
-                no "tag 与 versionName 不一致：$TAG vs v$VERSION_NAME；正式发版只允许 v<versionName>"
+                no "tag 与 versionName 不一致：$TAG vs v${VERSION_NAME}；正式发版只允许 v<versionName>"
                 fail=1
                 ;;
         esac
@@ -72,7 +72,7 @@ fi
 # 3. 签名 secrets 全有或全无（正式 tag 不再允许 unsigned 发布）
 for key in KEYSTORE_B64 KEY_PASSWORD ALIAS_NAME ALIAS_PASSWORD; do
     if [ -z "${!key:-}" ]; then
-        no "缺少签名 secret：$key（正式 tag 必须配置完整签名，禁止 unsigned 发布）"
+        no "缺少签名 secret：${key}（正式 tag 必须配置完整签名，禁止 unsigned 发布）"
         fail=1
     fi
 done

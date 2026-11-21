@@ -109,7 +109,7 @@ while IFS= read -r -d '' doc; do
             link_count=$((link_count + 1))
             doc_links=$((doc_links + 1))
             if [ ! -e "$resolved" ]; then
-                bad "$doc:$lineno → $target（解析为 ${resolved#"$ROOT"/}，不存在）"
+                bad "$doc:$lineno → ${target}（解析为 ${resolved#"$ROOT"/}，不存在）"
             fi
         done
     done < "$doc"
@@ -117,7 +117,7 @@ while IFS= read -r -d '' doc; do
     if [ "$doc_links" -gt 0 ]; then
         docs_with_links=$((docs_with_links + 1))
         if [ "$fail" -eq "$fail_before" ]; then
-            ok "$doc（$doc_links 条相对链接均存在）"
+            ok "${doc}（$doc_links 条相对链接均存在）"
         fi
     fi
 done < <(git ls-files -z -- '*.md')

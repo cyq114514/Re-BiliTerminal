@@ -102,9 +102,9 @@ if [ -n "$latest_tag" ]; then
     tag_vc=$(git show "$latest_tag:app/build.gradle" 2>/dev/null | grep -m1 -E '^[[:space:]]*versionCode[[:space:]]' | grep -oE '[0-9]+' | head -1)
     ahead=$(git rev-list --count "$latest_tag..HEAD" 2>/dev/null || echo 0)
     if [ "${ahead:-0}" -gt 0 ] && [ "${tag_vc:-}" = "${vc:-}" ]; then
-        no "HEAD 比最新 tag（$latest_tag）多 $ahead 个提交，但 versionCode 仍是 $vc：下次发版前必须递增"
+        no "HEAD 比最新 tag（${latest_tag}）多 $ahead 个提交，但 versionCode 仍是 ${vc}：下次发版前必须递增"
     else
-        ok "版本与最新 tag 关系：tag=$latest_tag（versionCode=${tag_vc:-?}），领先 $ahead 个提交"
+        ok "版本与最新 tag 关系：tag=${latest_tag}（versionCode=${tag_vc:-?}），领先 $ahead 个提交"
     fi
 else
     info "仓库没有 tag（或不在 git 历史中）"
