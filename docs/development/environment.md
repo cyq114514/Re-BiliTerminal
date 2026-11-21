@@ -59,7 +59,7 @@ ALIAS_PASSWORD=******
 - 测试代码在 `app/src/test/java/`，JUnit4 + Robolectric；`testOptions.unitTests` 开启 `includeAndroidResources`/`returnDefaultValues`（`app/build.gradle:134-142`）。
 - 依赖只在 `testImplementation`（`app/build.gradle:190-195`），**不会进入 APK**，也不影响 minSdk 19。
 - `app/src/test/resources/robolectric.properties` 固定 `sdk=33` 且 `conscryptMode=OFF`：`conscrypt-android` 在 JVM 上安装 Provider 会 `UnsatisfiedLinkError`，而测试不验证 TLS，关掉它不影响被测业务逻辑（说明见 [`testing.md`](testing.md) §2.3）。
-- 首次运行会从 Maven Central 下载 Robolectric `android-all`（几十 MB），之后走 Gradle/Robolectric 缓存。
+- Robolectric 的 `android-all-instrumented`（约 160MB）由 Gradle `robolectricJars` 配置解析并复制到 `app/build/robolectric-jars/preinstrumented`，通过 `robolectric.dependency.dir` 交给 Robolectric；不在测试运行期自行联网下载（避免 CI 偶发 404）。
 - 不要求 `local.properties` 签名配置、不需要真机/模拟器；但**需要 Android SDK**（`ANDROID_HOME` 或 `local.properties` 的 `sdk.dir`）。
 - **ARM64 / PRoot 同样要加 aapt2 override**（与 §4 构建相同参数）：
 

@@ -52,7 +52,7 @@ app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
 - `app/src/test/resources/robolectric.properties` 固定 `sdk=33` 且 `conscryptMode=OFF`：
   - `conscrypt-android` 只有 Android 原生库，Robolectric 在 JVM 上安装 Conscrypt Provider 会 `UnsatisfiedLinkError`；
   - 关掉 Conscrypt 不影响被测业务逻辑（测试不验证 TLS）。
-- 首次运行会从 Maven Central 下载 Robolectric 的 `android-all`（约几十 MB），之后走 Gradle/Robolectric 缓存。
+- `android-all-instrumented`（约 160 MB）由 Gradle 的 `robolectricJars` 配置解析（走 settings.gradle 的仓库与 Gradle 缓存），`prepareRobolectricJars` 复制到 `app/build/robolectric-jars/preinstrumented`，测试通过 `robolectric.dependency.dir` 读取：**测试运行期不再由 Robolectric 自行联网下载**（历史 CI 曾因该下载 404 导致整批失败）。版本号 `13-robolectric-9030017-i7` 与 Robolectric/SDK 33 绑定，升级 Robolectric 时需同步。
 - 测试不要求 `local.properties` 签名配置、不需要 `ANDROID_HOME`（CI 由 workflow 提供）。
 
 ## 3. 测试代码规范
@@ -67,7 +67,7 @@ app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
 
 ## 4. 已覆盖测试清单（PASS 以实际运行为准）
 
-> 下表是**测试文件 → 业务模块 → 覆盖点**。当前共 **19 个测试类 / 210 个用例**（含 1 个基础设施冒烟）（2026-11-21 本地全量实测 `PASS`，见 `ci.md` §8）。
+> 下表是**测试文件 → 业务模块 → 覆盖点**。当前共 **19 个测试类 / 211 个用例**（含 1 个基础设施冒烟）（2026-11-21 本地全量实测 `PASS`，见 `ci.md` §8）。
 > 实际通过/失败数见每次 CI 的 Job Summary；标注 `PARTIAL` 的表示只覆盖该模块中可离线验证的部分。
 
 ### P0 核心
@@ -96,7 +96,7 @@ app/build/reports/tests/testDebugUnitTest/index.html  # 人读报告
 | `source/rule/RuleLimitsTest` | 安全上限 | 常量关系与上限被实际引用 |
 | `source/play/HlsPlaylistTest` | 本地 HLS 改写 | 分片/key/init/多级播放列表改写、非法地址原样保留、`isPlaylist` |
 | `source/play/HlsRouteTableTest` | HLS 代理安全 | 未注册 token 不可取、会话上限 8、淘汰清 token、子会话 |
-| `util/AppSignTest` | 接口签名 | 参数排序、URL 编码、MD5 已知向量、query 稳定 |
+| `util/AppSignTest` | 接口签名 | 参数排序、URL 编码、MD5 已知向量（含首字节 0 向量）、300 次批量签名定长 32 位、query 稳定 |
 | `util/GsonUtilTest` | JSON 解析 | 空/非法 JSON、int/long 字符串兼容、列表、往返 |
 
 ### P2 其他（渐进覆盖）

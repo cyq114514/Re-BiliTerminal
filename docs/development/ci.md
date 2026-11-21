@@ -165,7 +165,7 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| 本地 JVM 单元测试（全部） | **PASS** | `./gradlew :app:testDebugUnitTest :app:assembleDebug -Pandroid.aapt2FromMavenOverride=...` → `BUILD SUCCESSFUL`；XML 汇总 **210 tests / 0 failures / 0 errors / 0 skipped**（19 个测试类，含基础设施冒烟） |
+| 本地 JVM 单元测试（全部） | **PASS** | `./gradlew clean :app:testDebugUnitTest :app:assembleDebug -Pandroid.aapt2FromMavenOverride=...` → `BUILD SUCCESSFUL`；XML 汇总 **211 tests / 0 failures / 0 errors / 0 skipped**（19 个测试类，含基础设施冒烟） |
 | 本地 Debug 编译 | **PASS** | 同一次 Gradle 调用产出 `app/build/outputs/apk/debug/app-debug.apk`（约 22.0 MB，构建时间 2026-11-21 03:03（本地）） |
 | 仓库自检脚本 | **PASS** | `check-env`（FAIL 0 / WARN 1：本机 aapt2 override 提示）、`check-repo`（FAIL 0 / WARN 2：工作区未提交、tag 版本提示）、`check-links`（FAIL 0）、`validate-ci`（FAIL 0 / WARN 1：action 未 pin SHA）、`check-tests`（FAIL 0 / WARN 0） |
 | GitHub Actions 真实运行 | **PASS** | 两次 main push 均全绿：[run 44839324416](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44839324416)（`main` @ `5cf433a`）与 [run 44838407423](https://github.com/cyq114514/Re-BiliTerminal/actions/runs/44838407423)（`d91bf9b`）：`规范与环境检查` / `编译自检（Debug）` / `JVM 单元测试` PASS，`发布（tag）` skipped（非 tag，符合预期）；CI 日志 **210 tests / 0 failures / 0 errors / 0 skipped**（`BUILD SUCCESSFUL in 1m 11s`）；artifact `unit-test-results`（XML+HTML）与 `Re-BiliTerminal-debug` 均上传成功 |
@@ -181,7 +181,18 @@ release    仅 tag v*              原有发布链（签名/资源冒烟/Release
 5. **CI checkout 行尾差异（已修并验证）**：Ubuntu runner 上 `eol=crlf` 文件会显示为 modified；`check-repo.sh` 已过滤「仅 CR/LF 差异」。第二次 CI 日志：`[ OK ] 工作区干净` + `[INFO] 已忽略 6 个仅行尾差异（CI checkout 的 eol=crlf 归一化）`；若再出现 dirty，说明是真实内容改动。
 6. **PR 触发尚未单独实测**：本次是 main push 触发；PR 的同套 job 与 `paths-ignore` 由同一 workflow 定义，等首次 PR 再确认。
 
-### 8.2 下一步（按顺序）
+### 8.2 真实 CI 失败与修复记录（过程，非最终状态）
+
+1. **run 44839675340（`bb675c9`）`JVM 单元测试` FAIL**：
+   - 现象：12 个 Robolectric 测试类全部 `Failed to fetch maven artifact org.robolectric:android-all-instrumented:13-robolectric-9030017-i7`（`FileNotFoundException`）。
+   - 原因：Robolectric 用自己的 `MavenArtifactFetcher` 在测试运行期下载 android-all，不经过 Gradle 仓库/缓存、无重试；同一提交上一次 run 成功，属于外部网络偶发。
+   - 修法：`app/build.gradle` 增加 `robolectricJars` 配置，由 Gradle 解析 `android-all-instrumented`（复用 Gradle 缓存），`prepareRobolectricJars` 复制到 build 目录，`robolectric.dependency.dir` 指向它；测试运行期不再联网。
+2. **`AppSignTest` 偶发 `sign` 只有 31 位（本地复现）**：
+   - 根因（真实生产缺陷）：`ToolsUtil.md5` 用 `for (i = 0; i < 32 - md5code.length(); i++)` 边插入边改长度，最多只补 1 个 0；MD5 首字节 <0x10 时会少 1~2 位，导致 B 站 `sign`/`w_rid` 随机失效。
+   - 修法：改为 `while (hex.length() < 32) hex = "0" + hex;`，新增「首字节 0 的 MD5 已知向量」与「300 次批量签名定长 32 位」回归用例。
+   - 验证：本地 `clean :app:testDebugUnitTest :app:assembleDebug` → BUILD SUCCESSFUL，**211 tests / 0 failures / 0 errors / 0 skipped**；最终 CI 结果见下一次 run。
+
+### 8.3 下一步（按顺序）
 
 1. 首次真实 PR 后确认 PR 触发链路与 `paths-ignore`（本次只验证了 main push）。
 2. 视需要补 P2 纯逻辑测试与增量 lint（见 `testing.md` §7）。
