@@ -129,11 +129,29 @@ public class AppSignTest {
         assertEquals(expected, keysOf(first));
     }
 
+    @Test
+    public void signIsAlways32HexCharsAcrossManyInputs() {
+        // MD5 首字节 <0x10 时 BigInteger.toString(16) 会少一位；批量输入覆盖这条路径，
+        // 防止「偶尔少一位 sign」让接口签名随机失效（曾在本机复现 31 位 sign）。
+        for (int i = 0; i < 300; i++) {
+            TreeMap<String, String> params = new TreeMap<>();
+            params.put("probe", "value-" + i);
+            Map<String, String> parsed = parseQuery(AppSign.sign(params));
+            String sign = parsed.get("sign");
+            assertNotNull(sign);
+            assertEquals("第 " + i + " 次签名长度异常：" + sign, 32, sign.length());
+            assertTrue("第 " + i + " 次签名含非小写十六进制字符：" + sign,
+                    sign.matches("[0-9a-f]{32}"));
+        }
+    }
+
     // ---------------------------------------------------------------- ToolsUtil.md5
 
     @Test
     public void md5MatchesKnownVectors() {
         assertEquals("900150983cd24fb0d6963f7d28e17f72", ToolsUtil.md5("abc"));
+        // 首字节 <0x10 的已知向量：必须补足 32 位，否则 B 站 sign 会少一位
+        assertEquals("018541bebe5c87dd495e8ceb894a030c", ToolsUtil.md5("leading-zero-25"));
         assertEquals("d41d8cd98f00b204e9800998ecf8427e", ToolsUtil.md5(""));
         assertEquals("9e107d9d372bb6826bd81d3542a419d6",
                 ToolsUtil.md5("The quick brown fox jumps over the lazy dog"));

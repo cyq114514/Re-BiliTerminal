@@ -65,11 +65,14 @@ public class ToolsUtil {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("没有md5这个算法！");
         }
-        StringBuilder md5code = new StringBuilder(new BigInteger(1, secretBytes).toString(16));
-        for (int i = 0; i < 32 - md5code.length(); i++) {
-            md5code.insert(0, "0");
+        //必须补足 32 位：MD5 首字节 <0x10 时 BigInteger.toString(16) 会少 0（甚至少两位），
+        //而 B 站 sign/w_rid 是定长 32 位小写十六进制，少一位签名就随机失效。
+        //原实现用 `i < 32 - md5code.length()` 边插边改长度，最多只补一个 0（实测 0832… 仍 31 位）。
+        String hex = new BigInteger(1, secretBytes).toString(16);
+        while (hex.length() < 32) {
+            hex = "0" + hex;
         }
-        return md5code.toString();
+        return hex;
     }
 
 
