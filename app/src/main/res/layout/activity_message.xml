@@ -92,7 +92,7 @@
                                     android:adjustViewBounds="true"
                                     android:src="@drawable/icon_reply" />
 
-                                <TextView
+                                <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                                     android:id="@+id/reply_text"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
@@ -138,7 +138,7 @@
                                     android:adjustViewBounds="true"
                                     android:src="@drawable/icon_at" />
 
-                                <TextView
+                                <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                                     android:id="@+id/at_text"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
@@ -190,7 +190,7 @@
                                     android:adjustViewBounds="true"
                                     android:src="@drawable/icon_reply_like0" />
 
-                                <TextView
+                                <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                                     android:id="@+id/like_text"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
@@ -236,7 +236,7 @@
                                     android:adjustViewBounds="true"
                                     android:src="@drawable/icon_setting" />
 
-                                <TextView
+                                <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                                     android:id="@+id/setting_text"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
@@ -286,7 +286,7 @@
                                     android:adjustViewBounds="true"
                                     android:src="@drawable/icon_info" />
 
-                                <TextView
+                                <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
                                     android:id="@+id/system_text"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"

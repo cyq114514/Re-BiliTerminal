@@ -29,6 +29,7 @@ import com.RobinNotBad.BiliClient.util.CookieRefresher;
 import com.RobinNotBad.BiliClient.util.CrashReportUtil;
 import com.RobinNotBad.BiliClient.util.CrashUploader;
 import com.RobinNotBad.BiliClient.util.ExitReasonCollector;
+import com.RobinNotBad.BiliClient.util.FrameMonitor;
 import com.RobinNotBad.BiliClient.util.LaunchPing;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.PlayerSentinel;
@@ -173,6 +174,8 @@ public class BiliTerminal extends Application {
                 public void onActivityResumed(@NonNull Activity activity) {
                     //崩溃上报里的 page 字段：记录崩溃时用户在哪一页，便于复现
                     CrashUploader.setCurrentPage(activity.getClass().getSimpleName());
+                    //掉帧日志同样要标注页面：用户导出 app-log.txt 后能直接对上"在哪一页卡的"
+                    FrameMonitor.notePage(activity);
 
                     //首屏之后的启动弹窗：此刻首屏已在栈顶，弹窗才会盖在它上面。
                     //延迟 250ms 是为"恢复链"场景留出余量——连续 startActivity 时第一条 resumed
@@ -225,6 +228,10 @@ public class BiliTerminal extends Application {
             Logu.setFileLoggingEnabled(SharedPreferencesUtil.getBoolean(Logu.KEY_FILE_LOG, false), false);
             //注册设置项监听，让开关切换立即生效（SharedPreferences 只持弱引用，强引用在 Logu 内部）
             Logu.registerPreferenceListener();
+
+            //掉帧监控：跟随「调试日志落文件」开关启停，卡顿段写进同一份 app-log.txt。
+            //放在日志开关初始化之后，冷启动时才能读到正确的开关状态
+            FrameMonitor.install();
 
             //第三方源开箱即用：首次启动把 assets 内置订阅快照灌进 SourceStore。
             //延后 300ms + 后台线程：解析 170KB JSON / 63 条规则不占首屏，也避开日志开关与 SP 的初始化窗口

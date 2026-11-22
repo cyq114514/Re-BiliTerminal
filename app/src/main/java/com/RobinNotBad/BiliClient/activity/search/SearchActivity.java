@@ -71,6 +71,12 @@ public class SearchActivity extends InstanceActivity {
     /** 头部收起后会被量成 0 高，展开动画要用收起前的高度，这里缓存一份 */
     private int searchHeaderHeight = 0;
     private boolean searchBarVisible = true;
+    /**
+     * 当前 RecyclerView 滚动状态。只有 DRAGGING（手指拖动）参与头部方向累计：
+     * fling（SETTLING）阶段也会持续回调 onScrolled(dy)，快速甩到边界时 dy 反号，
+     * 会把刚收起的头部又弹回来——这是"快速滑动时顶部栏突然显现"的直接来源。
+     */
+    private int recyclerScrollState = RecyclerView.SCROLL_STATE_IDLE;
     /** 类别页签的占位监听只注册一次（buildSearchTabs 每次搜索都会重建内层胶囊） */
     private boolean tabsPaddingBound = false;
     private boolean refreshing = false;
@@ -935,16 +941,22 @@ public class SearchActivity extends InstanceActivity {
             if (dy > 0 && searchBarVisible) animateHeader(false);
             else if (dy < 0 && !searchBarVisible) animateHeader(true);
         } else if (dy != 0) {
-            //方向累计器：同向累加、反向清零。跨过阈值且方向确实要翻转显隐才动，
-            //同向的重复越阈不重置（继续累计无害，反向第一帧自然清零）。
-            //一次手势只允许一次翻转：跨过阈值时若本次手势已翻过，就不再翻（等下次手势）
-            if (scrollAccum != 0 && (scrollAccum > 0) != (dy > 0)) scrollAccum = dy;
-            else scrollAccum += dy;
-            if (Math.abs(scrollAccum) >= ToolsUtil.dp2px(HEADER_TOGGLE_ACCUM_DP)) {
-                boolean show = scrollAccum < 0;
-                if (show != searchBarVisible && !headerToggleUsed) {
-                    headerToggleUsed = true;
-                    animateHeader(show);
+            //A1：只有手指拖动阶段参与方向累计。fling 阶段 dy 仍会持续回调，
+            //快速甩到边界时反号会把头部弹回来（2026-11-22 反馈"快速滑动顶部栏突然显现"）
+            if (recyclerScrollState != RecyclerView.SCROLL_STATE_DRAGGING) {
+                scrollAccum = 0;
+            } else {
+                //方向累计器：同向累加、反向清零。跨过阈值且方向确实要翻转显隐才动，
+                //同向的重复越阈不重置（继续累计无害，反向第一帧自然清零）。
+                //一次手势只允许一次翻转：跨过阈值时若本次手势已翻过，就不再翻（等下次手势）
+                if (scrollAccum != 0 && (scrollAccum > 0) != (dy > 0)) scrollAccum = dy;
+                else scrollAccum += dy;
+                if (Math.abs(scrollAccum) >= ToolsUtil.dp2px(HEADER_TOGGLE_ACCUM_DP)) {
+                    boolean show = scrollAccum < 0;
+                    if (show != searchBarVisible && !headerToggleUsed) {
+                        headerToggleUsed = true;
+                        animateHeader(show);
+                    }
                 }
             }
         }
@@ -958,16 +970,36 @@ public class SearchActivity extends InstanceActivity {
      * 手势结束后累计器一并清零，下次手势从零起步。
      */
     public void onRecyclerViewScrollState(int newState) {
+        recyclerScrollState = newState;
         if (newState == RecyclerView.SCROLL_STATE_DRAGGING || newState == RecyclerView.SCROLL_STATE_IDLE) {
             headerToggleUsed = false;
             scrollAccum = 0;
         }
     }
 
+    /** 头部当前是否展开（给 SearchFragment 的下拉判定用） */
+    public boolean isSearchBarVisible() {
+        return searchBarVisible;
+    }
+
     /**
-     * 收起/展开头部本体：一个 ValueAnimator 同步驱动 header translationY 与 viewPager 顶 padding，
-     * 内容随头部平滑退让/让位。旧实现 padding 在动画中途一次性硬切（GONE 后清零 / VISIBLE 后垫回），
-     * 每次翻转列表内容猛跳一截；GONE 还是 postDelayed 埋的雷，可能跟随后的展开打架。
+     * A2：列表已在顶部、头部已收起时，只有用户真的向下拖过一段距离才展开。
+     * 替代原来"手指一按下就强制展开"（那次改动让每次触摸屏幕顶部都会弹头）。
+     */
+    public void showHeaderOnPull() {
+        if (!searchBarVisible && !headerAnimating) animateHeader(true);
+    }
+
+    /**
+     * 收起/展开头部本体：一个 ValueAnimator 同步驱动 header translationY 与 viewPager 的
+     * 视觉让位，内容随头部平滑退让/让位。旧实现 padding 在动画中途一次性硬切（GONE 后清零 /
+     * VISIBLE 后垫回），每次翻转列表内容猛跳一截；GONE 还是 postDelayed 埋的雷，可能跟随后的展开打架。
+     *
+     * <p><b>动画期间不再逐帧改 padding</b>（2026-11-22）：每次 {@code setPadding} 都会让 ViewPager
+     * 和所有可见子页重新 measure/layout，手表实测动画窗口的 UI 线程耗时是普通帧的 9 倍
+     * （3.29ms vs 0.36ms/帧），低端机上直接演变成连掉 10+ 帧。现在改成：
+     * 进入动画时一次性把 padding 设到目标值，再用 viewPager 的 translationY 把视觉位置拉回原位，
+     * 动画期间只动 translationY（纯渲染属性，不触发布局），结束时归零。
      *
      * <p>方向反转时从当前位置续走：旧动画先摘牌再 cancel，收尾监听用 a != headerAnimator
      * 挡掉被顶掉的旧收尾（cancel 会同步触发 onAnimationEnd，不能让它把半路的显隐落定）。
@@ -985,11 +1017,18 @@ public class SearchActivity extends InstanceActivity {
         float height = (rawHeight > 0 ? rawHeight : searchHeaderHeight) + ToolsUtil.dp2px(2f);
         final float fromY = header.getTranslationY();
         final float toY = show ? 0 : -height;
-        final int fromPad = viewPager.getPaddingTop();
-        final int toPad = show ? tabsPadHeight() : 0;
 
-        //展开先占回布局位（translation 不占位），内容让位由 padding 逐帧完成；收起动画结束才 GONE
+        //展开先占回布局位（translation 不占位），内容让位由 padding 与 translationY 配合完成；
+        //收起动画结束才 GONE
         if (show) header.setVisibility(View.VISIBLE);
+
+        //视觉偏移 = paddingTop + translationY。先把 padding 一次性设到目标值（唯一一次 layout），
+        //再用 translationY 把内容拉回当前视觉位置，动画期间只动 translationY
+        final int targetPad = show ? tabsPadHeight() : 0;
+        final float contentOffset = viewPager.getPaddingTop() + viewPager.getTranslationY();
+        if (viewPager.getPaddingTop() != targetPad) viewPager.setPadding(0, targetPad, 0, 0);
+        viewPager.setTranslationY(contentOffset - targetPad);
+        final float fromTrans = viewPager.getTranslationY();
 
         headerAnimating = true;
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
@@ -997,8 +1036,7 @@ public class SearchActivity extends InstanceActivity {
         animator.addUpdateListener(animation -> {
             float t = (float) animation.getAnimatedValue();
             header.setTranslationY(fromY + (toY - fromY) * t);
-            int pad = Math.round(fromPad + (toPad - fromPad) * t);
-            if (viewPager.getPaddingTop() != pad) viewPager.setPadding(0, pad, 0, 0);
+            viewPager.setTranslationY(fromTrans * (1f - t));
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -1006,8 +1044,9 @@ public class SearchActivity extends InstanceActivity {
                 if (animation != headerAnimator) return; //被方向反转顶掉的旧动画，收尾交给新动画
                 headerAnimating = false;
                 headerAnimator = null;
+                viewPager.setTranslationY(0); //padding 在动画开始时就已落定，这里只归零视觉补偿
                 if (!show) header.setVisibility(View.GONE); //头部连同页签一起走，结果列表顶上没人再需要让位
-                syncTabsPadding(); //落定补一次：动画期间被守卫拦掉的 syncTabsPadding 在这里结算
+                syncTabsPadding(); //落定补一次：防止页签高度在动画期间变化（如字体放大/旋转）
             }
         });
         headerAnimator = animator;
@@ -1033,6 +1072,9 @@ public class SearchActivity extends InstanceActivity {
         scrollAccum = 0;
         header.setVisibility(View.VISIBLE);
         header.setTranslationY(0);
+        //动画期间 viewPager 靠 translationY 做视觉补偿，落定终态必须归零，
+        //否则中途搜索会在列表上留一截错位
+        if (viewPager != null) viewPager.setTranslationY(0);
         //页签刚置回 VISIBLE 还没走完布局，post 一次等量完高度再垫 padding
         header.post(this::syncTabsPadding);
     }

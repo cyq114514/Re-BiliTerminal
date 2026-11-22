@@ -12,16 +12,12 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity;
 import com.RobinNotBad.BiliClient.model.UserInfo;
 import com.RobinNotBad.BiliClient.ui.theme.ThemeApplier;
 import com.RobinNotBad.BiliClient.util.GlideUtil;
 import com.RobinNotBad.BiliClient.util.StringUtil;
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.request.RequestOptions;
 
 import java.util.List;
 
@@ -92,18 +88,20 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
             holder.badge.setVisibility(showMutualBadge && user.mutualFollow ? View.VISIBLE : View.GONE);
         }
 
-        if (user.avatar == null || user.avatar.isEmpty()) {
+        boolean hasAvatar = user.avatar != null && !user.avatar.isEmpty();
+        if (!hasAvatar) {
             holder.avatar.setVisibility(View.GONE);
-            holder.desc.setSingleLine(false);
         } else {
-            Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(user.avatar))
-                    .transition(GlideUtil.getTransitionOptions())
-                    .placeholder(R.mipmap.akari)
-                    .apply(RequestOptions.circleCropTransform())
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .into(holder.avatar);
+            //统一走 requestRound：内含宿主判活 + url() 拼接 + circleCrop + transition + RGB_565，
+            //与 ElectricUserAdapter 等头像列表同一条路径；此前这里每项都新建一份 RequestOptions
+            GlideUtil.requestRound(holder.avatar, user.avatar, R.mipmap.akari);
             holder.avatar.setVisibility(View.VISIBLE);
-            holder.desc.setSingleLine(true);
+        }
+        //setSingleLine 每次调用都会 requestLayout：关注列表每页 20 条、签名长短不一，
+        //每次 bind 都切一次会在低端机上叠成布局峰值。只在状态真的变化时改
+        if (holder.singleLineDesc != hasAvatar) {
+            holder.desc.setSingleLine(hasAvatar);
+            holder.singleLineDesc = hasAvatar;
         }
 
         if (onUserPickListener != null) {
@@ -133,6 +131,9 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
         final TextView badge;
         //构造时捕获 XML/主题默认色，供非 vip 复用恢复
         final int defaultNameColor;
+        //userDesc 当前是否单行：按布局实际值初始化（cell_user_list 默认 singleLine，
+        //复用本 Holder 的 cell_up_list 以自身 maxLines 为准），bind 只切真实变化
+        boolean singleLineDesc;
 
         public Holder(@NonNull View itemView) {
             super(itemView);
@@ -141,6 +142,7 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.Holder
             avatar = itemView.findViewById(R.id.userAvatar);
             badge = itemView.findViewById(R.id.userBadge);
             defaultNameColor = name.getTextColors().getDefaultColor();
+            singleLineDesc = desc.getMaxLines() == 1;
         }
     }
 }

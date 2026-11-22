@@ -149,8 +149,9 @@ public class SettingUIActivity extends BaseActivity {
             });
 
             SwitchMaterial quickSwipe = findViewById(R.id.switch_quick_swipe);
+            //默认关闭（与 BaseActivity 的读取口径保持一致）
             quickSwipe.setChecked(SharedPreferencesUtil.getBoolean(
-                    SharedPreferencesUtil.QUICK_SWIPE_ENABLE, true));
+                    SharedPreferencesUtil.QUICK_SWIPE_ENABLE, false));
             quickSwipe.setOnCheckedChangeListener((buttonView, isChecked) ->
                     SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.QUICK_SWIPE_ENABLE, isChecked));
 

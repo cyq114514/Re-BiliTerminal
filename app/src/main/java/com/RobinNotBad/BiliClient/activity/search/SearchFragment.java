@@ -1,7 +1,9 @@
 package com.RobinNotBad.BiliClient.activity.search;
 
+import android.app.Activity;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -18,6 +20,7 @@ import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager;
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
+import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import com.RobinNotBad.BiliClient.util.view.ImageAutoLoadScrollListener;
 
 public class SearchFragment extends Fragment {
@@ -34,6 +37,10 @@ public class SearchFragment extends Fragment {
     public volatile int loadGeneration = 0;
     public long lastLoadTimestamp;
     public boolean refreshable = false;
+
+    //A2：列表顶部的"下拉唤出头部"判定。按下时记录起点，移动超过 24dp 才展开
+    private float pullStartY;
+    private boolean pullArmed;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -64,13 +71,13 @@ public class SearchFragment extends Fragment {
 
                 if (newState != RecyclerView.SCROLL_STATE_DRAGGING) return;
 
-                if (!recyclerView.canScrollVertically(-1)) {
-                    if (requireActivity() instanceof SearchActivity) {
-                        SearchActivity activity = (SearchActivity) requireActivity();  //不能向上滚动了就显示搜索栏
-                        activity.onScrolled(-114, true); //意图明确，强制展开且不走累计器/节流
+                //到顶不再"一按下就展开"（2026-11-22）：原来这里无条件强制展开，
+                //快速滑动/轻触屏幕顶部都会把刚收起的头部弹回来。改由下面的触摸监听判断
+                //用户是否真的向下拖过一段距离（A2）
+                if (recyclerView.canScrollVertically(-1)) {
+                    if (listener != null && !recyclerView.canScrollVertically(1) && !swipeRefreshLayout.isRefreshing() && !bottom) {
+                        goOnLoad();
                     }
-                } else if (listener != null && !recyclerView.canScrollVertically(1) && !swipeRefreshLayout.isRefreshing() && !bottom) {
-                    goOnLoad();
                 }
             }
 
@@ -96,6 +103,32 @@ public class SearchFragment extends Fragment {
                     }
                 }
             }
+        });
+
+        //A2：列表已在顶部、头部已收起时，手指向下拖过 24dp 才展开头部。
+        //原来在 DRAGGING 一进来就强制展开，轻触屏幕顶部（列表本来就在顶）也会弹头。
+        //返回 false 不拦截：RecyclerView 的滚动、长按、点击全部照常
+        recyclerView.setOnTouchListener((v, event) -> {
+            Activity host = getActivity();
+            if (!(host instanceof SearchActivity)) return false;
+            SearchActivity activity = (SearchActivity) host;
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    pullStartY = event.getY();
+                    pullArmed = !activity.isSearchBarVisible() && !recyclerView.canScrollVertically(-1);
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (pullArmed && event.getY() - pullStartY >= ToolsUtil.dp2px(24f)) {
+                        pullArmed = false;
+                        activity.showHeaderOnPull();
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    pullArmed = false;
+                    break;
+            }
+            return false;
         });
         ImageAutoLoadScrollListener.install(recyclerView);
     }

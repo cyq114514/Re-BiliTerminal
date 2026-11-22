@@ -25,6 +25,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -1496,6 +1497,27 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 }
             }
         }
+
+        //底部时间/在线人数与 CC 字幕一起贴着屏幕底走：
+        //1.3.9 以前底栏是 wrap_content，收起时内部控件 GONE 后高度塌缩，文字自然落到底部；
+        //1.4.0 换肤改用 INVISIBLE 保留整卡高度（防止锚点失效），文字就停在卡片上沿。
+        //字幕锚在 bottom_text_bar 上，translationY 不会互相带走，两个 View 必须各自平移同一距离。
+        //delta 用实测布局算，兼容圆屏（底栏 marginBottom 被改成 padding*5）与横屏。
+        float textDelta = 0f;
+        if (!show && layout_control != null && layout_control.getHeight() > 0
+                && bottom_text_bar != null && bottom_text_bar.getBottom() > 0) {
+            textDelta = Math.max(0f, layout_control.getHeight() - bottom_text_bar.getBottom()
+                    - ToolsUtil.dp2px(6f));
+        }
+        moveBottomText(bottom_text_bar, textDelta);
+        moveBottomText(text_subtitle, textDelta);
+    }
+
+    /** 底部文字条 / CC 字幕的贴底平移：0 = 回到控制栏上方，与卡片淡出同一时长 */
+    private void moveBottomText(View view, float delta) {
+        if (view == null) return;
+        view.animate().cancel();
+        view.animate().translationY(delta).setDuration(CONTROL_FADE_MS);
     }
 
     @SuppressLint("SetTextI18n")
@@ -3663,14 +3685,17 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         }
         int budget = available - ToolsUtil.dp2px(4f);
 
-        int defaultHeight = ToolsUtil.dp2px(28f);
+        //横屏矮屏再压一档：默认 24dp、下限 16dp，保证三行在 60dp 内放得下
+        boolean compact = screen_landscape
+                && Math.min(screen_width, screen_height) < ToolsUtil.dp2px(300f);
+        int defaultHeight = ToolsUtil.dp2px(compact ? 24f : 28f);
         boolean speedVisible = text_speed != null && text_speed.getVisibility() == View.VISIBLE;
         int rows = speedVisible ? 3 : 2;
         int spacing = ToolsUtil.dp2px(6f);
 
         int buttonHeight = defaultHeight;
         if (defaultHeight * rows + spacing > budget) {
-            buttonHeight = Math.max(ToolsUtil.dp2px(20f), (budget - spacing) / rows);
+            buttonHeight = Math.max(ToolsUtil.dp2px(compact ? 16f : 20f), (budget - spacing) / rows);
         }
         //三颗按钮必须同一高度：倍速原先固定 30dp，而 ±秒 会被夹到 34/22dp，加载态最明显
         applySeekButtonHeight(button_seek_back, buttonHeight, defaultHeight);
@@ -3823,6 +3848,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         screen_width = displayMetrics.widthPixels;// 获取屏宽
         screen_height = displayMetrics.heightPixels;// 获取屏高
         changeVideoSize();
+
+        //横竖切换后控制层可用高度完全变了：紧凑模式按新方向重新结算
+        //（applyCompactLandscapeUi 内部会先恢复默认，不会把压缩态带回去）
+        applyCompactLandscapeUi();
+        fitBottomButtons();
+        fitRightControl();
 
         //横竖切换后控制区高度完全变了，左侧纵列要重新夹一次
         if (left_control != null) left_control.post(this::clampSeekColumnHeight);
@@ -4346,6 +4377,103 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * XML 改了这里自动跟），下限按「可用宽度均分」兜底而不是裸 dp，
      * 保证任何倍率下这一行都恰好塞得进屏幕，宽屏保持原尺寸不动。
      */
+    /**
+     * 横屏矮屏（词典笔/点读笔一类细长屏）的紧凑控制层（2026-11-22 反馈：控件互相压叠）。
+     *
+     * <p>控制层按 dp 叠加：顶栏约 40dp + 文字条约 18dp + 底栏约 70dp ≈ 130dp。
+     * 横屏后短边不足 300dp 时中间只剩二三十 dp，左右按钮列会顶出可用区间，与字幕/进度条互压。
+     * 这里只做“压缩”不做“隐藏”：按钮位置与功能一个不少，避免出现“藏了却没入口”的功能黑洞。
+     */
+    private void applyCompactLandscapeUi() {
+        //1) 先恢复默认：旋转回竖屏/退出矮屏时不能把压缩态带回去
+        if (seekbar_progress != null) setViewHeight(seekbar_progress, ToolsUtil.dp2px(20f));
+        if (bottom_control != null) {
+            bottom_control.setPadding(bottom_control.getPaddingLeft(), ToolsUtil.dp2px(2f),
+                    bottom_control.getPaddingRight(), ToolsUtil.dp2px(4f));
+        }
+        if (bottom_buttons != null) resizeBottomButtons(ToolsUtil.dp2px(38f), ToolsUtil.dp2px(7f));
+        if (text_title != null) {
+            text_title.setTextSize(14f);
+            text_title.setMaxLines(1);
+        }
+        if (layout_top != null) {
+            layout_top.setPadding(layout_top.getPaddingLeft(), ToolsUtil.dp2px(6f),
+                    layout_top.getPaddingRight(), ToolsUtil.dp2px(6f));
+        }
+        View battery = findViewById(R.id.battery_text);
+        if (battery != null) battery.setVisibility(View.VISIBLE);
+        View clock = findViewById(R.id.player_clock);
+        if (clock != null) {
+            clock.setVisibility(SharedPreferencesUtil.getBoolean("player_show_clock", true)
+                    ? View.VISIBLE : View.GONE);
+        }
+        //圆屏的字幕宽度在圆屏分支里按 0.65 屏宽设置过，这里不能覆盖
+        if (!screen_round && text_subtitle != null) {
+            text_subtitle.setMaxWidth(Integer.MAX_VALUE);
+            text_subtitle.setMaxLines(Integer.MAX_VALUE);
+            text_subtitle.setTextSize(11f);
+        }
+
+        //2) 只对横屏 + 短边不足 300dp 的细长屏压缩
+        if (!screen_landscape) return;
+        if (Math.min(screen_width, screen_height) >= ToolsUtil.dp2px(300f)) return;
+
+        //顶栏只留标题：电量/时钟在矮屏上是纯高度开销
+        if (battery != null) battery.setVisibility(View.GONE);
+        if (clock != null) clock.setVisibility(View.GONE);
+        if (text_title != null) text_title.setTextSize(12f);
+        if (layout_top != null) {
+            layout_top.setPadding(layout_top.getPaddingLeft(), ToolsUtil.dp2px(3f),
+                    layout_top.getPaddingRight(), ToolsUtil.dp2px(3f));
+        }
+
+        //底栏压缩：进度条 20→14dp、按钮 38→30dp、卡片内边距减半
+        if (seekbar_progress != null) setViewHeight(seekbar_progress, ToolsUtil.dp2px(14f));
+        if (bottom_control != null) {
+            bottom_control.setPadding(bottom_control.getPaddingLeft(), ToolsUtil.dp2px(1f),
+                    bottom_control.getPaddingRight(), ToolsUtil.dp2px(2f));
+        }
+        if (bottom_buttons != null) resizeBottomButtons(ToolsUtil.dp2px(30f), ToolsUtil.dp2px(5f));
+
+        //CC 字幕：宽度按短边收、最多三行，避免在极窄区域里逐字折行后压到控制层
+        if (!screen_round && text_subtitle != null) {
+            int shortSide = Math.min(screen_width, screen_height);
+            text_subtitle.setMaxWidth((int) (shortSide * 0.86f));
+            text_subtitle.setMaxLines(3);
+            text_subtitle.setEllipsize(TextUtils.TruncateAt.END);
+            text_subtitle.setTextSize(10f);
+        }
+    }
+
+    private void setViewHeight(View view, int height) {
+        if (view == null) return;
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp == null || lp.height == height) return;
+        lp.height = height;
+        view.setLayoutParams(lp);
+    }
+
+    /** 底栏按钮行统一尺寸（按钮都在 bottom_buttons 的居中 LinearLayout 里） */
+    private void resizeBottomButtons(int size, int iconPad) {
+        if (bottom_buttons == null) return;
+        for (int i = 0; i < bottom_buttons.getChildCount(); i++) {
+            View child = bottom_buttons.getChildAt(i);
+            if (!(child instanceof ViewGroup)) continue;
+            ViewGroup group = (ViewGroup) child;
+            for (int j = 0; j < group.getChildCount(); j++) {
+                View button = group.getChildAt(j);
+                ViewGroup.LayoutParams lp = button.getLayoutParams();
+                if (lp == null) continue;
+                if (lp.width == size && lp.height == size) continue;
+                lp.width = size;
+                lp.height = size;
+                button.setLayoutParams(lp);
+                if (button instanceof ImageButton)
+                    button.setPadding(iconPad, iconPad, iconPad, iconPad);
+            }
+        }
+    }
+
     private void fitBottomButtons() {
         if (bottom_buttons == null || screen_width <= 0) return;
         if (bottom_buttons.getChildCount() == 0) return;
@@ -4649,6 +4777,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //边缘裁掉）。该行是居中 wrap_content，放不下时两侧对称外溢、被物理边缘裁切；
         //按满编 5 键（菜单/音量-/播放/音量+/选P）算所需宽度，放不下就整行等比收缩，
         //宽度足够的屏幕保持原尺寸。必须放在圆屏 padding 之后：padding 会吃掉可用宽度
+        //横屏矮屏（词典笔/点读笔）先压缩控制层，再走宽度收缩，否则高度不够时左右列会互压
+        applyCompactLandscapeUi();
         fitBottomButtons();
         fitRightControl();
 

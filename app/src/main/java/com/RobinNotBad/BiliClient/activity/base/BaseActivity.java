@@ -512,9 +512,10 @@ public class BaseActivity extends AppCompatActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        //只在非沉浸页旁听；播放器/看图/短视频自己管手势，不抢
+        //只在非沉浸页旁听；播放器/看图/短视频自己管手势，不抢。
+        //默认关闭（2026-11-22 用户要求）：右边缘左滑快捷面板容易被列表横滑/返回手势误触
         if (!isNoSwipeThemedPage()
-                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.QUICK_SWIPE_ENABLE, true)) {
+                && SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.QUICK_SWIPE_ENABLE, false)) {
             if (quickSwipeDetector == null) {
                 quickSwipeDetector = new GestureDetector(this, new QuickSwipeListener());
             }
