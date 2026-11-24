@@ -181,6 +181,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     private RelativeLayout layout_control, layout_top, layout_video, layout_card_bg, layout_audio_only;
     private RelativeLayout bottom_text_bar;
+    /**
+     * 控制层是否使用 1.3.9 的旧版布局（设置项 {@code player_ui_legacy_control}）。
+     * 只影响布局与换肤，不参与任何播放/交互逻辑。
+     */
+    private boolean legacy_control_layout;
     private LinearLayout layout_speed, layout_volume, right_control, loading_info, left_control, bottom_control;
     private RelativeLayout bottom_buttons;
     private HorizontalScrollView right_second;
@@ -676,7 +681,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         }
 
-        setContentView(R.layout.activity_player);
+        //控制层布局二选一：默认 1.4 新版（悬浮底卡 + 圆形图标底），设置里可一键切回 1.3.9 的旧按钮。
+        //只换 XML 不复制逻辑：两套布局的 id 集合一致（旧版仅缺 bottom_text_bar，Java 侧已判空），
+        //findview()/initUI() 不需要任何分支。
+        legacy_control_layout = SharedPreferencesUtil.getBoolean(
+                SharedPreferencesUtil.PLAYER_UI_LEGACY_CONTROL, false);
+        setContentView(legacy_control_layout ? R.layout.activity_player_legacy : R.layout.activity_player);
         //哨兵打点收敛到「能区分崩溃阶段」的最小集合：每调用一次 stage 就是一次 commit（同步落盘），
         //原来 8 次打点在低端机上光 fsync 就要几十毫秒，这里把相邻的快速步骤合并
         PlayerSentinel.stage("布局完成");
@@ -1856,7 +1866,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     if (hasDanmaku && mDanmakuView != null) {
                         mDanmakuView.pause();
                     }
-                    btn_control.setImageResource(R.drawable.player_icon_play);
+                    btn_control.setImageResource(playIconRes(false));
                     return;
                 }
             }
@@ -1881,7 +1891,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 if (hasDanmaku && mDanmakuView != null) {
                     mDanmakuView.pause();
                 }
-                btn_control.setImageResource(R.drawable.player_icon_play);
+                btn_control.setImageResource(playIconRes(false));
                 if (hasMediaSession()) {
                     updateMediaSessionPlaybackState();
                 }
@@ -1929,7 +1939,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     if (hasDanmaku && mDanmakuView != null) {
                         mDanmakuView.pause();
                     }
-                    btn_control.setImageResource(R.drawable.player_icon_play);
+                    btn_control.setImageResource(playIconRes(false));
                     showcon();
                     if (hasMediaSession()) {
                         updateMediaSessionPlaybackState();
@@ -2162,7 +2172,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         loading_info.setVisibility(View.GONE);
         anim_loading.stop();
         isPlaying = true;
-        btn_control.setImageResource(R.drawable.player_icon_pause);
+        btn_control.setImageResource(playIconRes(true));
 
         text_speed.setVisibility(controlsShown ? View.VISIBLE : View.GONE);
         if (isLiveMode)
@@ -2184,7 +2194,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             ijkPlayer.start();
         } else {
             isPlaying = false;
-            btn_control.setImageResource(R.drawable.player_icon_play);
+            btn_control.setImageResource(playIconRes(false));
         }
 
         if (hasMediaSession()) {
@@ -2654,6 +2664,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 runOnUiThread(() -> {
                     RecyclerView subtitleRecycler = findViewById(R.id.subtitle_list);
                     SubtitleAdapter adapter = new SubtitleAdapter();
+                    adapter.setLegacyStyle(legacy_control_layout);
                     adapter.setData(subtitleLinks);
                     adapter.setSelectedItemIndex(subtitle_selected);
                     adapter.setOnItemClickListener(index -> {
@@ -3804,7 +3815,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
         }
         if (btn_control != null)
-            btn_control.setImageResource(R.drawable.player_icon_play);
+            btn_control.setImageResource(playIconRes(false));
         if (hasMediaSession()) {
             updateMediaSessionPlaybackState();
         }
@@ -3832,7 +3843,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
         }
         if (btn_control != null)
-            btn_control.setImageResource(R.drawable.player_icon_pause);
+            btn_control.setImageResource(playIconRes(true));
         if (hasMediaSession()) {
             updateMediaSessionPlaybackState();
         }
@@ -4338,9 +4349,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      */
     private void clampQuickMenuWidth() {
         if (right_second == null || screen_width <= 0) return;
-        int columnWidth = ToolsUtil.dp2px(32f) + ToolsUtil.dp2px(8f);
+        //旧版右列是 28dp 方形图标（1.3.9 尺寸），且左列没有胶囊、无需为它让位
+        int columnWidth = ToolsUtil.dp2px(legacy_control_layout ? 28f : 32f) + ToolsUtil.dp2px(8f);
         //同时给左侧"快进/倍速/快退"胶囊留出宽度：否则展开的快速行会横穿到左列上
-        int leftColumnWidth = ToolsUtil.dp2px(48f) + ToolsUtil.dp2px(12f);
+        int leftColumnWidth = legacy_control_layout ? 0 : ToolsUtil.dp2px(48f) + ToolsUtil.dp2px(12f);
         int maxRowWidth = Math.max(screen_width - columnWidth - leftColumnWidth
                 - ToolsUtil.dp2px(8f), ToolsUtil.dp2px(56f));
 
@@ -4387,16 +4399,27 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void applyCompactLandscapeUi() {
         //1) 先恢复默认：旋转回竖屏/退出矮屏时不能把压缩态带回去
         if (seekbar_progress != null) setViewHeight(seekbar_progress, ToolsUtil.dp2px(20f));
+        //恢复默认值要按各自基准：旧版底栏是通栏灰条、按钮 42dp 无内边距，
+        //统一写成 38dp+7dp 会让"切横屏再转回来"把旧布局悄悄改成新版
         if (bottom_control != null) {
-            bottom_control.setPadding(bottom_control.getPaddingLeft(), ToolsUtil.dp2px(2f),
-                    bottom_control.getPaddingRight(), ToolsUtil.dp2px(4f));
+            bottom_control.setPadding(bottom_control.getPaddingLeft(),
+                    legacy_control_layout ? 0 : ToolsUtil.dp2px(2f),
+                    bottom_control.getPaddingRight(),
+                    legacy_control_layout ? 0 : ToolsUtil.dp2px(4f));
         }
-        if (bottom_buttons != null) resizeBottomButtons(ToolsUtil.dp2px(38f), ToolsUtil.dp2px(7f));
+        if (bottom_buttons != null)
+            resizeBottomButtons(ToolsUtil.dp2px(legacy_control_layout ? 42f : 38f),
+                    legacy_control_layout ? 0 : ToolsUtil.dp2px(7f));
         if (text_title != null) {
-            text_title.setTextSize(14f);
+            //恢复默认要按各自基准：旧版标题是 1.3.9 的 12sp，新版是换肤后的 14sp
+            text_title.setTextSize(legacy_control_layout ? 12f : 14f);
             text_title.setMaxLines(1);
         }
-        if (layout_top != null) {
+        //旧版顶栏是通栏灰条、XML 本来没有纵向内边距，这里的 6dp 是给新版悬浮卡片补的。
+        //旧版照抄会让顶栏凭空高 12dp，而 back_hot 的高度回写（见 initUI 末尾）会把这份内边距
+        //当成内容再撑一次高度，每过一次布局顶栏就再长 12dp——这就是"顶栏整体往下跑"的根因。
+        //旧版不碰纵向内边距，保留 XML / 圆屏分支给出的值。
+        if (layout_top != null && !legacy_control_layout) {
             layout_top.setPadding(layout_top.getPaddingLeft(), ToolsUtil.dp2px(6f),
                     layout_top.getPaddingRight(), ToolsUtil.dp2px(6f));
         }
@@ -4422,7 +4445,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (battery != null) battery.setVisibility(View.GONE);
         if (clock != null) clock.setVisibility(View.GONE);
         if (text_title != null) text_title.setTextSize(12f);
-        if (layout_top != null) {
+        //旧版顶栏没有纵向内边距可压（见上），只在新版卡片上做矮屏压缩
+        if (layout_top != null && !legacy_control_layout) {
             layout_top.setPadding(layout_top.getPaddingLeft(), ToolsUtil.dp2px(3f),
                     layout_top.getPaddingRight(), ToolsUtil.dp2px(3f));
         }
@@ -4615,9 +4639,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //底栏改成悬浮卡片后，弹层只要贴着"屏高 10%"会被卡片盖住（卡片自身就有 ~64dp 高）。
         //≥230dp 高的屏幕把下限抬到 72dp，落在底卡上沿之上；更矮的圆屏（384×384）
         //如果也抬到 72dp，面板会被顶出屏幕，仍沿用 10%——此时面板盖住底排是可接受的。
-        int maxOverlayBottom = screen_height >= ToolsUtil.dp2px(230f)
+        int maxOverlayBottom = legacy_control_layout
+                ? (int) (screen_height * 0.10)
+                : (screen_height >= ToolsUtil.dp2px(230f)
                 ? Math.max((int) (screen_height * 0.10), ToolsUtil.dp2px(72f))
-                : (int) (screen_height * 0.10);
+                : (int) (screen_height * 0.10));
         int[] overlayBottomIds = {R.id.subtitle_card, R.id.danmaku_send_card,
                 R.id.page_selector_card, R.id.quality_selector_card,
                 R.id.viewpoint_selector_card, R.id.layout_speed};
@@ -4676,41 +4702,53 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             }
 
             //圆屏底排：屏底弦宽只有 ~130px，5 键必须上移并加宽侧边距才落在圆内。
-            bottom_buttons.setPadding(padding * 6, 0, padding * 6, padding);
+            //旧版底栏是通栏灰条 + 方形键，1.3.9 在圆屏下只内缩一个 padding
+            int roundSidePadding = legacy_control_layout ? padding : padding * 6;
+            bottom_buttons.setPadding(roundSidePadding, 0, roundSidePadding, padding);
 
             //圆屏上下边缘的弦宽放不下完整卡片：顶/底不铺卡片底，回到浮动控件。
             //底部 5 个键各自套圆形卡底（播放键仍是强调色圆底，在 applyPlayerVisualTheme 里覆盖）；
             //文字补一层柔和阴影，亮画面下才读得清。
             if (bottom_control != null) {
-                bottom_control.setBackground(null);
-                bottom_control.setPadding(0, 0, 0, 0);
+                //旧版底栏本来就是通栏灰条，拆掉卡底/内边距等于把新样式套回来；
+                //这里只保留上移量（margin），保证圆屏下底栏仍落在可视圆内
+                if (!legacy_control_layout) {
+                    bottom_control.setBackground(null);
+                    bottom_control.setPadding(0, 0, 0, 0);
+                }
                 ViewGroup.LayoutParams bcLp = bottom_control.getLayoutParams();
                 if (bcLp instanceof RelativeLayout.LayoutParams) {
                     ((RelativeLayout.LayoutParams) bcLp).setMargins(0, 0, 0, padding * 5);
                     bottom_control.setLayoutParams(bcLp);
                 }
             }
-            int[] bottomBtnIds = {R.id.button_quality, R.id.button_sound_cut,
-                    R.id.button_sound_add, R.id.button_page_selector};
-            for (int bottomBtnId : bottomBtnIds) {
-                View bottomBtn = findViewById(bottomBtnId);
-                if (bottomBtn != null)
-                    bottomBtn.setBackgroundResource(R.drawable.player_circle_bg);
+            if (!legacy_control_layout) {
+                int[] bottomBtnIds = {R.id.button_quality, R.id.button_sound_cut,
+                        R.id.button_sound_add, R.id.button_page_selector};
+                for (int bottomBtnId : bottomBtnIds) {
+                    View bottomBtn = findViewById(bottomBtnId);
+                    if (bottomBtn != null)
+                        bottomBtn.setBackgroundResource(R.drawable.player_circle_bg);
+                }
             }
 
             //左右两列同样内缩：圆形屏在 y≈100 处的可用弦宽只有 ~330px
-            left_control.setPadding(padding * 3, 0, 0, 0);
-            right_control.setPadding(0, 0, padding * 4, 0);
+            //旧版左列是贴边胶囊组（1.3.9 无左侧内缩），右列只缩一个 padding
+            if (!legacy_control_layout) left_control.setPadding(padding * 3, 0, 0, 0);
+            right_control.setPadding(0, 0, legacy_control_layout ? padding : padding * 4, 0);
             //右列缩到 26dp：底排上移后，32dp 的整列会压到最下面那颗按钮；
             //26dp × 3 + 间距 = 164px，正好在底排上方居中收住
-            int[] roundRightBtnIds = {R.id.danmaku_btn, R.id.rotate_btn, R.id.menu_btn};
-            for (int roundRightBtnId : roundRightBtnIds) {
-                View roundBtn = findViewById(roundRightBtnId);
-                if (roundBtn == null) continue;
-                ViewGroup.LayoutParams rp = roundBtn.getLayoutParams();
-                rp.width = ToolsUtil.dp2px(26f);
-                rp.height = ToolsUtil.dp2px(26f);
-                roundBtn.setLayoutParams(rp);
+            //旧版右列本身就是 28dp 方键、底排也不上移，按 1.3.9 保持原尺寸
+            if (!legacy_control_layout) {
+                int[] roundRightBtnIds = {R.id.danmaku_btn, R.id.rotate_btn, R.id.menu_btn};
+                for (int roundRightBtnId : roundRightBtnIds) {
+                    View roundBtn = findViewById(roundRightBtnId);
+                    if (roundBtn == null) continue;
+                    ViewGroup.LayoutParams rp = roundBtn.getLayoutParams();
+                    rp.width = ToolsUtil.dp2px(26f);
+                    rp.height = ToolsUtil.dp2px(26f);
+                    roundBtn.setLayoutParams(rp);
+                }
             }
 
             //右侧按钮列在圆屏上要保证"整列都落在可视圆内"：
@@ -4727,7 +4765,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 right_control.setLayoutParams(rcParams);
                 right_control.setClipChildren(false);
 
-                int columnWidth = ToolsUtil.dp2px(26f) + padding * 4;
+                int columnWidth = legacy_control_layout
+                        ? ToolsUtil.dp2px(28f) + padding
+                        : ToolsUtil.dp2px(26f) + padding * 4;
                 int maxRowWidth = Math.max(screen_width - columnWidth - ToolsUtil.dp2px(8f), ToolsUtil.dp2px(56f));
                 ViewGroup.LayoutParams rowParams = right_second.getLayoutParams();
                 rowParams.width = maxRowWidth;
@@ -4744,15 +4784,21 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
             //圆屏顶部同样不铺卡片（卡片四角会出圆）：改回浮动文字 + 1px 阴影，
             //横向只留 8dp 安全边距，标题限宽 70% 后居中，避免长标题被圆边裁掉。
-            layout_top.setBackground(null);
-            layout_top.setPadding(padding * 4, padding, padding * 4, padding / 2);
-            text_title.setMaxWidth((int) (screen_width * 0.70));
-            text_title.setShadowLayer(3f, 0f, 1f, 0xCC000000);
-            View roundClock = findViewById(R.id.player_clock);
-            if (roundClock instanceof TextView)
-                ((TextView) roundClock).setShadowLayer(3f, 0f, 1f, 0xCC000000);
-            if (batteryText != null)
-                batteryText.setShadowLayer(3f, 0f, 1f, 0xCC000000);
+            //旧版顶栏本来就没有悬浮卡底（1.3.9 是通栏渐变），阴影/限宽都是为了
+            //配合新卡片的圆角，回退时按 1.3.9 只保留 7 倍侧边内缩。
+            if (legacy_control_layout) {
+                layout_top.setPadding(padding * 7, padding, padding * 7, 0);
+            } else {
+                layout_top.setBackground(null);
+                layout_top.setPadding(padding * 4, padding, padding * 4, padding / 2);
+                text_title.setMaxWidth((int) (screen_width * 0.70));
+                text_title.setShadowLayer(3f, 0f, 1f, 0xCC000000);
+                View roundClock = findViewById(R.id.player_clock);
+                if (roundClock instanceof TextView)
+                    ((TextView) roundClock).setShadowLayer(3f, 0f, 1f, 0xCC000000);
+                if (batteryText != null)
+                    batteryText.setShadowLayer(3f, 0f, 1f, 0xCC000000);
+            }
 
             LinearLayout clockLayout = findViewById(R.id.clock_layout);
             clockLayout.setOrientation(LinearLayout.HORIZONTAL);
@@ -4796,12 +4842,28 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         //固定宽度返回热区：标题宽度=屏宽-clock_layout，1.2.9 加电量百分比后右侧块变宽，
         //标题可点范围跟着缩水；热区钉在左侧 72dp 不随右侧宽度变化。
         //圆屏模式下标题换行居中、左缘没有视觉锚点，隐藏该热区避免出现"看不见的退出区"
-        //高度由 XML 的 alignTop/alignBottom 跟随 top 卡片，不再从 Java 回写：
+        //新版布局的高度由 XML 的 alignTop/alignBottom 跟随 top 卡片，不回写：
         //回写 0dp 子 View 会在首次测量时把 wrap_content 的 top 撑成整屏（1.3.0 控制面板消失同因）
         View backHot = findViewById(R.id.back_hot);
         if (backHot != null) {
             backHot.setOnClickListener(view -> finish());
             backHot.setVisibility(screen_round ? View.GONE : View.VISIBLE);
+            //旧版布局（1.3.9 原样）里 back_hot 是 layout_height=0dp 的固定宽度热区，
+            //高度靠这段监听器跟随顶栏回写；不补回来旧样式下左上角返回热区高度为 0，点不到。
+            //回写的是"顶栏高度 - 顶栏纵向内边距"，不能直接写父高度，否则 wrap_content 的顶栏会
+            //把内边距算两次而逐次长高（旧版顶栏若被塞了纵向内边距，一播放顶栏就往下跑）。
+            if (legacy_control_layout && layout_top != null) {
+                layout_top.addOnLayoutChangeListener(
+                        (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                            //必须减掉顶栏自身的内边距：back_hot 是 top 的子 View，回写父高度时
+                            //wrap_content 的 top 会把内边距再算一遍，形成"越量越高"的反馈回路
+                            int hotHeight = bottom - top - v.getPaddingTop() - v.getPaddingBottom();
+                            if (hotHeight <= 0 || backHot.getHeight() == hotHeight) return;
+                            ViewGroup.LayoutParams hotParams = backHot.getLayoutParams();
+                            hotParams.height = hotHeight;
+                            backHot.setLayoutParams(hotParams);
+                        });
+            }
         }
 
         //电量/时间区域恢复点击退出（1.3.2 反馈：旧版本点击此区域也可以返回）。
@@ -4964,6 +5026,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * 不改任何状态位与点击逻辑。API 21 以下 continue 用 XML 里的默认粉兜底。
      */
     private void applyPlayerVisualTheme() {
+        //旧版控制层（1.3.9）自带按钮底与进度条配色，这里一律不动：
+        //播放键要的不是主题色圆底，是原来的方形图标 + ripple 反馈。
+        if (legacy_control_layout) return;
+
         int primary = ThemeManager.getPrimary();
 
         if (btn_control != null) {
@@ -5000,13 +5066,34 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
+     * 播放/暂停键的图标资源。
+     *
+     * <p>新版是 1.4.0 重绘的 {@code player_icon_*}（细描边），旧版控制层沿用 1.3.9 的
+     * {@code btn_player_*}（粗实心）。两套图标的视觉重量不同，混用会让旧版通栏灰条上
+     * 出现“新图标配旧底栏”的割裂感，所以按控制层样式二选一。
+     */
+    private int playIconRes(boolean playing) {
+        if (legacy_control_layout)
+            return playing ? R.drawable.btn_player_pause : R.drawable.btn_player_play;
+        return playing ? R.drawable.player_icon_pause : R.drawable.player_icon_play;
+    }
+
+    /**
      * 播放器开关态图标：开启=主题强调色，关闭=textwhite + alpha 0.5。
      *
      * <p>旧资源里“开启态”是写死的 B 站蓝；不替换图标形状，用 SRC_IN 统一染成主题色。
+     *
+     * <p>旧版控制层不染色、也不降 alpha：1.3.9 的开关态图标是原色满不透明，
+     * 染色属于 1.4.0 换肤的一部分，回退时一并回退（图标资源两版相同，清掉滤镜即等价）。
      */
     private void setPlayerToggleIcon(ImageView view, int resId, boolean active) {
         if (view == null) return;
         view.setImageResource(resId);
+        if (legacy_control_layout) {
+            view.clearColorFilter();
+            view.setAlpha(1f);
+            return;
+        }
         view.setColorFilter(active
                         ? ThemeManager.getPrimary()
                         : ContextCompat.getColor(this, R.color.textwhite),
@@ -6009,6 +6096,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         runOnUiThread(() -> {
             RecyclerView pageSelectorRecycler = findViewById(R.id.page_selector_list);
             PageSelectorAdapter adapter = new PageSelectorAdapter();
+            adapter.setLegacyStyle(legacy_control_layout);
             adapter.setData(pagenames, currentPageIndex);
             adapter.setOnItemClickListener(index -> {
                 layout_card_bg.setVisibility(View.GONE);
@@ -6190,6 +6278,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         runOnUiThread(() -> {
             RecyclerView qualitySelectorRecycler = findViewById(R.id.quality_selector_list);
             QualitySelectorAdapter adapter = new QualitySelectorAdapter();
+            adapter.setLegacyStyle(legacy_control_layout);
             adapter.setData(qnStrList, qnValueList, currentQuality);
             adapter.setOnItemClickListener(index -> {
                 layout_card_bg.setVisibility(View.GONE);
@@ -6305,6 +6394,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             RecyclerView viewPointRecycler = findViewById(R.id.viewpoint_selector_list);
             if (viewPointAdapter == null) {
                 viewPointAdapter = new ViewPointAdapter();
+                viewPointAdapter.setLegacyStyle(legacy_control_layout);
                 viewPointAdapter.setData(viewPoints);
                 viewPointAdapter.setOnItemClickListener(index -> {
                     layout_card_bg.setVisibility(View.GONE);
@@ -6437,7 +6527,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             if (question.pauseVideo == 1 && isPlaying) {
                 ijkPlayer.pause();
                 isPlaying = false;
-                btn_control.setImageResource(R.drawable.player_icon_play);
+                btn_control.setImageResource(playIconRes(false));
             }
 
             //低分辨率设备横屏时选项会被截断，先按设置把屏幕临时转成竖屏

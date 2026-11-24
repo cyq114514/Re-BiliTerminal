@@ -21,7 +21,17 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
     public OnItemClickListener listener;
     public int selectedItemIndex = 0;
 
+    /**
+     * 旧版（1.3.9）浮层样式：条目换成 {@code cell_subtitle} 按钮，着色见
+     * {@link PlayerChipStyle#applyLegacyButton}。默认关闭 = 现版 chip。
+     */
+    private boolean legacyStyle;
+
     public SubtitleAdapter() {
+    }
+
+    public void setLegacyStyle(boolean legacyStyle) {
+        this.legacyStyle = legacyStyle;
     }
 
     public void setOnItemClickListener(OnItemClickListener listener) {
@@ -46,8 +56,9 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_player_chip, parent, false);
-        ToolsUtil.applyPressScale(view);
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(legacyStyle ? R.layout.cell_subtitle : R.layout.cell_player_chip, parent, false);
+        if (!legacyStyle) ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
 
@@ -73,14 +84,18 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
 
         public Holder(View view) {
             super(view);
-            chip = itemView.findViewById(R.id.chip_text);
+            chip = itemView.findViewById(legacyStyle ? R.id.btn : R.id.chip_text);
         }
 
         void bind(int currentIndex, boolean isSelected) {
             if (currentIndex < 0 || list == null || currentIndex >= list.length)
                 return;
             chip.setText(list[currentIndex].lang);
-            PlayerChipStyle.apply(chip, isSelected);
+            if (legacyStyle) {
+                PlayerChipStyle.applyLegacyButton(chip, isSelected);
+            } else {
+                PlayerChipStyle.apply(chip, isSelected);
+            }
             chip.setOnClickListener(v -> {
                 setSelectedItemIndex(currentIndex);
                 if (listener != null) {

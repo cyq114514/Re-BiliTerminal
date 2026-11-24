@@ -1,0 +1,886 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    1.3.9 版播放器控制层布局（回退用）。
+    设置项「播放页按钮样式」选旧版时，PlayerActivity 改为 setContentView 本文件；
+    与 activity_player.xml 的唯一结构差异是缺少 bottom_text_bar（新版的字幕/进度锚点，
+    Java 侧对它的读取全部做了 null 判空）。本文件除本注释外逐字沿用 v1.3.9。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:theme="@style/Theme.BiliClient"
+    android:keepScreenOn="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".activity.player.PlayerActivity"
+    android:id="@+id/root_layout"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+
+    <RelativeLayout
+        android:id="@+id/videoArea"
+        android:layout_width="1px"
+        android:layout_height="1px"
+        android:layout_centerInParent="true" />
+
+
+    <master.flame.danmaku.ui.widget.DanmakuView
+        android:id="@+id/sv_danmaku"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <RelativeLayout
+        android:id="@+id/audio_only_layout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp">
+
+            <TextView
+                android:id="@+id/audio_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:gravity="center"
+                android:maxWidth="220dp"
+                android:text="听视频模式"
+                android:textColor="@color/textwhite"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/audio_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:maxWidth="220dp"
+                android:text="听视频模式，仅播放音频"
+                android:textColor="#99ffffff"
+                android:textSize="11sp"
+                android:lineSpacingExtra="2dp" />
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:id="@+id/control_layout"
+        android:gravity="bottom"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <TextView
+            android:id="@+id/text_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_above="@+id/text_progress"
+            android:layout_centerHorizontal="true"
+            android:alpha="0.8"
+            android:background="@drawable/background_grey_cardview"
+            android:gravity="center"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="3dp"
+            android:text="@string/text_default_subtitle"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/text_progress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="2dp"
+            android:gravity="start"
+            android:text="@string/text_default_progress"
+            android:alpha="0.8"
+            android:textSize="11sp"
+            android:layout_above="@id/bottom_control" />
+
+        <TextView
+            android:id="@+id/text_online"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/bottom_control"
+            android:alpha="0.8"
+            android:gravity="end"
+            android:paddingEnd="2dp"
+            android:text="@string/text_default_online"
+            android:textAlignment="textEnd"
+            android:textSize="11sp" />
+
+        <RelativeLayout
+            android:id="@+id/top"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/overlay_gray"
+            android:paddingHorizontal="8dp"
+            android:layout_alignParentTop="true">
+
+            <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                android:id="@+id/text_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="4dp"
+                android:layout_toStartOf="@+id/clock_layout"
+                android:drawableStart="@drawable/arrow_back"
+                android:text="@string/pagename_player"
+                android:textColor="@color/textwhite"
+                android:textSize="12sp" />
+
+            <!--固定宽度的返回热区：返回=点标题本身，而标题宽度=屏宽-clock_layout。
+                1.2.9 标题栏加了电量百分比后右侧块变宽，标题（含箭头）的可点范围跟着缩水。
+                热区钉在左侧不随右侧宽度变化；电量/时钟区域仍不可点退出（X-41）。
+                注意必须排在 text_title 之后，z 序在其上才能优先接住触摸。
+
+                高度必须是 0dp、由 PlayerActivity 布局后贴回顶栏实际高度，绝不能写 match_parent：
+                顶栏 top 是 wrap_content 的 RelativeLayout，MATCH_PARENT 子 View 在测量阶段拿到的是
+                「给满可用空间」= AT_MOST(屏高) 再被当成 EXACTLY 用，顶栏会被撑成整屏；
+                随后 below=top 的 left_control / right_control 上下两边全被钉死，量出 0 高度整列消失
+                （1.3.0 控制面板消失事故）。0dp 不参与测量，高度见 PlayerActivity 的 backHot 同步逻辑-->
+            <View
+                android:id="@+id/back_hot"
+                android:layout_width="72dp"
+                android:layout_height="0dp"
+                android:layout_alignParentStart="true"
+                android:layout_alignParentLeft="true" />
+
+            <!-- 顶栏右侧：时间 + 电量百分比，同一行（用户反馈 2026-11-07：时间/电池图形/数字
+                 三行叠在一起）。电池图形已删，只留数字百分比，右侧块不再被撑成三行 -->
+            <LinearLayout
+                android:id="@+id/clock_layout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- 顶栏时间（1.3.3 反馈：右上角只有电量想看时间不行，加开关 player_show_clock）。
+                     默认 gone，initUI 按开关显隐 -->
+                <com.RobinNotBad.BiliClient.ui.widget.TextClock
+                    android:id="@+id/player_clock"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:textColor="@color/textwhite"
+                    android:textSize="10sp"
+                    android:visibility="gone"
+                    tools:ignore="SmallSp" />
+
+                <!-- 具体电量百分比：只留数字 -->
+                <TextView
+                    android:id="@+id/battery_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/textwhite"
+                    android:textSize="10sp"
+                    tools:ignore="SmallSp" />
+            </LinearLayout>
+        </RelativeLayout>
+
+
+        <LinearLayout
+            android:id="@+id/bottom_control"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:background="@color/overlay_gray"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="vertical">
+
+            <com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar
+                android:id="@+id/videoprogress"
+                style="@style/Widget.AppCompat.SeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="20dp"
+                android:layout_marginTop="2dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:progressTint="#aa44aaff"
+                android:secondaryProgressTint="#eeFEFEFE"
+                android:thumb="@drawable/player_selector_progress"
+                android:thumbOffset="8dp"
+                tools:targetApi="lollipop" />
+
+            <RelativeLayout
+                android:id="@+id/bottom_buttons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerInParent="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageButton
+                        android:id="@+id/button_quality"
+                        android:layout_width="38dp"
+                        android:layout_height="42dp"
+                        android:layout_marginEnd="6dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/icon_menu" />
+
+                    <ImageButton
+                        android:id="@+id/button_sound_cut"
+                        android:layout_width="38dp"
+                        android:layout_height="42dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitCenter"
+                        android:src="@mipmap/soundcut" />
+
+                    <ImageButton
+                        android:id="@+id/button_video"
+                        android:layout_width="38dp"
+                        android:layout_height="42dp"
+                        android:layout_marginStart="6dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/btn_player_play" />
+
+                    <ImageButton
+                        android:id="@+id/button_sound_add"
+                        android:layout_width="38dp"
+                        android:layout_height="42dp"
+                        android:layout_marginStart="6dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitCenter"
+                        android:src="@mipmap/soundadd" />
+
+                    <ImageButton
+                        android:id="@+id/button_page_selector"
+                        android:layout_width="38dp"
+                        android:layout_height="42dp"
+                        android:layout_marginStart="6dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/icon_folder"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+            </RelativeLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/right_control"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_above="@+id/bottom_control"
+            android:gravity="center"
+            android:layout_below="@+id/top"
+            android:layout_alignParentRight="true"
+            android:layout_marginEnd="4dp"
+            android:orientation="horizontal">
+
+
+            <HorizontalScrollView
+                android:id="@+id/right_second"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/background_edittext"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/right_second_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="4dp"
+                    android:paddingVertical="4dp">
+
+                    <ImageButton
+                        android:id="@+id/danmaku_send_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/send" />
+
+                    <ImageButton
+                        android:id="@+id/subtitle_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@mipmap/subtitle_off" />
+
+                    <ImageButton
+                        android:id="@+id/loop_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@mipmap/loopoff" />
+
+                    <ImageButton
+                        android:id="@+id/audio_only_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/icon_play_16"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/auto_next_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/icon_auto_next_off"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/viewpoint_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/icon_folder"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/jump_time_btn"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/icon_jump_time" />
+
+                </LinearLayout>
+
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <ImageButton
+                    android:id="@+id/danmaku_btn"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:adjustViewBounds="true"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:scaleType="fitXY"
+                    android:src="@mipmap/danmakuoff" />
+
+                <ImageButton
+                    android:id="@+id/rotate_btn"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:adjustViewBounds="true"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:scaleType="fitXY"
+                    android:src="@mipmap/rotate" />
+
+                <ImageButton
+                    android:id="@+id/menu_btn"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:adjustViewBounds="true"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:scaleType="fitXY"
+                    android:src="@mipmap/morehide" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- 片头/片尾「手动跳过」按钮：仅当档位为"手动跳过"且当前位于片段区间内时显示。
+             另外两个档位不需要 UI：总是跳过/跳过一次自动跳，仅显示只用提示，禁用完全不处理 -->
+        <!-- 不能用 MaterialCardView：本页主题 Theme.NoSwipe 的 parent 是 android:Theme.Black，
+             非 MaterialComponents 后代，MaterialCardView 构造时直接抛 IllegalArgumentException，
+             整个布局 inflate 失败 → 播放页起不来。改用普通 FrameLayout + 形状背景。 -->
+        <FrameLayout
+            android:id="@+id/clip_skip_card"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_above="@+id/bottom_control"
+            android:layout_alignParentRight="true"
+            android:background="@drawable/bg_clip_skip"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="40dp"
+            android:visibility="gone">
+            <!-- marginBottom 留 40dp：下方 text_online（"x人在看"）同样贴 bottom_control 上沿右对齐，
+                 只留 12dp 时两者垂直带会重叠约 4dp，卡片声明更靠后、会压住人数数字 -->
+
+            <TextView
+                android:id="@+id/clip_skip_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="跳过片头"
+                android:textColor="@color/textwhite"
+                android:textSize="13sp" />
+        </FrameLayout>
+
+        <ImageButton
+            android:id="@+id/btn_debug"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_alignParentLeft="true"
+            android:layout_above="@+id/left_control"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="4dp"
+            android:adjustViewBounds="true"
+            android:background="?android:attr/selectableItemBackground"
+            android:scaleType="fitCenter"
+            android:src="@drawable/icon_debug"
+            android:visibility="gone" />
+
+        <!-- 左侧纵列：快退 / 倍速 / 快进 竖着排。
+             原先 ±N 秒按钮跟底部那一排挤在一起，小屏（点读笔、手表）上会被压成竖排、
+             只露出半个字，现在它们和倍速共用最左边这一列，宽度管够；
+             「显示快进快退按钮」关掉 / 直播 / 听视频模式时两个按钮一起收起。
+
+             必须夹在顶栏与进度文字之间：只写 centerVertical 时这一列按"整个控制层"垂直居中，
+             矮屏（控制区 200dp 上下）上列底边正好落到进度条上，+10s 的 34dp 触控区压住
+             进度条左端——拖进度时抬手就是误触。below/above 同时写等于"在这两条边界之间居中"，
+             底边永远不会越过进度文字；高度再不够由 PlayerActivity.clampSeekColumnHeight() 兜底压缩 -->
+        <!-- 高度写 match_parent 和 right_control 同一个套路：below/above 把可用区间算出来，
+             gravity="center" 再把三行内容在区间里垂直居中。用 wrap_content 时纵向居中全靠
+             RelativeLayout 的 centerVertical 与锚点协商，行为不如 gravity 直观 -->
+        <LinearLayout
+            android:id="@+id/left_control"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_alignParentLeft="true"
+            android:layout_above="@+id/text_progress"
+            android:layout_below="@+id/top"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/button_seek_back"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center"
+                android:minWidth="46dp"
+                android:paddingHorizontal="4dp"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="-10s"
+                android:textColor="@color/textwhite"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/text_speed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="5dp"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="x 1.0"
+                android:textColor="@color/textwhite"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/button_seek_forward"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center"
+                android:minWidth="46dp"
+                android:paddingHorizontal="4dp"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="+10s"
+                android:textColor="@color/textwhite"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/loading_info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_centerInParent="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/circle"
+
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center" />
+
+            <TextView
+                android:id="@+id/loading_text0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="加载中"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/loading_text1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="OwO"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="10sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_speed"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#50000000"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="倍速调节"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="14sp"
+                app:layout_constraintBottom_toTopOf="@+id/seekbar_speed" />
+
+            <SeekBar
+                android:id="@+id/seekbar_speed"
+                style="@style/Widget.AppCompat.SeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="26dp"
+                android:indeterminate="false"
+                android:max="7"
+                android:progress="2"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/text_newspeed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="1.0x"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="14sp"
+                app:layout_constraintTop_toBottomOf="@id/seekbar_speed" />
+
+        </LinearLayout>
+
+        <!-- 无极调音：0~100% 的软件增益（长按底部音量按钮打开） -->
+        <LinearLayout
+            android:id="@+id/layout_volume"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#50000000"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="无极调音（软件增益）"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/seekbar_volume"
+                style="@style/Widget.AppCompat.SeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="26dp"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="100" />
+
+            <TextView
+                android:id="@+id/text_newvolume"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:shadowColor="@color/bgblack"
+                android:shadowDx="2.0"
+                android:shadowDy="0.0"
+                android:shadowRadius="3.0"
+                android:text="100%"
+                android:textAlignment="center"
+                android:textColor="@color/divider_gray"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+
+    </RelativeLayout>
+
+
+    <TextView
+        android:id="@+id/showsound"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:shadowColor="@color/bgblack"
+        android:shadowDx="2.0"
+        android:shadowDy="0.0"
+        android:shadowRadius="3.0"
+        android:text="音量：100%"
+        android:textColor="@color/textwhite"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <RelativeLayout
+        android:id="@+id/card_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#70000000"
+        android:visibility="gone">
+
+
+        <LinearLayout
+            android:id="@+id/subtitle_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:layout_marginHorizontal="6dp"
+            android:background="@drawable/background_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/subtitle_card_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="3dp"
+                android:text="选择字幕"
+                android:textSize="14sp" />
+
+            <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+                android:id="@+id/subtitle_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="3dp"
+                android:orientation="horizontal"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:listitem="@layout/cell_subtitle" />
+
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:id="@+id/danmaku_send_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:layout_marginHorizontal="6dp"
+            android:background="@drawable/background_card"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="4dp"
+                android:layout_marginTop="4dp"
+                android:paddingHorizontal="3dp"
+                android:text="发送弹幕"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/danmaku_send_edit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="4dp"
+                android:hint="发个友善的弹幕见证当下"
+                android:maxLength="100"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:textColor="@color/textwhite"
+                android:textColorHint="#88ffffff" />
+
+            <Button
+                android:id="@+id/danmaku_send"
+                android:layout_width="match_parent"
+                android:layout_height="35dp"
+                android:layout_marginHorizontal="6dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/background_card_borderless"
+                android:gravity="center"
+                android:text="发送" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/page_selector_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_marginHorizontal="6dp"
+            android:layout_marginBottom="56dp"
+            android:background="@drawable/background_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/page_selector_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="3dp"
+                android:text="选择分P"
+                android:textSize="14sp" />
+
+            <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+                android:id="@+id/page_selector_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="3dp"
+                android:maxHeight="240dp"
+                android:orientation="vertical" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/quality_selector_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_marginHorizontal="6dp"
+            android:layout_marginBottom="56dp"
+            android:background="@drawable/background_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/quality_selector_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="3dp"
+                android:text="选择清晰度"
+                android:textSize="14sp" />
+
+            <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+                android:id="@+id/quality_selector_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="3dp"
+                android:maxHeight="240dp"
+                android:orientation="horizontal" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/viewpoint_selector_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:layout_marginHorizontal="6dp"
+            android:background="@drawable/background_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/viewpoint_selector_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="3dp"
+                android:text="视频分段"
+                android:textSize="14sp" />
+
+            <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
+                android:id="@+id/viewpoint_selector_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="3dp"
+                android:orientation="horizontal"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:listitem="@layout/cell_episode" />
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+</RelativeLayout>
