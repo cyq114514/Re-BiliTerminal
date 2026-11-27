@@ -58,7 +58,8 @@ public class SubtitleAdapter extends RecyclerView.Adapter<SubtitleAdapter.Holder
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(legacyStyle ? R.layout.cell_subtitle : R.layout.cell_player_chip, parent, false);
-        if (!legacyStyle) ToolsUtil.applyPressScale(view);
+        //1.3.9 的字幕条目同样有按压缩放反馈，旧版/新版都保留
+        ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
 

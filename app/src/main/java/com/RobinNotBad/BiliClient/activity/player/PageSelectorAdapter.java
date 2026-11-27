@@ -57,7 +57,8 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(legacyStyle ? R.layout.cell_page_item : R.layout.cell_player_chip, parent, false);
-        if (!legacyStyle) ToolsUtil.applyPressScale(view);
+        //1.3.9 的分P条目是普通卡片，两种样式都要按压缩放反馈（Quality/ViewPoint 的 1.3.9 实现没有，故不共用此分支）
+        ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
 

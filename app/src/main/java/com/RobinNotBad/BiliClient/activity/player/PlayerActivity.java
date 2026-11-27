@@ -3680,21 +3680,41 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
      * 顶出去的那截就是压住进度条、拖进度时误触的元凶。这里按实际可用高度把两个秒数
      * 按钮一起压矮（下限 22dp），保证整列始终落在进度文字上方。
      *
-     * <p>每次都从 34dp 的默认值重新算，反复调用（旋转 / 显隐切换 / 重新布局）不会越压越小。
+     * <p>每次都会按各自基准重新算（新版 28dp、矮屏 24dp；旧版维持 1.3.9 的 34dp），
+     * 反复调用（旋转 / 显隐切换 / 重新布局）不会越压越小。
      */
     private void clampSeekColumnHeight() {
-        if (left_control == null || layout_top == null || bottom_text_bar == null) return;
+        //锚点：新版是底栏文字条容器 bottom_text_bar；旧版（1.3.9 布局）没有它，
+        //回退到进度文字自身——1.3.9 的 clamp 正是以 text_progress.getTop() 为锚点。
+        View anchor = bottom_text_bar != null ? bottom_text_bar : text_progress;
+        if (left_control == null || layout_top == null || anchor == null) return;
         if (left_control.getVisibility() != View.VISIBLE) return;
 
-        int available = bottom_text_bar.getTop() - layout_top.getBottom();
+        int available = anchor.getTop() - layout_top.getBottom();
         if (available <= 0) {   //还没完成布局
             //顶栏被异常撑高时这里恒为负、左右控件列会被压成 0 高（1.3.0 就是这么整列消失的）。
             //布局已完成（进度文字已有 top）却仍不够高度时留一条日志，下次一眼能定位
-            if (layout_top.getHeight() > ToolsUtil.dp2px(80f) && bottom_text_bar.getTop() > 0)
+            if (layout_top.getHeight() > ToolsUtil.dp2px(80f) && anchor.getTop() > 0)
                 Logu.w("player_ui", "顶栏高度异常 " + layout_top.getHeight() + "px，控件列可用高度 " + available + "px");
             return;
         }
         int budget = available - ToolsUtil.dp2px(4f);
+
+        //旧版控制层沿用 1.3.9 的口径：±秒按钮 34dp 基准、只压这两颗，倍速是 wrap_content 单独估高。
+        //不能只把锚点回退：1.4 的 28/24dp 基准会把旧布局 XML 的 34dp 按钮悄悄改小。
+        if (legacy_control_layout) {
+            int legacyDefaultHeight = ToolsUtil.dp2px(34f);
+            boolean legacySpeedVisible = text_speed != null && text_speed.getVisibility() == View.VISIBLE;
+            int speedHeight = legacySpeedVisible
+                    ? Math.max(text_speed.getHeight(), ToolsUtil.dp2px(24f)) : 0;
+            int legacyButtonHeight = legacyDefaultHeight;
+            if (legacyDefaultHeight * 2 + speedHeight > budget) {
+                legacyButtonHeight = Math.max(ToolsUtil.dp2px(22f), (budget - speedHeight) / 2);
+            }
+            applySeekButtonHeight(button_seek_back, legacyButtonHeight, legacyDefaultHeight);
+            applySeekButtonHeight(button_seek_forward, legacyButtonHeight, legacyDefaultHeight);
+            return;
+        }
 
         //横屏矮屏再压一档：默认 24dp、下限 16dp，保证三行在 60dp 内放得下
         boolean compact = screen_landscape
@@ -4399,7 +4419,7 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private void applyCompactLandscapeUi() {
         //1) 先恢复默认：旋转回竖屏/退出矮屏时不能把压缩态带回去
         if (seekbar_progress != null) setViewHeight(seekbar_progress, ToolsUtil.dp2px(20f));
-        //恢复默认值要按各自基准：旧版底栏是通栏灰条、按钮 42dp 无内边距，
+        //恢复默认值要按各自基准：旧版底栏是通栏灰条、按钮 38×42 无内边距，
         //统一写成 38dp+7dp 会让"切横屏再转回来"把旧布局悄悄改成新版
         if (bottom_control != null) {
             bottom_control.setPadding(bottom_control.getPaddingLeft(),
@@ -4407,9 +4427,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     bottom_control.getPaddingRight(),
                     legacy_control_layout ? 0 : ToolsUtil.dp2px(4f));
         }
-        if (bottom_buttons != null)
-            resizeBottomButtons(ToolsUtil.dp2px(legacy_control_layout ? 42f : 38f),
-                    legacy_control_layout ? 0 : ToolsUtil.dp2px(7f));
+        if (bottom_buttons != null) {
+            if (legacy_control_layout) {
+                //1.3.9 的底栏按钮是 38×42（宽×高），不是正方形；只按高度写 42 会把整行拉宽、
+                //图标被 fitCenter 按 min(宽,高) 放大 ~10%
+                resizeBottomButtons(ToolsUtil.dp2px(38f), ToolsUtil.dp2px(42f), 0);
+            } else {
+                resizeBottomButtons(ToolsUtil.dp2px(38f), ToolsUtil.dp2px(7f));
+            }
+        }
         if (text_title != null) {
             //恢复默认要按各自基准：旧版标题是 1.3.9 的 12sp，新版是换肤后的 14sp
             text_title.setTextSize(legacy_control_layout ? 12f : 14f);
@@ -4479,6 +4505,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
 
     /** 底栏按钮行统一尺寸（按钮都在 bottom_buttons 的居中 LinearLayout 里） */
     private void resizeBottomButtons(int size, int iconPad) {
+        resizeBottomButtons(size, size, iconPad);
+    }
+
+    /** 同上，但宽高可不同：旧版（1.3.9）按钮是 38×42，压成正方形会改变图标大小与整行宽度 */
+    private void resizeBottomButtons(int width, int height, int iconPad) {
         if (bottom_buttons == null) return;
         for (int i = 0; i < bottom_buttons.getChildCount(); i++) {
             View child = bottom_buttons.getChildAt(i);
@@ -4488,9 +4519,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 View button = group.getChildAt(j);
                 ViewGroup.LayoutParams lp = button.getLayoutParams();
                 if (lp == null) continue;
-                if (lp.width == size && lp.height == size) continue;
-                lp.width = size;
-                lp.height = size;
+                if (lp.width == width && lp.height == height) continue;
+                lp.width = width;
+                lp.height = height;
                 button.setLayoutParams(lp);
                 if (button instanceof ImageButton)
                     button.setPadding(iconPad, iconPad, iconPad, iconPad);
@@ -4709,13 +4740,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             //圆屏上下边缘的弦宽放不下完整卡片：顶/底不铺卡片底，回到浮动控件。
             //底部 5 个键各自套圆形卡底（播放键仍是强调色圆底，在 applyPlayerVisualTheme 里覆盖）；
             //文字补一层柔和阴影，亮画面下才读得清。
-            if (bottom_control != null) {
-                //旧版底栏本来就是通栏灰条，拆掉卡底/内边距等于把新样式套回来；
-                //这里只保留上移量（margin），保证圆屏下底栏仍落在可视圆内
-                if (!legacy_control_layout) {
-                    bottom_control.setBackground(null);
-                    bottom_control.setPadding(0, 0, 0, 0);
-                }
+            if (bottom_control != null && !legacy_control_layout) {
+                //圆屏不铺卡片底：拆掉卡底/内边距并整块上移，保证悬浮底卡落在可视圆内。
+                //旧版（1.3.9）底栏本来就是通栏灰条、贴屏底，不改 margin/背景/内边距；
+                //上移量是 1.4 换肤后给悬浮卡片加的，回退旧观感时一并不做。
+                bottom_control.setBackground(null);
+                bottom_control.setPadding(0, 0, 0, 0);
                 ViewGroup.LayoutParams bcLp = bottom_control.getLayoutParams();
                 if (bcLp instanceof RelativeLayout.LayoutParams) {
                     ((RelativeLayout.LayoutParams) bcLp).setMargins(0, 0, 0, padding * 5);
@@ -4852,7 +4882,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             //高度靠这段监听器跟随顶栏回写；不补回来旧样式下左上角返回热区高度为 0，点不到。
             //回写的是"顶栏高度 - 顶栏纵向内边距"，不能直接写父高度，否则 wrap_content 的顶栏会
             //把内边距算两次而逐次长高（旧版顶栏若被塞了纵向内边距，一播放顶栏就往下跑）。
-            if (legacy_control_layout && layout_top != null) {
+            //圆屏下 back_hot 已 GONE（GONE 子 View 不参与 layout，getHeight() 恒为 0，
+            //回写守卫永不成立），该热区本来就不可见，注册监听只会造成每次布局都
+            //setLayoutParams→requestLayout 的空转，因此圆屏不注册。
+            if (legacy_control_layout && !screen_round && layout_top != null) {
                 layout_top.addOnLayoutChangeListener(
                         (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
                             //必须减掉顶栏自身的内边距：back_hot 是 top 的子 View，回写父高度时

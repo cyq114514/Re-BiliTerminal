@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     1.3.9 版播放器控制层布局（回退用）。
-    设置项「播放页按钮样式」选旧版时，PlayerActivity 改为 setContentView 本文件；
+    设置项「旧版播放器控制栏样式」选旧版时，PlayerActivity 改为 setContentView 本文件；
     与 activity_player.xml 的唯一结构差异是缺少 bottom_text_bar（新版的字幕/进度锚点，
     Java 侧对它的读取全部做了 null 判空）。本文件除本注释外逐字沿用 v1.3.9。
 -->
