@@ -169,6 +169,13 @@ final List<SettingSection> sectionList = new ArrayList<>(buildSections(this));
                 "", "true"));
         sectionList.add(new SettingSection("switch", "显示分P按钮", "player_ui_showPageBtn",
                 "", "true"));
+        //控制栏样式一键回退（1.4.0 换肤后的反馈：悬浮底卡 + 圆形图标底看着"丑"）：
+        //开=回到 1.3.9 的通栏底栏与方形按钮，关=保持 1.4 新版。布局在 onCreate 里二选一，
+        //所以改完要重进播放页；默认 false，不改变绝大多数用户的现有观感。
+        sectionList.add(new SettingSection("switch", "旧版播放器控制栏样式",
+                SharedPreferencesUtil.PLAYER_UI_LEGACY_CONTROL,
+                "开启后播放页控制区回到 1.3.9 的布局：通栏灰条底栏、方形按钮图标、无强调色圆底；关闭为现版悬浮底卡 + 圆形图标底。切换后重进播放页生效",
+                "false"));
 
         sectionList.add(new SettingSection("title", "互动视频", "", "", ""));
         sectionList.add(new SettingSection("input_float", "互动选项字体大小", "player_interaction_choice_size", "", "17.0"));

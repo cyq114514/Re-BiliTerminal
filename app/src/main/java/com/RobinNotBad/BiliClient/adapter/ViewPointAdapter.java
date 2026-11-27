@@ -19,6 +19,11 @@ import com.RobinNotBad.BiliClient.util.ToolsUtil;
 import java.util.List;
 
 public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.ViewPointHolder> {
+    /**
+     * 旧版（1.3.9）浮层样式：条目换成 {@code cell_episode} 胶囊按钮，着色见
+     * {@link PlayerChipStyle#applyLegacyButton}。默认关闭 = 现版 chip。
+     */
+    private boolean legacyStyle;
     private List<ViewPoint> viewPoints;
     public OnItemClickListener listener;
     private int currentPosition = -1;
@@ -32,6 +37,10 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
 
     public void setOnItemClickListener(OnItemClickListener listener) {
         this.listener = listener;
+    }
+
+    public void setLegacyStyle(boolean legacyStyle) {
+        this.legacyStyle = legacyStyle;
     }
 
     public void updateCurrentPosition(int positionInSeconds) {
@@ -72,8 +81,8 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
     @Override
     public ViewPointHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.cell_player_chip, parent, false);
-        ToolsUtil.applyPressScale(view);
+                .inflate(legacyStyle ? R.layout.cell_episode : R.layout.cell_player_chip, parent, false);
+        if (!legacyStyle) ToolsUtil.applyPressScale(view);
         return new ViewPointHolder(view);
     }
 
@@ -98,7 +107,7 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
 
         public ViewPointHolder(View view) {
             super(view);
-            chip = itemView.findViewById(R.id.chip_text);
+            chip = itemView.findViewById(legacyStyle ? R.id.btn : R.id.chip_text);
         }
 
         void bind(int currentIndex) {
@@ -109,7 +118,11 @@ public class ViewPointAdapter extends RecyclerView.Adapter<ViewPointAdapter.View
             chip.setText(viewPoint.content + "\n" + timeStr);
 
             boolean isCurrent = currentPosition >= viewPoint.from && currentPosition < viewPoint.to;
-            PlayerChipStyle.apply(chip, isCurrent);
+            if (legacyStyle) {
+                PlayerChipStyle.applyLegacyButton(chip, isCurrent);
+            } else {
+                PlayerChipStyle.apply(chip, isCurrent);
+            }
 
             chip.setOnClickListener(v -> {
                 if (listener != null) {

@@ -39,6 +39,13 @@ public class SharedPreferencesUtil {
     public static final String NIGHT_REMINDER_ENABLE = "night_reminder_enable";
     public static final String SEARCH_DEFAULT_CONTENT_ENABLE = "search_default_content_enable";
     public static final String PLAYER_MEDIA_SESSION_ENABLE = "player_media_session_enable";
+    /**
+     * 播放页控制层使用 1.3.9 的旧版布局（true）。
+     *
+     * <p>默认 false：保持 1.4 的悬浮底卡 + 圆形图标底。用户投诉新版按钮观感时可一键切回，
+     * 只换布局与换肤，不影响任何播放/手势逻辑。
+     */
+    public static final String PLAYER_UI_LEGACY_CONTROL = "player_ui_legacy_control";
     public static final String RECENT_UP_DISPLAY_ENABLE = "recent_up_display_enable";
     public static final String API_RETRY_INTERVAL_SECONDS = "api_retry_interval_seconds";
     public static final String API_RETRY_MAX_TIMES = "api_retry_max_times";

@@ -21,7 +21,17 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
     private int selectedItemIndex = 0;
     private OnItemClickListener listener;
 
+    /**
+     * 旧版（1.3.9）浮层样式：条目换成 {@code cell_page_item}，着色见
+     * {@link PlayerChipStyle#applyLegacyCard}。默认关闭 = 现版 chip。
+     */
+    private boolean legacyStyle;
+
     public PageSelectorAdapter() {
+    }
+
+    public void setLegacyStyle(boolean legacyStyle) {
+        this.legacyStyle = legacyStyle;
     }
 
     public void setOnItemClickListener(OnItemClickListener listener) {
@@ -45,7 +55,9 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cell_player_chip, parent, false);
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(legacyStyle ? R.layout.cell_page_item : R.layout.cell_player_chip, parent, false);
+        //1.3.9 的分P条目是普通卡片，两种样式都要按压缩放反馈（Quality/ViewPoint 的 1.3.9 实现没有，故不共用此分支）
         ToolsUtil.applyPressScale(view);
         return new Holder(view);
     }
@@ -67,7 +79,7 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
 
         public Holder(View view) {
             super(view);
-            chip = itemView.findViewById(R.id.chip_text);
+            chip = itemView.findViewById(legacyStyle ? R.id.page_name : R.id.chip_text);
         }
 
         void bind(int currentIndex, boolean isSelected) {
@@ -75,9 +87,14 @@ public class PageSelectorAdapter extends RecyclerView.Adapter<PageSelectorAdapte
                 return;
 
             chip.setText("P" + (currentIndex + 1) + " " + pagenames.get(currentIndex));
-            PlayerChipStyle.apply(chip, isSelected);
+            if (legacyStyle) {
+                PlayerChipStyle.applyLegacyCard(chip, itemView, isSelected);
+            } else {
+                PlayerChipStyle.apply(chip, isSelected);
+            }
 
-            chip.setOnClickListener(v -> {
+            //旧版条目是"卡片包文字"，点击区在卡片上；新版 root 就是 chip 本身，两者等价
+            itemView.setOnClickListener(v -> {
                 setSelectedItemIndex(currentIndex);
                 if (listener != null) {
                     listener.onItemClick(currentIndex);

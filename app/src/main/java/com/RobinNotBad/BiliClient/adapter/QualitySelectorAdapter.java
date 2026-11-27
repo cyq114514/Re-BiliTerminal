@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.adapter;
 
 import android.annotation.SuppressLint;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,6 +16,11 @@ import com.RobinNotBad.BiliClient.ui.widget.PlayerChipStyle;
 import com.RobinNotBad.BiliClient.util.ToolsUtil;
 
 public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelectorAdapter.QualityHolder> {
+    /**
+     * 旧版（1.3.9）浮层样式：条目换成 {@code cell_episode} 胶囊按钮，着色见
+     * {@link PlayerChipStyle#applyLegacyButton}。默认关闭 = 现版 chip。
+     */
+    private boolean legacyStyle;
     private String[] qualityNames;
     private int[] qualityValues;
     public OnItemClickListener listener;
@@ -44,6 +50,10 @@ public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelector
         this.listener = listener;
     }
 
+    public void setLegacyStyle(boolean legacyStyle) {
+        this.legacyStyle = legacyStyle;
+    }
+
     public void setSelectedItemIndex(int selectedItemIndex) {
         int previousSelectedIndex = this.selectedItemIndex;
         this.selectedItemIndex = selectedItemIndex;
@@ -54,9 +64,14 @@ public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelector
     @NonNull
     @Override
     public QualityHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.cell_player_chip, parent, false);
-        ToolsUtil.applyPressScale(view);
+        //cell_episode 是 MaterialButton，1.3.9 在这里用 BiliClient 主题包了一层 Context
+        //（否则 MaterialComponents 会在部分 API 上拒绝 inflate）
+        LayoutInflater inflater = legacyStyle
+                ? LayoutInflater.from(new ContextThemeWrapper(parent.getContext(), R.style.Theme_BiliClient))
+                : LayoutInflater.from(parent.getContext());
+        View view = inflater.inflate(legacyStyle ? R.layout.cell_episode : R.layout.cell_player_chip,
+                parent, false);
+        if (!legacyStyle) ToolsUtil.applyPressScale(view);
         return new QualityHolder(view);
     }
 
@@ -81,14 +96,18 @@ public class QualitySelectorAdapter extends RecyclerView.Adapter<QualitySelector
 
         public QualityHolder(View view) {
             super(view);
-            chip = itemView.findViewById(R.id.chip_text);
+            chip = itemView.findViewById(legacyStyle ? R.id.btn : R.id.chip_text);
         }
 
         void bind(int currentIndex, boolean isSelected) {
             if (currentIndex < 0 || qualityNames == null || currentIndex >= qualityNames.length)
                 return;
             chip.setText(qualityNames[currentIndex]);
-            PlayerChipStyle.apply(chip, isSelected);
+            if (legacyStyle) {
+                PlayerChipStyle.applyLegacyButton(chip, isSelected);
+            } else {
+                PlayerChipStyle.apply(chip, isSelected);
+            }
             chip.setOnClickListener(v -> {
                 setSelectedItemIndex(currentIndex);
                 if (listener != null) {
